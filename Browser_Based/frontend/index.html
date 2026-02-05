@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <title>Nyx | Music</title>
+
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Dancing+Script:wght@700&display=swap"
+        rel="stylesheet">
+    <style>
+        :root {
+            --accent-color: #3b82f6;
+            /* Hardcoded Blue Theme */
+        }
+
+        /* Global smooth scrolling and scrollbar hiding */
+        * {
+            scrollbar-width: none;
+            /* Firefox */
+            -ms-overflow-style: none;
+            /* IE/Edge */
+            scroll-behavior: smooth;
+        }
+
+        *::-webkit-scrollbar {
+            display: none;
+            /* Chrome/Safari/Opera */
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #020617;
+            /* Slate-950 */
+            color: #f8fafc;
+            margin: 0;
+            overflow: hidden;
+            -webkit-tap-highlight-color: transparent;
+            user-select: none;
+        }
+
+        .font-brand {
+            font-family: 'Dancing Script', cursive;
+        }
+
+        ::selection {
+            background-color: var(--accent-color);
+            color: white;
+        }
+
+        .accent-bg {
+            background-color: var(--accent-color);
+        }
+
+        .accent-text {
+            color: var(--accent-color);
+        }
+
+        .accent-border {
+            border-color: var(--accent-color);
+        }
+
+        .accent-ring:focus {
+            --tw-ring-color: var(--accent-color);
+        }
+
+        /* Minimalist Range Styling */
+        input[type="range"] {
+            -webkit-appearance: none;
+            background: transparent;
+            cursor: pointer;
+        }
+
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            height: 12px;
+            width: 12px;
+            border-radius: 50%;
+            background: #fff;
+            border: 1px solid var(--accent-color);
+            margin-top: -4px;
+            transition: transform 0.1s ease;
+        }
+
+        .pb-safe {
+            padding-bottom: calc(env(safe-area-inset-bottom) + 5rem);
+        }
+
+        /* Home Layout specifics */
+        .card-shadow {
+            box-shadow: 0 4px 30px rgba(0, 0, 0, 0.6);
+        }
+
+        .scrollbar-hide {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+
+        .scrollbar-hide::-webkit-scrollbar {
+            display: none;
+        }
+    </style>
+    <script type="importmap">
+{
+  "imports": {
+    "react/": "https://esm.sh/react@^19.2.3/",
+    "react": "https://esm.sh/react@^19.2.3",
+    "lucide-react": "https://esm.sh/lucide-react@^0.562.0",
+    "react-dom/": "https://esm.sh/react-dom@^19.2.3/",
+    "https": "https://esm.sh/https@^1.0.0",
+    "express": "https://esm.sh/express@^5.2.1",
+    "url": "https://esm.sh/url@^0.11.4",
+    "path": "https://esm.sh/path@^0.12.7",
+    "fs": "https://esm.sh/fs@^0.0.1-security",
+    "axios": "https://esm.sh/axios@^1.13.2",
+    "cors": "https://esm.sh/cors@^2.8.5",
+    "express-session": "https://esm.sh/express-session@^1.18.2"
+  }
+}
+</script>
+    <link rel="stylesheet" href="/index.css">
+</head>
+
+<body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+</body>
+
+</html>
