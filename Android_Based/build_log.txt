@@ -1,0 +1,32 @@
+﻿src/App.tsx(2,1): error TS6133: 'React' is declared but its value is never read.
+src/components/BottomNav.tsx(3,24): error TS6133: 'Library' is declared but its value is never read.
+src/components/Player.tsx(4,36): error TS6133: 'Loader2' is declared but its value is never read.
+src/components/Player.tsx(7,23): error TS2307: Cannot find module '../types' or its corresponding type declarations.
+src/components/Player.tsx(35,12): error TS6133: 'isBuffering' is declared but its value is never read.
+src/components/Player.tsx(41,12): error TS6133: 'audioError' is declared but its value is never read.
+src/components/Player.tsx(193,11): error TS6133: 'onTimeUpdate' is declared but its value is never read.
+src/components/Sidebar.tsx(3,22): error TS2307: Cannot find module '../types' or its corresponding type declarations.
+src/pages/Home.tsx(3,10): error TS1484: 'Playlist' is a type and must be imported using a type-only import when 'verbatimModuleSyntax' is enabled.
+src/pages/Home.tsx(3,20): error TS1484: 'Track' is a type and must be imported using a type-only import when 'verbatimModuleSyntax' is enabled.
+src/pages/Home.tsx(3,27): error TS1484: 'Artist' is a type and must be imported using a type-only import when 'verbatimModuleSyntax' is enabled.
+src/pages/Home.tsx(3,35): error TS1484: 'Category' is a type and must be imported using a type-only import when 'verbatimModuleSyntax' is enabled.
+src/pages/Home.tsx(5,18): error TS6133: 'Play' is declared but its value is never read.
+src/pages/Home.tsx(5,24): error TS6133: 'BarChart2' is declared but its value is never read.
+src/pages/Home.tsx(38,28): error TS6133: 'setRecentlyPlayed' is declared but its value is never read.
+src/pages/Home.tsx(39,31): error TS6133: 'setFeaturedPlaylists' is declared but its value is never read.
+src/pages/Home.tsx(40,27): error TS6133: 'setUserPlaylists' is declared but its value is never read.
+src/pages/Home.tsx(41,25): error TS6133: 'setNewReleases' is declared but its value is never read.
+src/pages/Home.tsx(42,24): error TS6133: 'setTopArtists' is declared but its value is never read.
+src/pages/Home.tsx(43,23): error TS6133: 'setTopTracks' is declared but its value is never read.
+src/pages/Home.tsx(44,29): error TS6133: 'setRecommendations' is declared but its value is never read.
+src/pages/Home.tsx(45,24): error TS6133: 'setCategories' is declared but its value is never read.
+src/pages/Home.tsx(47,18): error TS6133: 'setUser' is declared but its value is never read.
+src/pages/Library.tsx(3,10): error TS1484: 'Playlist' is a type and must be imported using a type-only import when 'verbatimModuleSyntax' is enabled.
+src/pages/Library.tsx(4,10): error TS6133: 'Grid' is declared but its value is never read.
+src/pages/Library.tsx(4,16): error TS6133: 'List' is declared but its value is never read.
+src/pages/Library.tsx(4,22): error TS6133: 'Plus' is declared but its value is never read.
+src/pages/Library.tsx(13,23): error TS6133: 'setPlaylists' is declared but its value is never read.
+src/pages/Search.tsx(4,10): error TS1484: 'Track' is a type and must be imported using a type-only import when 'verbatimModuleSyntax' is enabled.
+src/pages/Search.tsx(4,17): error TS1484: 'Playlist' is a type and must be imported using a type-only import when 'verbatimModuleSyntax' is enabled.
+src/pages/Search.tsx(30,25): error TS6133: 'setMyPlaylists' is declared but its value is never read.
+src/pages/Search.tsx(80,34): error TS6133: 'playlistId' is declared but its value is never read.

@@ -1,0 +1,13 @@
+﻿
+> nyx@0.0.0 build
+> tsc -b && vite build
+
+src/services/MusicService.ts(11,73): error TS2353: Object literal may only specify known properties, and 'id' does not exist in type '{ name: string; }'.
+src/services/MusicService.ts(11,232): error TS2353: Object literal may only specify known properties, and 'height' does not exist in type '{ url: string; }'.
+src/services/MusicService.ts(12,65): error TS2353: Object literal may only specify known properties, and 'id' does not exist in type '{ name: string; }'.
+src/services/MusicService.ts(12,220): error TS2353: Object literal may only specify known properties, and 'height' does not exist in type '{ url: string; }'.
+src/services/MusicService.ts(13,70): error TS2353: Object literal may only specify known properties, and 'id' does not exist in type '{ name: string; }'.
+src/services/MusicService.ts(13,224): error TS2353: Object literal may only specify known properties, and 'height' does not exist in type '{ url: string; }'.
+src/services/MusicService.ts(67,21): error TS2353: Object literal may only specify known properties, and 'id' does not exist in type '{ name: string; }'.
+src/services/MusicService.ts(71,83): error TS2322: Type '{ url: any; height: number; width: number; }[]' is not assignable to type '{ url: string; }[]'.
+  Object literal may only specify known properties, and 'height' does not exist in type '{ url: string; }'.
