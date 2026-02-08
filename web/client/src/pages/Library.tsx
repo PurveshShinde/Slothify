@@ -4,12 +4,14 @@ import { Playlist } from '../types';
 import { Grid, List, Plus, Music2 } from 'lucide-react';
 import axios from 'axios';
 
+import { useStore } from '../store/useStore';
+
 interface LibraryProps {
-  isAuthenticated: boolean;
   onPlaylistSelect: (id: string) => void;
 }
 
-const Library: React.FC<LibraryProps> = ({ isAuthenticated, onPlaylistSelect }) => {
+const Library: React.FC<LibraryProps> = ({ onPlaylistSelect }) => {
+  const { isAuthenticated } = useStore();
   const [playlists, setPlaylists] = useState<Playlist[]>([]);
   const [isLoading, setIsLoading] = useState(false);
 

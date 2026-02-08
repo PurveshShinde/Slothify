@@ -48,7 +48,6 @@ export const spotifyService = {
                 {
                     headers: { Authorization: `Bearer ${token}` },
                     params: {
-                        country: 'IN',
                         limit: 20
                     }
                 }
@@ -91,14 +90,14 @@ export const spotifyService = {
     },
 
     getNewReleases: async (token: string) => {
-        const response = await axios.get(`${API_URL}/browse/new-releases?country=IN&limit=20`, {
+        const response = await axios.get(`${API_URL}/browse/new-releases?limit=20`, {
             headers: { Authorization: `Bearer ${token}` }
         });
         return response.data?.albums?.items || [];
     },
 
     getCategories: async (token: string) => {
-        const response = await axios.get(`${API_URL}/browse/categories?country=IN&limit=20`, {
+        const response = await axios.get(`${API_URL}/browse/categories?limit=20`, {
             headers: { Authorization: `Bearer ${token}` }
         });
         return response.data?.categories?.items || [];
@@ -119,7 +118,7 @@ export const spotifyService = {
     },
 
     getCategoryPlaylists: async (token: string, categoryId: string) => {
-        const response = await axios.get(`${API_URL}/browse/categories/${categoryId}/playlists?country=IN&limit=20`, {
+        const response = await axios.get(`${API_URL}/browse/categories/${categoryId}/playlists?limit=20`, {
             headers: { Authorization: `Bearer ${token}` }
         });
         return response.data?.playlists?.items || [];
@@ -152,8 +151,7 @@ export const spotifyService = {
             headers: { Authorization: `Bearer ${token}` },
             params: {
                 seed_tracks: seedTracks.slice(0, 5).join(','),
-                limit: 20,
-                market: 'IN'
+                limit: 20
             }
         });
         return response.data?.tracks || [];

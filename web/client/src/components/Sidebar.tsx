@@ -16,7 +16,7 @@ interface SidebarProps {
 
 const Sidebar: React.FC<SidebarProps> = ({
   user, isAuthenticated, onNavigateHome, onNavigateSearch, onNavigateLibrary,
-  onNavigateLiked, onNavigateSettings
+  onNavigateLiked, onNavigateSettings, onNavigatePlaylist, onCreatePlaylist
 }) => {
 
   // ROBUST IMAGE CHECK: Handles both Spotify raw API (images) and Passport.js (photos)

@@ -4,12 +4,12 @@ import { Playlist, Track, Artist, Category } from '../types';
 import axios from 'axios';
 import { Music2, Play, BarChart2, Settings } from 'lucide-react';
 
+import { useStore } from '../store/useStore';
+
 interface HomeProps {
-  isAuthenticated: boolean;
   onPlaylistSelect: (id: string) => void;
   onSettingsClick: () => void;
   onSearch: (query: string) => void;
-  onPlayTrack: (track: Track) => void;
 }
 
 interface SectionProps {
@@ -34,30 +34,32 @@ const Section: React.FC<SectionProps> = ({ title, items, renderItem }) => {
   );
 };
 
-const Home: React.FC<HomeProps> = ({ isAuthenticated, onPlaylistSelect, onSearch, onPlayTrack, onSettingsClick }) => {
-  const [recentlyPlayed, setRecentlyPlayed] = useState<Track[]>([]);
-  const [featuredPlaylists, setFeaturedPlaylists] = useState<Playlist[]>([]);
-  const [userPlaylists, setUserPlaylists] = useState<Playlist[]>([]);
-  const [newReleases, setNewReleases] = useState<any[]>([]); // Albums
-  const [topArtists, setTopArtists] = useState<Artist[]>([]);
-  const [topTracks, setTopTracks] = useState<Track[]>([]);
-  const [recommendations, setRecommendations] = useState<Track[]>([]);
-  const [categories, setCategories] = useState<Category[]>([]);
+const Home: React.FC<HomeProps> = ({ onPlaylistSelect, onSearch, onSettingsClick }) => {
+  const { isAuthenticated, playTrack, user: storeUser, homeData, setHomeData } = useStore();
   const [isLoading, setIsLoading] = useState(false);
   const [user, setUser] = useState<any>(null);
 
+  // Use Store Data directly
+  const { recentlyPlayed, featuredPlaylists, userPlaylists, newReleases, topArtists, topTracks, recommendations, categories } = homeData;
+
   useEffect(() => {
     if (isAuthenticated) {
-      setIsLoading(true);
-
       axios.get('/api/auth/status').then(res => {
         if (res.data.authenticated) setUser(res.data.user);
       }).catch(() => { });
 
+      const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
+      const now = Date.now();
+
+      // If data is fresh (less than 5 mins old) and populated, don't fetch
+      if (homeData.timestamp && (now - homeData.timestamp < CACHE_DURATION) && homeData.recentlyPlayed.length > 0) {
+        return;
+      }
+
+      setIsLoading(true);
+
       const fetchAllData = async () => {
         try {
-          // We use allSettled to prevent one failure from blocking others
-          // Some failures (like recent-played 500) will just result in empty section
           const [recentRes, featuredRes, userRes, newRes, artistsRes, catsRes, topTracksRes] = await Promise.allSettled([
             axios.get('/api/me/recent', { withCredentials: true }),
             axios.get('/api/featured-playlists', { withCredentials: true }),
@@ -68,30 +70,28 @@ const Home: React.FC<HomeProps> = ({ isAuthenticated, onPlaylistSelect, onSearch
             axios.get('/api/me/top/tracks', { withCredentials: true }),
           ]);
 
-          if (recentRes.status === 'fulfilled') setRecentlyPlayed(recentRes.value.data);
-          if (featuredRes.status === 'fulfilled') setFeaturedPlaylists(featuredRes.value.data);
-          if (userRes.status === 'fulfilled') setUserPlaylists(userRes.value.data);
-          if (newRes.status === 'fulfilled') setNewReleases(newRes.value.data);
-          if (artistsRes.status === 'fulfilled') setTopArtists(artistsRes.value.data);
-          if (catsRes.status === 'fulfilled') setCategories(catsRes.value.data);
-          if (topTracksRes.status === 'fulfilled') setTopTracks(topTracksRes.value.data);
+          const newData: Partial<typeof homeData> = { timestamp: Date.now() };
+
+          if (recentRes.status === 'fulfilled') newData.recentlyPlayed = recentRes.value.data;
+          if (featuredRes.status === 'fulfilled') newData.featuredPlaylists = featuredRes.value.data;
+          if (userRes.status === 'fulfilled') newData.userPlaylists = userRes.value.data;
+          if (newRes.status === 'fulfilled') newData.newReleases = newRes.value.data;
+          if (artistsRes.status === 'fulfilled') newData.topArtists = artistsRes.value.data;
+          if (catsRes.status === 'fulfilled') newData.categories = catsRes.value.data;
+          if (topTracksRes.status === 'fulfilled') newData.topTracks = topTracksRes.value.data;
+
+          setHomeData(newData);
 
           let seedTracks: string[] = [];
-          if (recentRes.status === 'fulfilled' && recentRes.value.data.length) {
-            seedTracks = recentRes.value.data.slice(0, 3).map((t: Track) => t.id);
+          if (newData.recentlyPlayed && newData.recentlyPlayed.length) {
+            seedTracks = newData.recentlyPlayed.slice(0, 3).map((t: Track) => t.id);
           }
 
           if (seedTracks.length > 0) {
             axios.get(`/api/recommendations?seed_tracks=${seedTracks.join(',')}&limit=20`, { withCredentials: true })
-              .then(res => setRecommendations(res.data.tracks || []))
+              .then(res => setHomeData({ recommendations: res.data.tracks || [] }))
               .catch(console.error);
           }
-
-          // Top Tracks Response
-          // The 6th item in Promise.all is top tracks, but I added it to the array.
-          // Adjusting Promise.all logic:
-          // Indices: 0:recent, 1:featured, 2:userPL, 3:newRel, 4:artists, 5:cats, 6:topTracks
-          // But I pasted above differently. Let's be precise.
 
         } catch (error) {
           console.error('Failed to fetch home data', error);
@@ -102,13 +102,13 @@ const Home: React.FC<HomeProps> = ({ isAuthenticated, onPlaylistSelect, onSearch
 
       fetchAllData();
     }
-  }, [isAuthenticated]);
+  }, [isAuthenticated, setHomeData, homeData.timestamp, homeData.recentlyPlayed.length]); // Dependencies crucial for cache check
 
   if (!isAuthenticated) {
     return (
       <div className="flex flex-col items-center justify-center h-[60vh] text-center space-y-6 animate-in fade-in duration-700 px-4">
-        <div className="w-20 h-20 md:w-24 md:h-24 bg-blue-600 rounded-3xl flex items-center justify-center shadow-2xl shadow-blue-500/20 mb-4">
-          <Music2 size={40} className="text-white md:w-12 md:h-12" />
+        <div className="w-24 h-24 md:w-32 md:h-32 bg-blue-600 rounded-3xl flex items-center justify-center shadow-2xl shadow-blue-500/20 mb-4">
+          <Music2 size={56} className="text-white md:w-16 md:h-16" />
         </div>
         <h1 className="text-3xl md:text-4xl font-black text-white">Welcome to Nyx</h1>
         <p className="text-slate-400 max-w-sm text-sm md:text-base">Login to your Spotify account to sync your library.</p>
@@ -195,7 +195,7 @@ const Home: React.FC<HomeProps> = ({ isAuthenticated, onPlaylistSelect, onSearch
           track.album?.images[0]?.url,
           track.name,
           track.artists[0].name,
-          () => onPlayTrack(track)
+          () => playTrack(track)
         )}
       />
 
@@ -207,7 +207,7 @@ const Home: React.FC<HomeProps> = ({ isAuthenticated, onPlaylistSelect, onSearch
           track.album?.images[0]?.url,
           track.name,
           track.artists.map(a => a.name).join(', '),
-          () => onPlayTrack(track)
+          () => playTrack(track)
         )}
       />
 
@@ -231,7 +231,7 @@ const Home: React.FC<HomeProps> = ({ isAuthenticated, onPlaylistSelect, onSearch
           track.album?.images[0]?.url,
           track.name,
           track.artists[0].name,
-          () => onPlayTrack(track)
+          () => playTrack(track)
         )}
       />
 

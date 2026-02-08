@@ -172,4 +172,19 @@ router.delete('/playlists/:id/tracks', async (req, res) => {
     }
 });
 
+router.get('/recommendations', async (req, res) => {
+    try {
+        const token = (req.session as any).access_token;
+        const { seed_tracks, limit } = req.query;
+        const tracks = await spotifyService.getRecommendations(
+            token,
+            String(seed_tracks).split(','),
+        );
+        res.json(tracks);
+    } catch (err: any) {
+        console.error('[/api/recommendations] Error:', err.response?.data || err.message);
+        res.status(500).json({ error: 'Spotify API Error', details: err.message });
+    }
+});
+
 export default router;

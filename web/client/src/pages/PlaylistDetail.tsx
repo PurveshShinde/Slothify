@@ -6,6 +6,8 @@ import {
 import { Playlist, Track } from '../types';
 import axios from 'axios';
 
+import { useStore } from '../store/useStore';
+
 type SortOption = 'az' | 'za' | 'newest' | 'oldest' | 'duration' | 'artist';
 
 interface ExtendedTrack extends Track {
@@ -16,39 +18,40 @@ interface PlaylistDetailProps {
   id: string;
   isLikedView?: boolean;
   onBack: () => void;
-  onPlayTrack: (track: Track, fromQueue: Track[]) => void;
   onDownloadRequest: (id: string) => void;
-  likedTrackIds: Set<string>;
-  onToggleLike: (id: string) => void;
-  currentTrackId?: string;
-
-  // ✅ SYNCED PROPS
-  isPlaying: boolean;
-  onPlayPause: (playing: boolean) => void;
-  isShuffle: boolean;
-  onToggleShuffle: () => void;
-
-  title?: string;
 }
 
 const PlaylistDetail: React.FC<PlaylistDetailProps> = ({
-  id, isLikedView, onBack, onPlayTrack, likedTrackIds, onToggleLike, currentTrackId,
-  isPlaying, onPlayPause, isShuffle, onToggleShuffle
+  id, isLikedView, onBack
 }) => {
+  const {
+    user,
+    playTrack,
+    isPlaying,
+    setIsPlaying,
+    isShuffle,
+    toggleShuffle,
+    currentTrack,
+    likedTrackIds,
+    toggleLike
+  } = useStore();
+  const currentTrackId = currentTrack?.id;
+  const onPlayPause = setIsPlaying;
+  const onToggleShuffle = toggleShuffle;
+  const onPlayTrack = playTrack;
+  const onToggleLike = toggleLike;
   const [playlist, setPlaylist] = useState<Playlist | null>(null);
   const [tracks, setTracks] = useState<ExtendedTrack[]>([]);
   const [filterQuery, setFilterQuery] = useState('');
   const [sortBy, setSortBy] = useState<SortOption>('az');
   const [showSortMenu, setShowSortMenu] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
-  const [currentUser, setCurrentUser] = useState<any>(null);
+  /* const [currentUser, setCurrentUser] = useState<any>(null); -- Removed, using store */
 
   useEffect(() => {
     const fetchData = async () => {
       setIsLoading(true);
       try {
-        const authRes = await axios.get('/api/auth/status');
-        if (authRes.data.authenticated) setCurrentUser(authRes.data.user);
 
         if (!isLikedView) {
           const res = await axios.get(`/api/playlists/${id}`);
@@ -118,7 +121,7 @@ const PlaylistDetail: React.FC<PlaylistDetailProps> = ({
 
   if (isLoading) return <div className="flex items-center justify-center h-64"><div className="w-8 h-8 border-2 border-green-500 border-t-transparent rounded-full animate-spin"></div></div>;
 
-  const isOwner = playlist?.owner?.id === currentUser?.id;
+  const isOwner = playlist?.owner?.id === user?.id;
   const gradientColor = isLikedView ? 'from-purple-900/80' : 'from-slate-800/80';
   const isThisPlaylistPlaying = tracks.some(t => t.id === currentTrackId);
 
@@ -140,7 +143,7 @@ const PlaylistDetail: React.FC<PlaylistDetailProps> = ({
   const ownerImage = getOwnerImage();
 
   return (
-    <div className={`flex flex-col h-full animate-in fade-in duration-500 bg-gradient-to-b ${gradientColor} to-slate-950`}>
+    <div className={`flex flex-col h-full animate-in fade-in duration-500 bg-gradient-to-b ${gradientColor} to-black`}>
       {/* HEADER */}
       <div className="relative flex flex-col md:flex-row gap-6 p-6 pb-4 md:pb-8">
         <button onClick={onBack} className="absolute top-4 left-4 p-2 text-white z-20 md:hidden"><ChevronLeft size={28} /></button>

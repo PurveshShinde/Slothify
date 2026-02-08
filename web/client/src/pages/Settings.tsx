@@ -4,11 +4,12 @@ import { User } from '../types';
 import { LogOut, User as UserIcon, Moon, Shield, Coffee, Info, Globe, Check, AlertCircle } from 'lucide-react';
 import axios from 'axios';
 
-interface SettingsProps {
-    user: User | null;
-}
+import { useStore } from '../store/useStore';
 
-const Settings: React.FC<SettingsProps> = ({ user }) => {
+interface SettingsProps { }
+
+const Settings: React.FC<SettingsProps> = () => {
+    const { user } = useStore();
     const [showRecentlyPlayed, setShowRecentlyPlayed] = useState(true);
     const [showTopArtists, setShowTopArtists] = useState(true);
     const [showTopTracks, setShowTopTracks] = useState(true);
