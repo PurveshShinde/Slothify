@@ -48,6 +48,7 @@ export const spotifyService = {
                 {
                     headers: { Authorization: `Bearer ${token}` },
                     params: {
+                        country: 'IN',
                         limit: 20
                     }
                 }
@@ -79,7 +80,11 @@ export const spotifyService = {
         const response = await axios.get(`${API_URL}/playlists/${playlistId}/tracks`, {
             headers: { Authorization: `Bearer ${token}` }
         });
-        return (response.data?.items || []).map((item: any) => item.track);
+        return (response.data?.items || []).map((item: any) => ({
+            ...item.track,
+            added_at: item.added_at,
+            added_by: item.added_by
+        }));
     },
 
     getMyRecentlyPlayedTracks: async (token: string) => {
@@ -90,14 +95,14 @@ export const spotifyService = {
     },
 
     getNewReleases: async (token: string) => {
-        const response = await axios.get(`${API_URL}/browse/new-releases?limit=20`, {
+        const response = await axios.get(`${API_URL}/browse/new-releases?country=IN&limit=20`, {
             headers: { Authorization: `Bearer ${token}` }
         });
         return response.data?.albums?.items || [];
     },
 
     getCategories: async (token: string) => {
-        const response = await axios.get(`${API_URL}/browse/categories?limit=20`, {
+        const response = await axios.get(`${API_URL}/browse/categories?country=IN&limit=20`, {
             headers: { Authorization: `Bearer ${token}` }
         });
         return response.data?.categories?.items || [];
@@ -118,7 +123,7 @@ export const spotifyService = {
     },
 
     getCategoryPlaylists: async (token: string, categoryId: string) => {
-        const response = await axios.get(`${API_URL}/browse/categories/${categoryId}/playlists?limit=20`, {
+        const response = await axios.get(`${API_URL}/browse/categories/${categoryId}/playlists?country=IN&limit=20`, {
             headers: { Authorization: `Bearer ${token}` }
         });
         return response.data?.playlists?.items || [];
@@ -128,7 +133,10 @@ export const spotifyService = {
         const response = await axios.get(`${API_URL}/me/tracks?limit=50`, {
             headers: { Authorization: `Bearer ${token}` }
         });
-        return (response.data?.items || []).map((item: any) => item.track);
+        return {
+            items: (response.data?.items || []).map((item: any) => item.track),
+            total: response.data?.total || 0
+        };
     },
 
     addTracksToPlaylist: async (token: string, playlistId: string, uris: string[]) => {
@@ -151,9 +159,26 @@ export const spotifyService = {
             headers: { Authorization: `Bearer ${token}` },
             params: {
                 seed_tracks: seedTracks.slice(0, 5).join(','),
-                limit: 20
+                limit: 20,
+                market: 'IN'
             }
         });
         return response.data?.tracks || [];
+    },
+    createPlaylist: async (token: string, userId: string, name: string) => {
+        const response = await axios.post(`${API_URL}/users/${userId}/playlists`, {
+            name,
+            description: 'Created via NYX Player',
+            public: false
+        }, {
+            headers: { Authorization: `Bearer ${token}` }
+        });
+        return response.data;
+    },
+    getUserProfile: async (token: string, userId: string) => {
+        const response = await axios.get(`${API_URL}/users/${userId}`, {
+            headers: { Authorization: `Bearer ${token}` }
+        });
+        return response.data;
     },
 };

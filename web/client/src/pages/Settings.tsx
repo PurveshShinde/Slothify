@@ -4,12 +4,11 @@ import { User } from '../types';
 import { LogOut, User as UserIcon, Moon, Shield, Coffee, Info, Globe, Check, AlertCircle } from 'lucide-react';
 import axios from 'axios';
 
-import { useStore } from '../store/useStore';
+interface SettingsProps {
+    user: User | null;
+}
 
-interface SettingsProps { }
-
-const Settings: React.FC<SettingsProps> = () => {
-    const { user } = useStore();
+const Settings: React.FC<SettingsProps> = ({ user }) => {
     const [showRecentlyPlayed, setShowRecentlyPlayed] = useState(true);
     const [showTopArtists, setShowTopArtists] = useState(true);
     const [showTopTracks, setShowTopTracks] = useState(true);
@@ -67,8 +66,8 @@ const Settings: React.FC<SettingsProps> = () => {
                         <h2 className="text-2xl font-bold text-white truncate">{user?.display_name || 'Guest User'}</h2>
                         <div className="flex items-center space-x-2 mt-1">
                             {user ? (
-                                <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-500/10 text-green-400 border border-green-500/20">
-                                    <div className="w-1.5 h-1.5 rounded-full bg-green-500 mr-1.5 animate-pulse" />
+                                <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-500/10 text-blue-400 border border-blue-500/20">
+                                    <div className="w-1.5 h-1.5 rounded-full bg-blue-500 mr-1.5 animate-pulse" />
                                     Spotify Connected
                                 </span>
                             ) : (
@@ -90,7 +89,7 @@ const Settings: React.FC<SettingsProps> = () => {
                     ) : (
                         <button
                             onClick={() => window.location.href = '/api/auth/login'}
-                            className="hidden md:flex items-center space-x-2 px-6 py-3 bg-green-600 hover:bg-green-500 text-white rounded-xl font-bold transition-all shadow-lg shadow-green-600/20"
+                            className="hidden md:flex items-center space-x-2 px-6 py-3 bg-blue-600 hover:bg-blue-500 text-white rounded-xl font-bold transition-all shadow-lg shadow-blue-600/20"
                         >
                             <div className="w-2 h-2 bg-white rounded-full animate-pulse" />
                             <span>Login with Spotify</span>
@@ -109,7 +108,7 @@ const Settings: React.FC<SettingsProps> = () => {
                     ) : (
                         <button
                             onClick={() => window.location.href = '/api/auth/login'}
-                            className="w-full flex items-center justify-center space-x-2 px-6 py-3 bg-green-600 hover:bg-green-500 text-white rounded-xl font-bold transition-all shadow-lg shadow-green-600/20"
+                            className="w-full flex items-center justify-center space-x-2 px-6 py-3 bg-blue-600 hover:bg-blue-500 text-white rounded-xl font-bold transition-all shadow-lg shadow-blue-600/20"
                         >
                             <span>Login with Spotify</span>
                         </button>
@@ -151,7 +150,7 @@ const Settings: React.FC<SettingsProps> = () => {
             <SectionTitle>Privacy & Data Usage</SectionTitle>
             <div className="bg-[#1F2937]/30 rounded-2xl p-6 border border-white/5">
                 <div className="flex items-start space-x-4">
-                    <Shield className="text-green-500 flex-shrink-0 mt-1" size={24} />
+                    <Shield className="text-blue-500 flex-shrink-0 mt-1" size={24} />
                     <div className="space-y-4">
                         <div>
                             <h4 className="font-bold text-white text-lg">Your Data is Safe</h4>
@@ -162,7 +161,7 @@ const Settings: React.FC<SettingsProps> = () => {
                         </div>
                         <div className="flex flex-wrap gap-2">
                             {['No Audio Playback', 'No Downloads', 'Read-Only Metadata'].map(tag => (
-                                <span key={tag} className="px-3 py-1 bg-green-500/10 text-green-400 border border-green-500/20 rounded-full text-xs font-bold">
+                                <span key={tag} className="px-3 py-1 bg-blue-500/10 text-blue-400 border border-blue-500/20 rounded-full text-xs font-bold">
                                     {tag}
                                 </span>
                             ))}
@@ -176,8 +175,8 @@ const Settings: React.FC<SettingsProps> = () => {
             <div className="space-y-4">
                 <div className="flex items-center justify-between p-5 bg-[#1F2937]/50 rounded-2xl border border-white/5">
                     <div className="flex items-center space-x-4">
-                        <div className={`p-3 ${user ? 'bg-green-500/20' : 'bg-slate-700/50'} rounded-xl`}>
-                            <Globe size={20} className={user ? "text-green-500" : "text-slate-500"} />
+                        <div className={`p-3 ${user ? 'bg-blue-500/20' : 'bg-slate-700/50'} rounded-xl`}>
+                            <Globe size={20} className={user ? "text-blue-500" : "text-slate-500"} />
                         </div>
                         <div>
                             <h4 className="font-bold text-white">Spotify</h4>

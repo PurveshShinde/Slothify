@@ -3,8 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { Search as SearchIcon, Play, ArrowLeft, Plus, Loader2, Music2, CheckCircle2 } from 'lucide-react';
 import { Track, Playlist } from '../types';
 import axios from 'axios';
-
-import { useStore } from '../store/useStore';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 
 const CATEGORIES = [
   { name: 'Pop', color: 'bg-blue-600' },
@@ -14,13 +13,14 @@ const CATEGORIES = [
 ];
 
 interface SearchProps {
-  onBack: () => void;
-  showBack: boolean;
-  initialQuery?: string;
+  isAuthenticated: boolean;
+  onPlayTrack: (track: Track, queue: Track[]) => void;
 }
 
-const Search: React.FC<SearchProps> = ({ onBack, showBack, initialQuery = '' }) => {
-  const { isAuthenticated, playTrack } = useStore();
+const Search: React.FC<SearchProps> = ({ isAuthenticated, onPlayTrack }) => {
+  const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const initialQuery = searchParams.get('q') || '';
   const [query, setQuery] = useState(initialQuery);
   const [results, setResults] = useState<Track[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -33,10 +33,14 @@ const Search: React.FC<SearchProps> = ({ onBack, showBack, initialQuery = '' }) 
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   useEffect(() => {
-    if (initialQuery) {
-      setQuery(initialQuery);
-    }
+    setQuery(initialQuery);
   }, [initialQuery]);
+
+  const updateQuery = (newQuery: string) => {
+    setQuery(newQuery);
+    if (newQuery) setSearchParams({ q: newQuery });
+    else setSearchParams({});
+  };
 
   useEffect(() => {
     if (!query.trim()) {
@@ -111,7 +115,7 @@ const Search: React.FC<SearchProps> = ({ onBack, showBack, initialQuery = '' }) 
 
       {/* Toast Notification */}
       {toastMessage && (
-        <div className="fixed top-20 right-4 z-[60] bg-green-500 text-white px-6 py-3 rounded-xl shadow-2xl flex items-center space-x-2 animate-in fade-in slide-in-from-top-4">
+        <div className="fixed top-20 right-4 z-[60] bg-blue-500 text-white px-6 py-3 rounded-xl shadow-2xl flex items-center space-x-2 animate-in fade-in slide-in-from-top-4">
           <CheckCircle2 size={20} />
           <span className="font-bold">{toastMessage}</span>
         </div>
@@ -119,11 +123,11 @@ const Search: React.FC<SearchProps> = ({ onBack, showBack, initialQuery = '' }) 
 
       {/* Header */}
       <div className="flex items-center space-x-4">
-        {showBack && (
-          <button onClick={onBack} className="md:hidden p-2 -ml-2 text-slate-400 hover:text-white transition-colors">
-            <ArrowLeft size={24} />
-          </button>
-        )}
+        {/* Mobile Back Button - Show only if we can go back? Or always show if query present? */}
+        {/* We can rely on history length or just always show on mobile if we want */}
+        <button onClick={() => navigate(-1)} className="md:hidden p-2 -ml-2 text-slate-400 hover:text-white transition-colors">
+          <ArrowLeft size={24} />
+        </button>
         <h1 className="text-3xl font-bold">Search</h1>
       </div>
 
@@ -135,7 +139,7 @@ const Search: React.FC<SearchProps> = ({ onBack, showBack, initialQuery = '' }) 
         <input
           type="text"
           value={query}
-          onChange={(e) => setQuery(e.target.value)}
+          onChange={(e) => updateQuery(e.target.value)}
           placeholder="What do you want to listen to?"
           className="w-full bg-white/10 border-none rounded-full py-3.5 px-12 text-white placeholder-slate-400 focus:ring-2 focus:ring-blue-500 outline-none transition-all"
         />
@@ -180,7 +184,7 @@ const Search: React.FC<SearchProps> = ({ onBack, showBack, initialQuery = '' }) 
       {query.trim() ? (
         <div className="space-y-2">
           {results.map((track) => (
-            <div key={track.id} onClick={() => playTrack(track, results)} className="flex items-center space-x-4 p-3 bg-white/5 hover:bg-white/10 rounded-xl cursor-pointer transition-colors group">
+            <div key={track.id} onClick={() => onPlayTrack(track, results)} className="flex items-center space-x-4 p-3 bg-white/5 hover:bg-white/10 rounded-xl cursor-pointer transition-colors group">
               <div className="relative w-12 h-12 flex-shrink-0">
                 <img src={track.album.images[0]?.url || 'https://picsum.photos/100'} className="w-full h-full rounded-lg object-cover" alt="" />
                 <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity rounded-lg">
@@ -205,7 +209,7 @@ const Search: React.FC<SearchProps> = ({ onBack, showBack, initialQuery = '' }) 
       ) : (
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 pt-4">
           {CATEGORIES.map((cat) => (
-            <div key={cat.name} onClick={() => setQuery(cat.name)} className={`${cat.color} aspect-square md:aspect-video rounded-2xl p-6 relative overflow-hidden cursor-pointer hover:scale-[1.03] transition-transform shadow-lg`}>
+            <div key={cat.name} onClick={() => updateQuery(cat.name)} className={`${cat.color} aspect-square md:aspect-video rounded-2xl p-6 relative overflow-hidden cursor-pointer hover:scale-[1.03] transition-transform shadow-lg`}>
               <span className="text-xl font-black relative z-10">{cat.name}</span>
               <div className="absolute -bottom-4 -right-4 w-24 h-24 bg-white/10 rounded-full rotate-12 blur-xl" />
             </div>

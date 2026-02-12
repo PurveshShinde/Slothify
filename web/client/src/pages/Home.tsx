@@ -1,15 +1,14 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Playlist, Track, Artist, Category } from '../types';
 import axios from 'axios';
-import { Music2, Play, BarChart2, Settings } from 'lucide-react';
-
-import { useStore } from '../store/useStore';
+import { Music2, Settings, RefreshCw, ArrowDown } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { useCache } from '../context/CacheContext';
 
 interface HomeProps {
-  onPlaylistSelect: (id: string) => void;
-  onSettingsClick: () => void;
-  onSearch: (query: string) => void;
+  isAuthenticated: boolean;
+  onPlayTrack: (track: Track) => void;
 }
 
 interface SectionProps {
@@ -25,7 +24,7 @@ const Section: React.FC<SectionProps> = ({ title, items, renderItem }) => {
       <h2 className="text-xl md:text-2xl font-bold tracking-tight px-1 text-white">{title}</h2>
       <div className="flex space-x-4 md:space-x-6 overflow-x-auto pb-6 scrollbar-hide px-1 snap-x">
         {items.map((item, idx) => (
-          <div key={idx /* Use index to avoid duplicates from API */} className="snap-start flex-shrink-0">
+          <div key={idx} className="snap-start flex-shrink-0">
             {renderItem(item)}
           </div>
         ))}
@@ -34,13 +33,81 @@ const Section: React.FC<SectionProps> = ({ title, items, renderItem }) => {
   );
 };
 
-const Home: React.FC<HomeProps> = ({ onPlaylistSelect, onSearch, onSettingsClick }) => {
-  const { isAuthenticated, playTrack, user: storeUser, homeData, setHomeData } = useStore();
-  const [isLoading, setIsLoading] = useState(false);
+const Home: React.FC<HomeProps> = ({ isAuthenticated, onPlayTrack }) => {
+  const navigate = useNavigate();
+  const { cache, setHomeData } = useCache();
+
+  // Initialize state from cache if available
+  const [recentlyPlayed, setRecentlyPlayed] = useState<Track[]>(cache.homeData?.recentlyPlayed || []);
+  const [featuredPlaylists, setFeaturedPlaylists] = useState<Playlist[]>(cache.homeData?.featuredPlaylists || []);
+  const [userPlaylists, setUserPlaylists] = useState<Playlist[]>(cache.homeData?.userPlaylists || []);
+  const [newReleases, setNewReleases] = useState<any[]>(cache.homeData?.newReleases || []);
+  const [topArtists, setTopArtists] = useState<Artist[]>(cache.homeData?.topArtists || []);
+  const [topTracks, setTopTracks] = useState<Track[]>(cache.homeData?.topTracks || []);
+  const [recommendations, setRecommendations] = useState<Track[]>(cache.homeData?.recommendations || []);
+  const [categories, setCategories] = useState<Category[]>(cache.homeData?.categories || []);
+
+  const [isLoading, setIsLoading] = useState(!cache.homeData);
   const [user, setUser] = useState<any>(null);
 
-  // Use Store Data directly
-  const { recentlyPlayed, featuredPlaylists, userPlaylists, newReleases, topArtists, topTracks, recommendations, categories } = homeData;
+  // Pull-to-refresh state
+  const [pullStartY, setPullStartY] = useState(0);
+  const [pullMoveY, setPullMoveY] = useState(0);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  const fetchAllData = async (isRefresh = false) => {
+    if (!isAuthenticated) return;
+    if (!isRefresh && cache.homeData) return; // Don't fetch if cached and not refreshing
+
+    setIsLoading(!isRefresh); // Only show full loader if not refreshing
+
+    try {
+      const [recentRes, featuredRes, userRes, newRes, artistsRes, catsRes, topTracksRes] = await Promise.allSettled([
+        axios.get('/api/me/recent', { withCredentials: true }),
+        axios.get('/api/featured-playlists', { withCredentials: true }),
+        axios.get('/api/me/playlists', { withCredentials: true }),
+        axios.get('/api/browse/new-releases', { withCredentials: true }),
+        axios.get('/api/me/top/artists', { withCredentials: true }),
+        axios.get('/api/browse/categories', { withCredentials: true }),
+        axios.get('/api/me/top/tracks', { withCredentials: true }),
+      ]);
+
+      const newData: any = {};
+
+      if (recentRes.status === 'fulfilled') { newData.recentlyPlayed = recentRes.value.data; setRecentlyPlayed(newData.recentlyPlayed); }
+      if (featuredRes.status === 'fulfilled') { newData.featuredPlaylists = featuredRes.value.data; setFeaturedPlaylists(newData.featuredPlaylists); }
+      if (userRes.status === 'fulfilled') { newData.userPlaylists = userRes.value.data; setUserPlaylists(newData.userPlaylists); }
+      if (newRes.status === 'fulfilled') { newData.newReleases = newRes.value.data; setNewReleases(newData.newReleases); }
+      if (artistsRes.status === 'fulfilled') { newData.topArtists = artistsRes.value.data; setTopArtists(newData.topArtists); }
+      if (catsRes.status === 'fulfilled') { newData.categories = catsRes.value.data; setCategories(newData.categories); }
+      if (topTracksRes.status === 'fulfilled') { newData.topTracks = topTracksRes.value.data; setTopTracks(newData.topTracks); }
+
+      // Recommendations need seed tracks
+      let seedTracks: string[] = [];
+      if (newData.recentlyPlayed && newData.recentlyPlayed.length) {
+        seedTracks = newData.recentlyPlayed.slice(0, 3).map((t: Track) => t.id);
+      }
+
+      if (seedTracks.length > 0) {
+        try {
+          const recRes = await axios.get(`/api/recommendations?seed_tracks=${seedTracks.join(',')}&limit=20`, { withCredentials: true });
+          newData.recommendations = recRes.data.tracks || [];
+          setRecommendations(newData.recommendations);
+        } catch (e) { console.error(e); }
+      }
+
+      // Update Cache
+      setHomeData(newData);
+
+    } catch (error) {
+      console.error('Failed to fetch home data', error);
+    } finally {
+      setIsLoading(false);
+      setIsRefreshing(false);
+      setPullMoveY(0);
+    }
+  };
 
   useEffect(() => {
     if (isAuthenticated) {
@@ -48,67 +115,45 @@ const Home: React.FC<HomeProps> = ({ onPlaylistSelect, onSearch, onSettingsClick
         if (res.data.authenticated) setUser(res.data.user);
       }).catch(() => { });
 
-      const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
-      const now = Date.now();
-
-      // If data is fresh (less than 5 mins old) and populated, don't fetch
-      if (homeData.timestamp && (now - homeData.timestamp < CACHE_DURATION) && homeData.recentlyPlayed.length > 0) {
-        return;
+      if (!cache.homeData) {
+        fetchAllData();
+      } else {
+        setIsLoading(false);
       }
-
-      setIsLoading(true);
-
-      const fetchAllData = async () => {
-        try {
-          const [recentRes, featuredRes, userRes, newRes, artistsRes, catsRes, topTracksRes] = await Promise.allSettled([
-            axios.get('/api/me/recent', { withCredentials: true }),
-            axios.get('/api/featured-playlists', { withCredentials: true }),
-            axios.get('/api/me/playlists', { withCredentials: true }),
-            axios.get('/api/browse/new-releases', { withCredentials: true }),
-            axios.get('/api/me/top/artists', { withCredentials: true }),
-            axios.get('/api/browse/categories', { withCredentials: true }),
-            axios.get('/api/me/top/tracks', { withCredentials: true }),
-          ]);
-
-          const newData: Partial<typeof homeData> = { timestamp: Date.now() };
-
-          if (recentRes.status === 'fulfilled') newData.recentlyPlayed = recentRes.value.data;
-          if (featuredRes.status === 'fulfilled') newData.featuredPlaylists = featuredRes.value.data;
-          if (userRes.status === 'fulfilled') newData.userPlaylists = userRes.value.data;
-          if (newRes.status === 'fulfilled') newData.newReleases = newRes.value.data;
-          if (artistsRes.status === 'fulfilled') newData.topArtists = artistsRes.value.data;
-          if (catsRes.status === 'fulfilled') newData.categories = catsRes.value.data;
-          if (topTracksRes.status === 'fulfilled') newData.topTracks = topTracksRes.value.data;
-
-          setHomeData(newData);
-
-          let seedTracks: string[] = [];
-          if (newData.recentlyPlayed && newData.recentlyPlayed.length) {
-            seedTracks = newData.recentlyPlayed.slice(0, 3).map((t: Track) => t.id);
-          }
-
-          if (seedTracks.length > 0) {
-            axios.get(`/api/recommendations?seed_tracks=${seedTracks.join(',')}&limit=20`, { withCredentials: true })
-              .then(res => setHomeData({ recommendations: res.data.tracks || [] }))
-              .catch(console.error);
-          }
-
-        } catch (error) {
-          console.error('Failed to fetch home data', error);
-        } finally {
-          setIsLoading(false);
-        }
-      };
-
-      fetchAllData();
     }
-  }, [isAuthenticated, setHomeData, homeData.timestamp, homeData.recentlyPlayed.length]); // Dependencies crucial for cache check
+  }, [isAuthenticated]);
+
+  // Pull-to-Refresh Handlers
+  const handleTouchStart = (e: React.TouchEvent) => {
+    if (containerRef.current?.scrollTop === 0) {
+      setPullStartY(e.touches[0].clientY);
+    }
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    if (pullStartY > 0 && containerRef.current?.scrollTop === 0) {
+      const touchY = e.touches[0].clientY;
+      const diff = touchY - pullStartY;
+      if (diff > 0) setPullMoveY(Math.min(diff, 150)); // Cap drag at 150px
+    }
+  };
+
+  const handleTouchEnd = () => {
+    if (pullMoveY > 80) { // Threshold to trigger refresh
+      setIsRefreshing(true);
+      fetchAllData(true);
+    } else {
+      setPullMoveY(0);
+      setPullStartY(0);
+    }
+  };
+
 
   if (!isAuthenticated) {
     return (
       <div className="flex flex-col items-center justify-center h-[60vh] text-center space-y-6 animate-in fade-in duration-700 px-4">
-        <div className="w-24 h-24 md:w-32 md:h-32 bg-blue-600 rounded-3xl flex items-center justify-center shadow-2xl shadow-blue-500/20 mb-4">
-          <Music2 size={56} className="text-white md:w-16 md:h-16" />
+        <div className="w-20 h-20 md:w-24 md:h-24 bg-blue-600 rounded-3xl flex items-center justify-center shadow-2xl shadow-blue-500/20 mb-4">
+          <Music2 size={40} className="text-white md:w-12 md:h-12" />
         </div>
         <h1 className="text-3xl md:text-4xl font-black text-white">Welcome to Nyx</h1>
         <p className="text-slate-400 max-w-sm text-sm md:text-base">Login to your Spotify account to sync your library.</p>
@@ -148,13 +193,29 @@ const Home: React.FC<HomeProps> = ({ onPlaylistSelect, onSearch, onSettingsClick
   };
 
   return (
-    <div className="space-y-8 md:space-y-10 animate-in fade-in duration-500 pb-32 overflow-x-hidden">
+    <div
+      ref={containerRef}
+      className="space-y-8 md:space-y-10 animate-in fade-in duration-500 pb-32 overflow-x-hidden h-full overflow-y-auto relative"
+      onTouchStart={handleTouchStart}
+      onTouchMove={handleTouchMove}
+      onTouchEnd={handleTouchEnd}
+    >
+
+      {/* Pull Refresh Indicator */}
+      <div
+        className="absolute top-0 left-0 right-0 flex justify-center items-center pointer-events-none transition-all duration-300 z-50"
+        style={{ height: pullMoveY > 0 ? `${pullMoveY}px` : '0px', opacity: pullMoveY > 0 ? 1 : 0 }}
+      >
+        <div className="bg-slate-800 p-2 rounded-full shadow-lg mt-4">
+          {isRefreshing ? <RefreshCw className="animate-spin text-blue-500" size={24} /> : <ArrowDown className={`text-white transition-transform duration-300 ${pullMoveY > 80 ? 'rotate-180' : ''}`} size={24} />}
+        </div>
+      </div>
 
       {/* 0. Greeting & Genre Chips */}
       <div className="space-y-4">
         <div className="flex items-center justify-between px-1">
           <h1 className="text-3xl md:text-4xl font-black text-white tracking-tight">{getGreeting()}</h1>
-          <button onClick={onSettingsClick} className="md:hidden p-2 text-slate-400 hover:text-white">
+          <button onClick={() => navigate('/settings')} className="md:hidden p-2 text-slate-400 hover:text-white">
             <Settings size={28} />
           </button>
         </div>
@@ -164,7 +225,7 @@ const Home: React.FC<HomeProps> = ({ onPlaylistSelect, onSearch, onSettingsClick
             {categories.map((cat) => (
               <button
                 key={cat.id}
-                onClick={() => onSearch(`${cat.name}`)}
+                onClick={() => navigate(`/search?q=${encodeURIComponent(cat.name)}`)}
                 className="px-4 py-2 md:px-6 md:py-2.5 bg-[#1F2937] hover:bg-[#374151] rounded-full text-[10px] md:text-xs font-bold whitespace-nowrap transition-colors border border-white/5 text-white"
               >
                 {cat.name}
@@ -182,7 +243,7 @@ const Home: React.FC<HomeProps> = ({ onPlaylistSelect, onSearch, onSettingsClick
           artist.images[0]?.url,
           artist.name,
           'Artist',
-          () => onSearch(artist.name),
+          () => navigate(`/search?q=${encodeURIComponent(artist.name)}`),
           true // Round image
         )}
       />
@@ -195,7 +256,7 @@ const Home: React.FC<HomeProps> = ({ onPlaylistSelect, onSearch, onSettingsClick
           track.album?.images[0]?.url,
           track.name,
           track.artists[0].name,
-          () => playTrack(track)
+          () => onPlayTrack(track)
         )}
       />
 
@@ -207,7 +268,7 @@ const Home: React.FC<HomeProps> = ({ onPlaylistSelect, onSearch, onSettingsClick
           track.album?.images[0]?.url,
           track.name,
           track.artists.map(a => a.name).join(', '),
-          () => playTrack(track)
+          () => onPlayTrack(track)
         )}
       />
 
@@ -219,7 +280,7 @@ const Home: React.FC<HomeProps> = ({ onPlaylistSelect, onSearch, onSettingsClick
           pl.images[0]?.url,
           pl.name,
           pl.description || 'Spotify Mix',
-          () => onPlaylistSelect(pl.id)
+          () => navigate(`/playlist/${pl.id}`)
         )}
       />
 
@@ -231,7 +292,7 @@ const Home: React.FC<HomeProps> = ({ onPlaylistSelect, onSearch, onSettingsClick
           track.album?.images[0]?.url,
           track.name,
           track.artists[0].name,
-          () => playTrack(track)
+          () => onPlayTrack(track)
         )}
       />
 
@@ -243,7 +304,7 @@ const Home: React.FC<HomeProps> = ({ onPlaylistSelect, onSearch, onSettingsClick
           album.images[0]?.url,
           album.name,
           `${album.artists[0]?.name} • Album`,
-          () => onSearch(album.name)
+          () => navigate(`/search?q=${encodeURIComponent(album.name)}`)
         )}
       />
 
@@ -255,7 +316,7 @@ const Home: React.FC<HomeProps> = ({ onPlaylistSelect, onSearch, onSettingsClick
           pl.images[0]?.url,
           pl.name,
           `By ${pl.owner.display_name}`,
-          () => onPlaylistSelect(pl.id)
+          () => navigate(`/playlist/${pl.id}`)
         )}
       />
 

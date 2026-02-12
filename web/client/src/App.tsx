@@ -1,81 +1,96 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { CacheProvider } from './context/CacheContext';
 import Sidebar from './components/Sidebar';
-import { useStore } from './store/useStore';
 import Home from './pages/Home';
 import Search from './pages/Search';
 import Library from './pages/Library';
 import PlaylistDetail from './pages/PlaylistDetail';
+import Downloads from './pages/Downloads';
 import Settings from './pages/Settings';
 import BottomNav from './components/BottomNav';
 import Player from './components/Player';
-import MobilePlayer from './pages/MobilePlayer';
-import Downloads from './pages/Downloads';
 import { User, Track } from './types';
 import axios from 'axios';
-import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
-
-type ViewType = 'home' | 'playlist' | 'search' | 'library' | 'liked' | 'settings' | 'player' | 'downloads';
 
 const App: React.FC = () => {
-  // ✅ GLOBAL STATE
-  const {
-    isAuthenticated, user, setIsAuthenticated, setUser,
-    playTrack,
-    // UI
-    setIsPlayerExpanded, setIsQueueVisible
-  } = useStore();
-
-  useKeyboardShortcuts();
-
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
   const [isCheckingAuth, setIsCheckingAuth] = useState<boolean>(true);
-  const [currentView, setCurrentView] = useState<ViewType>('home');
-  const [selectedPlaylist, setSelectedPlaylist] = useState<any>(null);
-  const [searchQuery, setSearchQuery] = useState<string>('');
+  const [user, setUser] = useState<User | null>(null);
 
-  // Synced with Browser History
+  // ✅ GLOBAL AUDIO STATE
+  const [currentTrack, setCurrentTrack] = useState<Track | null>(null);
+  const [queue, setQueue] = useState<Track[]>([]);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [isShuffle, setIsShuffle] = useState(false);
+
+
+  const [isPlayerExpanded, setIsPlayerExpanded] = useState(false);
+
+  // ✅ BACK BUTTON HANDLING
   useEffect(() => {
-    // Initial state
-    window.history.replaceState({ view: 'home' }, '', '#home');
-
     const handlePopState = (event: PopStateEvent) => {
-      if (event.state && event.state.view) {
-        setCurrentView(event.state.view);
-      } else {
-        // Fallback to home if no state
-        setCurrentView('home');
+      // If back button is pressed and player is expanded, close it
+      if (isPlayerExpanded) {
+        setIsPlayerExpanded(false);
       }
     };
 
     window.addEventListener('popstate', handlePopState);
     return () => window.removeEventListener('popstate', handlePopState);
+  }, [isPlayerExpanded]);
+
+  const handleToggleExpand = useCallback(() => {
+    if (!isPlayerExpanded) {
+      // OPEN: Push state so back button works
+      window.history.pushState({ expanded: true }, '', '#player');
+      setIsPlayerExpanded(true);
+    } else {
+      // CLOSE: Go back in history (triggers popstate)
+      window.history.back();
+    }
+  }, [isPlayerExpanded]);
+
+  const [isQueueVisible, setIsQueueVisible] = useState(false);
+  const [likedTrackIds, setLikedTrackIds] = useState<Set<string>>(new Set());
+  const [likedSongsTotal, setLikedSongsTotal] = useState<number>(0);
+
+  // Check for #player on mount (in case of refresh)
+  useEffect(() => {
+    if (window.location.hash === '#player') {
+      setIsPlayerExpanded(true);
+    }
   }, []);
 
-  const navigateTo = (view: ViewType, playlistData?: any, query: string = '') => {
-    if (playlistData) setSelectedPlaylist(playlistData);
-    if (view === 'search' && query) setSearchQuery(query);
+  const handlePlayTrack = useCallback((track: Track, trackQueue?: Track[]) => {
+    setCurrentTrack(track);
+    setIsPlaying(true);
+    if (trackQueue && trackQueue.length > 0) setQueue(trackQueue);
+    else setQueue([track]);
+  }, []);
 
-    // Prevent duplicate pushes
-    if (view === currentView) {
-      // Allow re-navigation for search updates or playlist switches if needed,
-      // but for now simplest is to toggle player off if it was open (though view is same)
-      // or just return.
-      if (view === 'playlist' && selectedPlaylist && playlistData && selectedPlaylist.id !== playlistData.id) {
-        // New playlist, proceed
-      } else if (view === 'search' && query && query !== searchQuery) {
-        // New search, proceed
+  const handleTrackChange = useCallback((track: Track) => {
+    setCurrentTrack(track);
+    setIsPlaying(true);
+  }, []);
+
+  const handlePlayPause = useCallback((playing: boolean) => {
+    setIsPlaying(playing);
+  }, []);
+
+  const handleToggleLike = useCallback((trackId: string) => {
+    setLikedTrackIds(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(trackId)) {
+        newSet.delete(trackId);
+        setLikedSongsTotal(t => Math.max(0, t - 1));
       } else {
-        return;
+        newSet.add(trackId);
+        setLikedSongsTotal(t => t + 1);
       }
-    }
-
-    window.history.pushState({ view, playlistId: playlistData?.id, query }, '', `#${view}`);
-    setCurrentView(view);
-    setIsPlayerExpanded(false);
-  };
-
-  const handleBack = () => {
-    window.history.back();
-  };
+      return newSet;
+    });
+  }, []);
 
   useEffect(() => {
     const checkAuth = async () => {
@@ -84,6 +99,16 @@ const App: React.FC = () => {
         if (res.data.authenticated) {
           setIsAuthenticated(true);
           setUser(res.data.user);
+
+          // Fetch Liked Songs
+          axios.get('/api/me/tracks').then(response => {
+            const { items, total } = response.data;
+            // Add IDs to Set
+            const ids = new Set<string>();
+            items.forEach((track: any) => ids.add(track.id));
+            setLikedTrackIds(ids);
+            setLikedSongsTotal(total);
+          }).catch(err => console.error("Failed to fetch liked songs", err));
         }
       } catch (err) { } finally {
         setIsCheckingAuth(false);
@@ -95,81 +120,85 @@ const App: React.FC = () => {
   if (isCheckingAuth) return <div className="h-screen w-full bg-slate-950 flex items-center justify-center"><div className="w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div></div>;
 
   return (
-    <div className="flex h-screen bg-black text-slate-100 overflow-hidden select-none flex-col md:flex-row font-sans">
-      <Sidebar
-        user={user}
-        isAuthenticated={isAuthenticated}
-        onNavigateHome={() => navigateTo('home')}
-        onNavigateSearch={() => navigateTo('search')}
-        onNavigateLibrary={() => navigateTo('library')}
-        onNavigateLiked={() => navigateTo('liked')}
-        onNavigatePlaylist={(id) => navigateTo('playlist', { id })}
-        onNavigateSettings={() => navigateTo('settings')}
-        onCreatePlaylist={() => { }}
-      />
+    <CacheProvider>
+      <BrowserRouter>
+        <div className="flex h-screen bg-black text-slate-100 overflow-hidden select-none flex-col md:flex-row font-sans">
+          <Sidebar user={user} isAuthenticated={isAuthenticated} />
 
-      <main className="flex-1 flex flex-col min-w-0 bg-black overflow-y-auto relative scrollbar-hide">
-        <div className="p-4 md:p-8 pb-32">
-          {currentView === 'home' && (
-            <Home
-              onPlaylistSelect={(id) => navigateTo('playlist', { id })}
-              onSettingsClick={() => navigateTo('settings')}
-              onSearch={(q) => navigateTo('search', null, q)}
-            />
-          )}
-          {currentView === 'search' && (
-            <Search
-              onBack={handleBack}
-              showBack={true} // Always allow back from search if needed, or check history. length is unreliable with pushState
-              initialQuery={searchQuery}
-            />
-          )}
-          {currentView === 'library' && (
-            <Library onPlaylistSelect={(id) => navigateTo('playlist', { id })} />
-          )}
-          {currentView === 'playlist' && selectedPlaylist && (
-            <PlaylistDetail
-              id={selectedPlaylist.id || selectedPlaylist}
-              onDownloadRequest={() => { }}
-              onBack={handleBack}
-            />
-          )}
-          {currentView === 'liked' && (
-            <PlaylistDetail
-              id="liked-songs"
-              onDownloadRequest={() => { }}
-              isLikedView={true}
-              onBack={handleBack}
-            />
-          )}
+          <main className="flex-1 flex flex-col min-w-0 bg-black overflow-y-auto relative scrollbar-hide">
+            <div className="p-4 md:p-8 pb-32">
+              <Routes>
+                <Route path="/" element={
+                  <Home
+                    isAuthenticated={isAuthenticated}
+                    onPlayTrack={handlePlayTrack}
+                  />
+                } />
+                <Route path="/search" element={
+                  <Search
+                    isAuthenticated={isAuthenticated}
+                    onPlayTrack={handlePlayTrack}
+                  />
+                } />
+                <Route path="/library" element={
+                  <Library isAuthenticated={isAuthenticated} user={user} likedTrackIds={likedTrackIds} likedSongsTotal={likedSongsTotal} />
+                } />
+                <Route path="/downloads" element={<Downloads />} />
+                <Route path="/playlist/:id" element={
+                  <PlaylistDetail
+                    user={user}
+                    onPlayTrack={handlePlayTrack}
+                    onDownloadRequest={() => { }}
+                    likedTrackIds={likedTrackIds}
+                    onToggleLike={handleToggleLike}
+                    isPlaying={isPlaying}
+                    onPlayPause={handlePlayPause}
+                    currentTrackId={currentTrack?.id}
+                    isShuffle={isShuffle}
+                    onToggleShuffle={() => setIsShuffle(!isShuffle)}
+                  />
+                } />
+                <Route path="/liked" element={
+                  <PlaylistDetail
+                    user={user}
+                    isLikedView={true}
+                    onPlayTrack={handlePlayTrack}
+                    onDownloadRequest={() => { }}
+                    likedTrackIds={likedTrackIds}
+                    onToggleLike={handleToggleLike}
+                    isPlaying={isPlaying}
+                    onPlayPause={handlePlayPause}
+                    currentTrackId={currentTrack?.id}
+                    isShuffle={isShuffle}
+                    onToggleShuffle={() => setIsShuffle(!isShuffle)}
+                  />
+                } />
+                <Route path="/settings" element={<Settings user={user} />} />
+                <Route path="*" element={<Navigate to="/" replace />} />
+              </Routes>
+            </div>
+          </main>
 
-          {currentView === 'settings' && (
-            <Settings />
-          )}
-          {currentView === 'player' && (
-            <MobilePlayer onBack={handleBack} />
-          )}
-          {currentView === 'downloads' && (
-            <Downloads onBack={handleBack} />
-          )}
+          <BottomNav />
+
+          <Player
+            currentTrack={currentTrack}
+            queue={queue}
+            onTrackChange={handleTrackChange}
+            isExpanded={isPlayerExpanded}
+            onToggleExpand={handleToggleExpand}
+            likedTrackIds={likedTrackIds}
+            onToggleLike={handleToggleLike}
+            onToggleQueue={() => setIsQueueVisible(!isQueueVisible)}
+            isQueueVisible={isQueueVisible}
+            isPlaying={isPlaying}
+            setIsPlaying={handlePlayPause}
+            isShuffle={isShuffle}
+            onToggleShuffle={() => setIsShuffle(!isShuffle)}
+          />
         </div>
-      </main>
-
-      {currentView !== 'player' && (
-        <BottomNav
-          activeView={currentView}
-          onNavigateHome={() => navigateTo('home')}
-          onNavigateSearch={() => navigateTo('search')}
-          onNavigateLibrary={() => navigateTo('library')}
-          onNavigateDownloads={() => navigateTo('downloads')}
-        />
-      )}
-
-      {/* ✅ PLAYER - ALWAYS MOUNTED (Preserves Audio) */}
-      <div className={currentView === 'player' ? 'hidden' : 'block'}>
-        <Player onMobileExpand={() => navigateTo('player')} />
-      </div>
-    </div>
+      </BrowserRouter>
+    </CacheProvider>
   );
 };
 

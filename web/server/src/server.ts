@@ -4,8 +4,7 @@ import cors from 'cors';
 import authRoutes from './routes/auth.js';
 import apiRoutes from './routes/api.js';
 import youtubeRoutes from './routes/youtube.js';
-import dotenv from 'dotenv';
-dotenv.config();
+
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -35,7 +34,7 @@ app.use(express.json() as any);
 
 app.use(session({
   name: 'nyx.sid',
-  secret: process.env.SESSION_SECRET!,
+  secret: 'nyx-super-secret-key',
   resave: false,
   saveUninitialized: false,
   cookie: {
@@ -52,12 +51,6 @@ app.use('/api/auth', authRoutes);
 app.use('/api', apiRoutes);
 
 app.use('/api/youtube', youtubeRoutes);
-
-
-// //Android 
-// app.listen(5000, '0.0.0.0', () => {
-//   console.log('Nyx Server running at http://0.0.0.0:5000');
-// });
 
 // HTTP Server on 127.0.0.1
 app.listen(5000, '127.0.0.1', () => {

@@ -1,29 +1,22 @@
 import React from 'react';
 import { Home, Library, Heart, Search, Settings, LogIn } from 'lucide-react';
 import { User } from '../types';
+import { NavLink } from 'react-router-dom';
 
 interface SidebarProps {
   user: User | null;
   isAuthenticated: boolean;
-  onNavigateHome: () => void;
-  onNavigateSearch: () => void;
-  onNavigateLibrary: () => void;
-  onNavigateLiked: () => void;
-  onNavigatePlaylist: (id: string) => void;
-  onNavigateSettings: () => void;
-  onCreatePlaylist: () => void;
 }
 
-const Sidebar: React.FC<SidebarProps> = ({
-  user, isAuthenticated, onNavigateHome, onNavigateSearch, onNavigateLibrary,
-  onNavigateLiked, onNavigateSettings, onNavigatePlaylist, onCreatePlaylist
-}) => {
-
-  // ROBUST IMAGE CHECK: Handles both Spotify raw API (images) and Passport.js (photos)
+const Sidebar: React.FC<SidebarProps> = ({ user, isAuthenticated }) => {
+  // ROBUST IMAGE CHECK
   const userImage =
     user?.images?.[0]?.url ||
     (user as any)?.photos?.[0]?.value ||
     'https://i.pravatar.cc/100';
+
+  const navClass = ({ isActive }: { isActive: boolean }) =>
+    `w-full flex items-center space-x-4 px-4 py-3 rounded-xl transition-all ${isActive ? 'bg-white/10 text-white' : 'text-slate-300 hover:text-white hover:bg-slate-800/50'}`;
 
   return (
     <aside className="hidden md:flex w-64 flex-shrink-0 bg-black flex-col p-4 space-y-6 border-r border-white/5">
@@ -32,24 +25,24 @@ const Sidebar: React.FC<SidebarProps> = ({
       </div>
 
       <nav className="space-y-1">
-        <button onClick={onNavigateHome} className="w-full flex items-center space-x-4 px-4 py-3 text-slate-300 hover:text-white hover:bg-slate-800/50 rounded-xl transition-all">
+        <NavLink to="/" className={navClass} end>
           <Home size={22} /><span className="font-bold text-sm">Home</span>
-        </button>
-        <button onClick={onNavigateSearch} className="w-full flex items-center space-x-4 px-4 py-3 text-slate-300 hover:text-white hover:bg-slate-800/50 rounded-xl transition-all">
+        </NavLink>
+        <NavLink to="/search" className={navClass}>
           <Search size={22} /><span className="font-bold text-sm">Search</span>
-        </button>
-        <button onClick={onNavigateLibrary} className="w-full flex items-center space-x-4 px-4 py-3 text-slate-300 hover:text-white hover:bg-slate-800/50 rounded-xl transition-all">
+        </NavLink>
+        <NavLink to="/library" className={navClass}>
           <Library size={22} /><span className="font-bold text-sm">Library</span>
-        </button>
-        <button onClick={onNavigateSettings} className="w-full flex items-center space-x-4 px-4 py-3 text-slate-300 hover:text-white hover:bg-slate-800/50 rounded-xl transition-all">
+        </NavLink>
+        <NavLink to="/settings" className={navClass}>
           <Settings size={22} /><span className="font-bold text-sm">Settings</span>
-        </button>
+        </NavLink>
       </nav>
 
       <div className="pt-4 space-y-1">
-        <button onClick={onNavigateLiked} className="w-full flex items-center space-x-4 px-4 py-3 text-slate-400 hover:text-white transition-colors">
+        <NavLink to="/liked" className={({ isActive }) => `w-full flex items-center space-x-4 px-4 py-3 transition-colors ${isActive ? 'text-white' : 'text-slate-400 hover:text-white'}`}>
           <Heart size={22} className="text-blue-500 fill-blue-500" /><span className="font-bold text-sm">Liked Songs</span>
-        </button>
+        </NavLink>
       </div>
 
       <div className="mt-auto pt-4 border-t border-white/5">

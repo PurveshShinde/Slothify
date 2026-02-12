@@ -24,6 +24,19 @@ router.get('/me/playlists', async (req, res) => {
     }
 });
 
+router.post('/me/playlists', async (req, res) => {
+    try {
+        const token = (req.session as any).access_token;
+        const user = await spotifyService.getMe(token);
+        const { name } = req.body;
+        const newPlaylist = await spotifyService.createPlaylist(token, user.id, name);
+        res.json(newPlaylist);
+    } catch (err: any) {
+        console.error('[/api/me/playlists POST] Error:', err.response?.data || err.message);
+        res.status(500).json({ error: 'Spotify API Error', details: err.message });
+    }
+});
+
 router.get('/featured-playlists', async (req, res) => {
     try {
         const token = (req.session as any).access_token;
@@ -140,8 +153,8 @@ router.get('/browse/categories/:id/playlists', async (req, res) => {
 router.get('/me/tracks', async (req, res) => {
     try {
         const token = (req.session as any).access_token;
-        const items = await spotifyService.getMySavedTracks(token);
-        res.json(items);
+        const result = await spotifyService.getMySavedTracks(token);
+        res.json(result);
     } catch (err: any) {
         console.error('[/api/me/tracks] Error:', err.response?.data || err.message);
         res.status(500).json({ error: 'Spotify API Error', details: err.message });
@@ -172,17 +185,13 @@ router.delete('/playlists/:id/tracks', async (req, res) => {
     }
 });
 
-router.get('/recommendations', async (req, res) => {
+router.get('/users/:id', async (req, res) => {
     try {
         const token = (req.session as any).access_token;
-        const { seed_tracks, limit } = req.query;
-        const tracks = await spotifyService.getRecommendations(
-            token,
-            String(seed_tracks).split(','),
-        );
-        res.json(tracks);
+        const profile = await spotifyService.getUserProfile(token, req.params.id);
+        res.json(profile);
     } catch (err: any) {
-        console.error('[/api/recommendations] Error:', err.response?.data || err.message);
+        console.error('[/api/users/:id] Error:', err.response?.data || err.message);
         res.status(500).json({ error: 'Spotify API Error', details: err.message });
     }
 });

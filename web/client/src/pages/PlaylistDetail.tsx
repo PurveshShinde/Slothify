@@ -1,73 +1,187 @@
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo, useRef } from 'react';
 import {
-  Search as SearchIcon, ChevronLeft, ArrowUpDown, Heart, Trash2, Play, Pause,
-  Clock3, MoreHorizontal, Download, Shuffle, MoreVertical
+  ArrowLeft, Search as SearchIcon, ArrowUpDown, Heart, Trash2, Play, Pause,
+  Clock3, MoreHorizontal, Download, Shuffle, MoreVertical, RefreshCw, ArrowDown, Plus
 } from 'lucide-react';
-import { Playlist, Track } from '../types';
+import { Playlist, Track, User } from '../types';
 import axios from 'axios';
-
-import { useStore } from '../store/useStore';
+import { useParams, useNavigate } from 'react-router-dom';
+import { useCache } from '../context/CacheContext';
 
 type SortOption = 'az' | 'za' | 'newest' | 'oldest' | 'duration' | 'artist';
 
 interface ExtendedTrack extends Track {
   added_at?: string;
+  added_by?: { id: string; display_name?: string;[key: string]: any };
 }
 
 interface PlaylistDetailProps {
-  id: string;
+  id?: string;
   isLikedView?: boolean;
-  onBack: () => void;
+  onPlayTrack: (track: Track, fromQueue: Track[]) => void;
   onDownloadRequest: (id: string) => void;
+  likedTrackIds: Set<string>;
+  onToggleLike: (id: string) => void;
+  currentTrackId?: string;
+
+  // ✅ SYNCED PROPS
+  isPlaying: boolean;
+  onPlayPause: (playing: boolean) => void;
+  isShuffle: boolean;
+  onToggleShuffle: () => void;
+  title?: string;
+  user?: User | null;
 }
 
 const PlaylistDetail: React.FC<PlaylistDetailProps> = ({
-  id, isLikedView, onBack
+  isLikedView, onPlayTrack, likedTrackIds, onToggleLike, currentTrackId,
+  isPlaying, onPlayPause, isShuffle, onToggleShuffle, user
 }) => {
-  const {
-    user,
-    playTrack,
-    isPlaying,
-    setIsPlaying,
-    isShuffle,
-    toggleShuffle,
-    currentTrack,
-    likedTrackIds,
-    toggleLike
-  } = useStore();
-  const currentTrackId = currentTrack?.id;
-  const onPlayPause = setIsPlaying;
-  const onToggleShuffle = toggleShuffle;
-  const onPlayTrack = playTrack;
-  const onToggleLike = toggleLike;
-  const [playlist, setPlaylist] = useState<Playlist | null>(null);
-  const [tracks, setTracks] = useState<ExtendedTrack[]>([]);
+  const navigate = useNavigate();
+  const { id: paramId } = useParams();
+  const id = isLikedView ? 'liked' : paramId || '';
+
+  const { cache, setPlaylistDetail } = useCache();
+
+  // Cache check
+  const cachedData = cache.playlistDetails[id];
+
+  const [playlist, setPlaylist] = useState<Playlist | null>(cachedData?.playlist || null);
+  const [tracks, setTracks] = useState<ExtendedTrack[]>(cachedData?.tracks || []);
   const [filterQuery, setFilterQuery] = useState('');
   const [sortBy, setSortBy] = useState<SortOption>('az');
   const [showSortMenu, setShowSortMenu] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
-  /* const [currentUser, setCurrentUser] = useState<any>(null); -- Removed, using store */
+  const [isLoading, setIsLoading] = useState(!cachedData);
+  const [showSearchBar, setShowSearchBar] = useState(false);
+  const [isScrolled, setIsScrolled] = useState(false);
+  const [contributorProfiles, setContributorProfiles] = useState<Record<string, any>>({});
+
+  // Pull-to-refresh state
+  const [pullStartY, setPullStartY] = useState(0);
+  const [pullMoveY, setPullMoveY] = useState(0);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  const fetchData = async (isRefresh = false) => {
+    if (!id) return;
+    if (!isRefresh && cachedData) return;
+
+    setIsLoading(!isRefresh);
+
+    try {
+      if (!isLikedView) {
+        const res = await axios.get(`/api/playlists/${id}`);
+        const fetchedPlaylist = res.data;
+        let fetchedTracks: ExtendedTrack[] = [];
+
+        if (res.data.tracks?.items) {
+          fetchedTracks = res.data.tracks.items
+            .filter((i: any) => i.track)
+            .map((i: any) => ({ ...i.track, added_at: i.added_at, added_by: i.added_by }));
+        }
+
+        setPlaylist(fetchedPlaylist);
+        setTracks(fetchedTracks);
+        setPlaylistDetail(id, { playlist: fetchedPlaylist, tracks: fetchedTracks });
+
+      } else {
+        const res = await axios.get('/api/me/tracks');
+        const fetchedTracks = res.data.items || [];
+        const fetchedPlaylist = {
+          id: 'liked',
+          name: 'Liked Songs',
+          description: 'Your saved tracks',
+          images: [],
+          owner: { display_name: user?.display_name || 'You', id: user?.id || 'me' },
+          tracks: { items: [], total: res.data.total || fetchedTracks.length }
+        } as any;
+
+        setPlaylist(fetchedPlaylist);
+        setTracks(fetchedTracks);
+        setPlaylistDetail(id, { playlist: fetchedPlaylist, tracks: fetchedTracks });
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setIsLoading(false);
+      setIsRefreshing(false);
+      setPullMoveY(0);
+    }
+  };
 
   useEffect(() => {
-    const fetchData = async () => {
-      setIsLoading(true);
-      try {
-
-        if (!isLikedView) {
-          const res = await axios.get(`/api/playlists/${id}`);
-          setPlaylist(res.data);
-          if (res.data.tracks?.items) {
-            setTracks(res.data.tracks.items.filter((i: any) => i.track).map((i: any) => ({ ...i.track, added_at: i.added_at })));
-          }
-        } else {
-          const res = await axios.get('/api/me/tracks');
-          setTracks(Array.isArray(res.data) ? res.data.map((t: any) => ({ ...t, added_at: new Date().toISOString() })) : []);
-          setPlaylist({ id: 'liked', name: 'Liked Songs', description: 'Your saved tracks', images: [], owner: { display_name: 'You', id: 'me' }, tracks: { items: [], total: 0 } } as any);
-        }
-      } catch (err) { console.error(err); } finally { setIsLoading(false); }
-    };
-    fetchData();
+    if ((!cachedData || isLikedView) && id) { // Always fetch liked view to stay fresh or if no cache
+      // If it's liked view, we probably want to fetch fresh or cache intelligently. 
+      // For now, let's respect cache but maybe invalidate it easier? 
+      // Actually adhering to user request "won't reload unless scroll down" implies rigorous caching.
+      if (!cachedData) fetchData();
+      else setIsLoading(false);
+    } else {
+      setIsLoading(false);
+    }
   }, [id, isLikedView]);
+
+  // Pull-to-Refresh Handlers
+  const handleTouchStart = (e: React.TouchEvent) => {
+    if (containerRef.current?.scrollTop === 0) {
+      setPullStartY(e.touches[0].clientY);
+    }
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    if (pullStartY > 0 && containerRef.current?.scrollTop === 0) {
+      const touchY = e.touches[0].clientY;
+      const diff = touchY - pullStartY;
+      if (diff > 0) setPullMoveY(Math.min(diff, 200));
+    }
+  };
+
+  const handleTouchEnd = () => {
+    if (pullMoveY > 180) {
+      setIsRefreshing(true);
+      fetchData(true);
+    } else if (pullMoveY > 50) {
+      setShowSearchBar(true);
+      setPullMoveY(0);
+      setPullStartY(0);
+    } else {
+      setPullMoveY(0);
+      setPullStartY(0);
+    }
+  };
+
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+
+    // We need to listen for scroll on the parent since the parent 'main' is the scroll container
+    const scrollParent = container.parentElement?.parentElement; // App's <main>
+    if (!scrollParent) return;
+
+    const handleParentScroll = () => {
+      const scrollPos = scrollParent.scrollTop;
+      setIsScrolled(scrollPos > 40);
+
+      // If user scrolls down slightly and search bar is empty, hide it
+      if (scrollPos > 80 && showSearchBar && filterQuery.length === 0) {
+        setShowSearchBar(false);
+      }
+    };
+
+    scrollParent.addEventListener('scroll', handleParentScroll);
+    return () => scrollParent.removeEventListener('scroll', handleParentScroll);
+  }, [showSearchBar, filterQuery]);
+
+  const handleScroll = () => {
+    // Keep internal handleScroll for cases where this might be used directly
+    if (containerRef.current) {
+      const scrollPos = containerRef.current.scrollTop;
+      if (scrollPos > 100 && showSearchBar && filterQuery.length === 0) {
+        setShowSearchBar(false);
+      }
+    }
+  };
+
 
   const removeTrack = async (track: Track, e: React.MouseEvent) => {
     e.stopPropagation();
@@ -79,7 +193,13 @@ const PlaylistDetail: React.FC<PlaylistDetailProps> = ({
           data: { uris: [track.uri] },
           withCredentials: true
         });
-        setTracks(prev => prev.filter(t => t.id !== track.id));
+        const newTracks = tracks.filter(t => t.id !== track.id);
+        setTracks(newTracks);
+        // Update cache
+        if (id) {
+          setPlaylistDetail(id, { playlist: { ...playlist, tracks: { ...playlist.tracks, total: newTracks.length } }, tracks: newTracks });
+        }
+
       } catch (err) {
         console.error("Failed to remove track", err);
       }
@@ -107,6 +227,51 @@ const PlaylistDetail: React.FC<PlaylistDetailProps> = ({
     return list;
   }, [tracks, filterQuery, sortBy]);
 
+  const collaborators = useMemo(() => {
+    if (!tracks.length || !playlist?.owner) return [];
+    const uniqueIds = new Set<string>();
+    const list: any[] = [];
+
+    // Always put owner first
+    uniqueIds.add(playlist.owner.id);
+    list.push({ ...playlist.owner, isOwner: true });
+
+    tracks.forEach(t => {
+      if (t.added_by && t.added_by.id && !uniqueIds.has(t.added_by.id) && t.added_by.id !== 'spotify') {
+        uniqueIds.add(t.added_by.id);
+        const name = t.added_by.display_name || t.added_by.id;
+        list.push({ ...t.added_by, display_name: name });
+      }
+    });
+    return list;
+  }, [tracks, playlist?.owner]);
+
+  // ✅ FETCH FULL CONTRIBUTOR PROFILES
+  useEffect(() => {
+    collaborators.forEach(collab => {
+      if (collab.id && !collab.isOwner && !contributorProfiles[collab.id]) {
+        axios.get(`/api/users/${collab.id}`)
+          .then(res => {
+            setContributorProfiles(prev => ({ ...prev, [collab.id]: res.data }));
+          })
+          .catch(() => {
+            // fallback: keep as is
+            setContributorProfiles(prev => ({ ...prev, [collab.id]: collab }));
+          });
+      }
+    });
+  }, [collaborators]);
+
+  if (isLoading) return <div className="flex items-center justify-center h-screen bg-black"><div className="w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div></div>;
+
+  const totalDurationMs = tracks.reduce((acc, t) => acc + t.duration_ms, 0);
+  const formatTotalDuration = (ms: number) => {
+    const hours = Math.floor(ms / 3600000);
+    const minutes = Math.floor((ms % 3600000) / 60000);
+    if (hours > 0) return `${hours}h ${minutes}m`;
+    return `${minutes}min`;
+  };
+
   const formatDuration = (ms: number) => {
     const min = Math.floor(ms / 60000);
     const sec = Math.floor((ms % 60000) / 1000);
@@ -119,10 +284,8 @@ const PlaylistDetail: React.FC<PlaylistDetailProps> = ({
     return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
   };
 
-  if (isLoading) return <div className="flex items-center justify-center h-64"><div className="w-8 h-8 border-2 border-green-500 border-t-transparent rounded-full animate-spin"></div></div>;
-
   const isOwner = playlist?.owner?.id === user?.id;
-  const gradientColor = isLikedView ? 'from-purple-900/80' : 'from-slate-800/80';
+
   const isThisPlaylistPlaying = tracks.some(t => t.id === currentTrackId);
 
   // ✅ MAIN BUTTON LOGIC
@@ -130,95 +293,177 @@ const PlaylistDetail: React.FC<PlaylistDetailProps> = ({
     if (isThisPlaylistPlaying) {
       onPlayPause(!isPlaying); // Toggle global play/pause
     } else {
-      if (tracks.length > 0) onPlayTrack(tracks[0], tracks);
+      if (sortedAndFilteredTracks.length > 0) {
+        if (isShuffle) {
+          const randomIndex = Math.floor(Math.random() * sortedAndFilteredTracks.length);
+          onPlayTrack(sortedAndFilteredTracks[randomIndex], sortedAndFilteredTracks);
+        } else {
+          onPlayTrack(sortedAndFilteredTracks[0], sortedAndFilteredTracks);
+        }
+      }
     }
   };
 
   // Helper to safely get the owner image
   const getOwnerImage = () => {
     if (!playlist?.owner) return null;
-    const img = (playlist.owner as any).images?.[0]?.url || (playlist.owner as any).photos?.[0]?.value;
+    let img = (playlist.owner as any).images?.[0]?.url || (playlist.owner as any).photos?.[0]?.value;
+
+    // Fallback to current user image if owner is the current user and playlist owner image is missing
+    if (!img && isOwner && user?.images?.[0]?.url) {
+      img = user.images[0].url;
+    }
+
     return img;
   };
   const ownerImage = getOwnerImage();
 
   return (
-    <div className={`flex flex-col h-full animate-in fade-in duration-500 bg-gradient-to-b ${gradientColor} to-black`}>
-      {/* HEADER */}
-      <div className="relative flex flex-col md:flex-row gap-6 p-6 pb-4 md:pb-8">
-        <button onClick={onBack} className="absolute top-4 left-4 p-2 text-white z-20 md:hidden"><ChevronLeft size={28} /></button>
-        <button onClick={onBack} className="hidden md:block absolute top-4 left-4 p-2 bg-black/20 rounded-full text-white z-20"><ChevronLeft size={24} /></button>
-        <div className="flex-shrink-0 mx-auto md:mx-0 mt-8 md:mt-0 shadow-2xl">
-          {isLikedView ? (
-            <div className="w-64 h-64 md:w-60 md:h-60 bg-gradient-to-br from-[#450af5] to-[#c4efd9] flex items-center justify-center shadow-2xl">
-              <Heart size={80} className="text-white fill-white" />
-            </div>
-          ) : (
-            <img src={playlist?.images[0]?.url || `https://picsum.photos/seed/${id}/400`} alt="" className="w-64 h-64 md:w-60 md:h-60 object-cover shadow-2xl" />
-          )}
-        </div>
-        <div className="flex flex-col justify-end text-left space-y-2 z-10 px-2 md:px-0">
-          <span className="hidden md:block text-xs font-bold uppercase tracking-wider text-white">{isLikedView ? 'Playlist' : 'Private Playlist'}</span>
-          <h1 className="text-2xl md:text-7xl font-black text-white tracking-tighter leading-tight drop-shadow-md">{isLikedView ? 'Liked Songs' : playlist?.name}</h1>
-          <p className="hidden md:block text-slate-300 opacity-80">{playlist?.description}</p>
-
-          {/* Desktop Meta */}
-          <div className="hidden md:flex items-center space-x-2 text-sm text-white font-medium pt-2">
-            {playlist?.owner && <span className="font-bold">{playlist.owner.display_name}</span>}
-            <span>• {tracks.length} songs</span>
-            <span className="text-slate-300">, about {Math.floor(tracks.reduce((acc, t) => acc + t.duration_ms, 0) / 60000)} min</span>
-          </div>
-
-          {/* Mobile Meta */}
-          <div className="md:hidden flex flex-col space-y-1 mt-1">
-            {playlist?.owner && (
-              <div className="flex items-center space-x-2">
-                {ownerImage ? (
-                  <img src={ownerImage} className="w-6 h-6 rounded-full object-cover border border-white/10" alt="" />
-                ) : (
-                  <div className="w-6 h-6 rounded-full bg-orange-500 flex items-center justify-center text-[10px] font-bold text-black">
-                    {playlist.owner.display_name.charAt(0)}
-                  </div>
-                )}
-                <span className="font-bold text-sm text-white">{playlist.owner.display_name}</span>
-              </div>
-            )}
-            <span className="text-slate-400 text-xs">{isLikedView ? 'Playlist' : 'Private Playlist'} • 2024</span>
-          </div>
+    <div
+      ref={containerRef}
+      onScroll={handleScroll}
+      className={`flex flex-col h-full animate-in fade-in duration-500 bg-black overflow-y-auto relative`}
+      onTouchStart={handleTouchStart}
+      onTouchMove={handleTouchMove}
+      onTouchEnd={handleTouchEnd}
+    >
+      {/* Pull Refresh Indicator */}
+      <div
+        className="absolute top-0 left-0 right-0 flex justify-center items-center pointer-events-none transition-all duration-300 z-50"
+        style={{ height: pullMoveY > 0 ? `${pullMoveY}px` : '0px', opacity: pullMoveY > 0 ? 1 : 0 }}
+      >
+        <div className="bg-slate-800 p-2 rounded-full shadow-lg mt-4">
+          {isRefreshing ? <RefreshCw className="animate-spin text-blue-500" size={24} /> : <ArrowDown className={`text-white transition-transform duration-300 ${pullMoveY > 80 ? 'rotate-180' : ''}`} size={24} />}
         </div>
       </div>
 
-      {/* MOBILE CONTROLS */}
-      <div className="md:hidden flex items-center justify-between px-4 pb-4">
-        <div className="flex items-center space-x-6 text-slate-400">
-          <Heart size={26} className={isLikedView ? "text-green-500 fill-green-500" : ""} />
-          <Download size={26} />
-          <MoreVertical size={26} />
-        </div>
-        <button onClick={handleMainPlayClick} className="w-14 h-14 bg-[#1ed760] rounded-full flex items-center justify-center text-black shadow-lg">
-          {isThisPlaylistPlaying && isPlaying ? <Pause size={28} fill="currentColor" /> : <Play size={28} fill="currentColor" className="ml-1" />}
+      {/* TOP NAVIGATION */}
+      <div className={`sticky top-0 z-30 px-4 py-4 flex items-center transition-all duration-300 ${isScrolled ? 'bg-black shadow-lg translate-y-0' : 'bg-transparent -translate-y-1'}`}>
+        <button onClick={() => navigate(-1)} className="p-1 text-white hover:opacity-70 transition-opacity">
+          <ArrowLeft size={28} />
         </button>
       </div>
 
-      {/* DESKTOP CONTROLS */}
-      <div className="hidden md:flex px-6 py-4 flex-col space-y-4">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center space-x-6">
-            <button onClick={handleMainPlayClick} className="w-14 h-14 bg-[#1ed760] rounded-full flex items-center justify-center text-black shadow-lg hover:scale-105 transition-all">
-              {isThisPlaylistPlaying && isPlaying ? <Pause size={28} fill="currentColor" /> : <Play size={28} fill="currentColor" className="ml-1" />}
-            </button>
-            <button onClick={onToggleShuffle} className={`transition-colors ${isShuffle ? 'text-green-500' : 'text-slate-400 hover:text-white'}`}><Shuffle size={28} /></button>
-            <button className="text-slate-400 hover:text-white"><Download size={24} /></button>
-            <button className="text-slate-400 hover:text-white"><MoreHorizontal size={28} /></button>
+      {/* SEARCH BAR (Hidden until pull) */}
+      <div
+        className="px-4 overflow-hidden transition-all duration-300 ease-out"
+        style={{
+          height: (pullMoveY > 20 || showSearchBar) ? '64px' : '0px',
+          opacity: (pullMoveY > 20 || showSearchBar) ? 1 : 0,
+          marginBottom: (pullMoveY > 20 || showSearchBar) ? '8px' : '0px'
+        }}
+      >
+        <div className="relative w-full">
+          <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+          <input
+            type="text"
+            placeholder="Find on this page"
+            value={filterQuery}
+            onChange={(e) => {
+              setFilterQuery(e.target.value);
+              if (e.target.value.length > 0) setShowSearchBar(true);
+            }}
+            onBlur={() => {
+              if (filterQuery.length === 0) setShowSearchBar(false);
+            }}
+            className="w-full bg-white/10 border-none rounded-md py-2.5 pl-9 pr-4 text-white placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-white/20 transition-all text-sm font-semibold"
+          />
+        </div>
+      </div>
+
+      {/* HEADER SECTION */}
+      <div className="flex flex-col items-start px-6 pt-2 pb-6 space-y-6">
+        {/* Centered Artwork */}
+        <div className="w-full flex justify-center py-4">
+          <div className="w-[70vw] aspect-square max-w-[300px] shadow-[0_20px_50px_rgba(0,0,0,0.5)] transition-transform duration-500 hover:scale-[1.02]">
+            {isLikedView ? (
+              <div className="w-full h-full bg-gradient-to-br from-[#450af5] to-[#c4efd9] flex items-center justify-center">
+                <Heart size={80} className="text-white fill-white" />
+              </div>
+            ) : (
+              <img src={playlist?.images[0]?.url || `https://picsum.photos/seed/${id}/400`} alt="" className="w-full h-full object-cover" />
+            )}
           </div>
-          <div className="flex items-center space-x-2">
-            <div className="relative group">
-              <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" size={18} />
-              <input type="text" placeholder="Search in playlist" onChange={(e) => setFilterQuery(e.target.value)} className="bg-white/10 rounded-full py-2 pl-10 pr-4 text-sm text-white w-48" />
+        </div>
+
+        {/* Title & Info */}
+        <div className="w-full space-y-3">
+          <h1 className="text-2xl md:text-4xl font-black text-white tracking-tight leading-tight">{isLikedView ? 'Liked Songs' : playlist?.name}</h1>
+
+          <div className="flex items-center">
+            {/* Multiple Avatars */}
+            <div className="flex -space-x-2 mr-3">
+              {(playlist as any)?.collaborative && (
+                <div className="relative z-20">
+                  <div className="w-6 h-6 rounded-full bg-zinc-800 border-2 border-black flex items-center justify-center text-white">
+                    <Plus size={12} strokeWidth={4} />
+                  </div>
+                </div>
+              )}
+              {collaborators.slice(0, 3).map((collab, i) => {
+                const fullProfile = contributorProfiles[collab.id] || collab;
+                const img = collab.isOwner ? ownerImage : (fullProfile.images?.[0]?.url || fullProfile.photos?.[0]?.value);
+                const initial = fullProfile.display_name?.charAt(0) || fullProfile.id?.charAt(0) || 'U';
+                return (
+                  <div key={collab.id} className="relative" style={{ zIndex: 10 - i }}>
+                    {img ? (
+                      <img src={img} className="w-6 h-6 rounded-full object-cover border-2 border-black" alt="" />
+                    ) : (
+                      <div
+                        className="w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold text-black border-2 border-black"
+                        style={{ backgroundColor: `hsl(${(collab.id.length * 45) % 360}, 65%, 60%)` }}
+                      >
+                        {initial.toUpperCase()}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+              {collaborators.length > 3 && (
+                <div className="w-6 h-6 rounded-full bg-zinc-800 border-2 border-black flex items-center justify-center text-[8px] font-bold text-white">
+                  +{collaborators.length - 3}
+                </div>
+              )}
             </div>
-            <button onClick={() => setShowSortMenu(!showSortMenu)} className="flex items-center space-x-1 text-slate-400 hover:text-white text-sm font-medium">
-              <span>Custom order</span>
-              <ArrowUpDown size={16} />
+
+            {/* Collaborator Names Text */}
+            <div className="text-sm font-bold text-white truncate max-w-[200px]">
+              {playlist?.owner?.display_name || 'You'}
+              {collaborators.length > 1 && (
+                <span className="text-zinc-400 font-normal"> + {collaborators.length - 1} other{collaborators.length > 2 ? 's' : ''}</span>
+              )}
+            </div>
+          </div>
+
+          <div className="flex items-center space-x-2 text-slate-400 text-sm font-medium">
+            <div className="p-0.5 border border-slate-500 rounded-sm">
+              <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor" className="text-slate-400">
+                <path d="M12 2C9.243 2 7 4.243 7 7v3H6c-1.103 0-2 .897-2 2v8c0 1.103.897 2 2 2h12c1.103 0 2-.897 2-2v-8c0-1.103-.897-2-2-2h-1V7c0-2.757-2.243-5-5-5zm-3 5c0-1.654 1.346-3 3-3s3 1.346 3 3v3H9V7zm9 13H6v-8h12v8z" />
+              </svg>
+            </div>
+            <span>{formatTotalDuration(totalDurationMs)}</span>
+          </div>
+        </div>
+
+        {/* ACTION ROW */}
+        <div className="w-full flex items-center justify-between py-2">
+          <div className="flex items-center space-x-6 text-slate-300">
+            <div className="flex items-center justify-center w-8 h-8 rounded-full border border-slate-500 p-1">
+              <Download size={18} />
+            </div>
+            <div className="flex items-center justify-center">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-slate-300">
+                <circle cx="18" cy="5" r="3" /><circle cx="6" cy="12" r="3" /><circle cx="18" cy="19" r="3" /><line x1="8.59" y1="13.51" x2="15.42" y2="17.49" /><line x1="15.41" y1="6.51" x2="8.59" y2="10.49" />
+              </svg>
+            </div>
+            <MoreHorizontal size={28} className="text-slate-300" />
+          </div>
+          <div className="flex items-center space-x-6">
+            <button onClick={onToggleShuffle} className={`transition-all active:scale-90 ${isShuffle ? 'text-[#1ed760]' : 'text-slate-400'}`}>
+              <Shuffle size={28} />
+            </button>
+            <button onClick={handleMainPlayClick} className="w-14 h-14 bg-[#1ed760] rounded-full flex items-center justify-center text-black shadow-lg hover:scale-105 active:scale-95 transition-all">
+              {isThisPlaylistPlaying && isPlaying ? <Pause size={30} fill="currentColor" /> : <Play size={30} fill="currentColor" className="ml-1" />}
             </button>
           </div>
         </div>
