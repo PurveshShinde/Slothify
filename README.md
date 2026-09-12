@@ -1,4 +1,4 @@
-# Nyx - Full Stack Music Player
+# Slothify - Full Stack Music Player
 
 ## Structure
 This project has been refactored into a full-stack structure:
