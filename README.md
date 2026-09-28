@@ -74,9 +74,28 @@ npm run dev
 
 ## ⚙️ Environment Configuration
 
-- Place a `.env` file in the root or respective directories for any shared environment variables (like Spotify Client IDs, Secrets, etc.).
-- The **frontend** proxies API requests to the backend server.
-- **Spotify Callback URI**: `https://localhost:5000/api/auth/callback`
+To run the application locally, you need to configure environment variables for both the client and the server:
+
+**1. Server Environment (`/server`)**
+Navigate to the server directory and copy the example file:
+```bash
+cd server
+cp .example.env .env
+```
+Open `server/.env` and fill in your [Spotify Developer Dashboard](https://developer.spotify.com/dashboard) credentials:
+- `SPOTIFY_CLIENT_ID`
+- `SPOTIFY_CLIENT_SECRET`
+- Ensure your **Redirect URI** in the dashboard exactly matches: `https://localhost:5000/api/auth/callback`
+
+**2. Client Environment (`/client`)**
+Navigate to the client directory and copy the example file:
+```bash
+cd client
+cp .example.env .env
+```
+Open `client/.env` and update any Vite-specific variables (like `VITE_API_URL` if needed).
+
+- The **frontend** automatically proxies API requests to the backend server.
 
 ## 🔒 HTTPS & Certificates
 
