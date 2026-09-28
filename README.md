@@ -7,7 +7,13 @@
 ![Node.js](https://img.shields.io/badge/Node.js-43853D?style=for-the-badge&logo=node.js&logoColor=white)
 ![Express.js](https://img.shields.io/badge/Express.js-404D59?style=for-the-badge)
 
-Slothify is a modern, ad-free music player that combines Spotify library sync with YouTube Music playback. 
+## 📖 About The Project
+
+**Slothify** is a modern, ad-free music player designed to give users the best of both worlds: the seamless library management of Spotify and the vast, ad-free audio catalog of YouTube. 
+
+Often, users are forced to pay for premium subscriptions just to listen to their favorite playlists without interruptions. Slothify bridges this gap by authenticating with your Spotify account to sync your playlists and liked songs, while silently fetching the actual high-quality audio through a custom YouTube proxy backend. The result is a premium, uninterrupted listening experience—completely free of charge.
+
+Built with a robust tech stack (React, Vite, Node.js, and Express), Slothify features a sleek, responsive UI that feels fast and lightweight.
 
 ## 🏗️ Project Structure
 
