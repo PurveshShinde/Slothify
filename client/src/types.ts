@@ -2,6 +2,7 @@
 export interface User {
   id: string;
   display_name: string;
+  username?: string;
   email?: string;
   images: { url: string }[];
 }

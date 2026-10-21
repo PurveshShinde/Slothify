@@ -1,12 +1,14 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
     Play, Pause, SkipBack, SkipForward, Repeat, Repeat1, Shuffle,
-    ListMusic, ChevronDown, Heart, Loader2, MonitorSpeaker, Mic2, Share2,
-    Volume2, VolumeX, Volume1, MoreVertical
+    ListMusic, ChevronDown, Heart, Loader2, MonitorSpeaker, Mic2,
+    Volume2, VolumeX, Volume1, MoreVertical, Sparkles, X, Plus, Disc
 } from 'lucide-react';
 import { Track } from '../types';
+import VintageTurntable from './VintageTurntable';
+import { useTheme } from '../context/ThemeContext';
 
-const API_BASE = 'http://127.0.0.1:5000';
+const API_BASE = (import.meta as any).env?.VITE_API_BASE || '';
 
 interface PlayerProps {
     currentTrack: Track | null;
@@ -15,20 +17,25 @@ interface PlayerProps {
     isExpanded: boolean;
     onToggleExpand: () => void;
     likedTrackIds: Set<string>;
-    onToggleLike: (id: string) => void;
+    onToggleLike: (id: string, track?: Track) => void;
     onToggleQueue: () => void;
     isQueueVisible: boolean;
     isPlaying: boolean;
     setIsPlaying: (playing: boolean) => void;
     isShuffle: boolean;
     onToggleShuffle: () => void;
+    onQueueChange?: (newQueue: Track[]) => void;
+    isTurntableOpen?: boolean;
+    setIsTurntableOpen?: (open: boolean) => void;
 }
 
 const Player: React.FC<PlayerProps> = ({
     currentTrack, queue, onTrackChange, isExpanded, onToggleExpand,
     likedTrackIds, onToggleLike, onToggleQueue, isQueueVisible,
-    isPlaying, setIsPlaying, isShuffle, onToggleShuffle
+    isPlaying, setIsPlaying, isShuffle, onToggleShuffle, onQueueChange,
+    isTurntableOpen, setIsTurntableOpen
 }) => {
+    const { isOcean } = useTheme();
     const [isBuffering, setIsBuffering] = useState(false);
     const [progress, setProgress] = useState(0);
     const [duration, setDuration] = useState(0);
@@ -37,14 +44,43 @@ const Player: React.FC<PlayerProps> = ({
     const [repeatMode, setRepeatMode] = useState<'off' | 'all' | 'one'>('off');
     const [audioError, setAudioError] = useState<string | null>(null);
 
-    // Guard to prevent multiple simultaneous preload pings
-    const [isPreloading, setIsPreloading] = useState(false);
+    const isLiked = currentTrack ? likedTrackIds.has(currentTrack.id) : false;
+    const currentDuration = duration > 0 ? duration : (currentTrack?.duration_ms ? currentTrack.duration_ms / 1000 : 0);
 
+    // Reset progress and duration when track changes
+    useEffect(() => {
+        setProgress(0);
+        setDuration(currentTrack?.duration_ms ? currentTrack.duration_ms / 1000 : 0);
+    }, [currentTrack?.id]);
+
+    // Smart Mood Suggestions
+    const [smartSuggestions, setSmartSuggestions] = useState<Track[]>([]);
+    const [isLoadingSuggestions, setIsLoadingSuggestions] = useState(false);
+
+    // Guard & Caching Refs
     const audioRef = useRef<HTMLAudioElement | null>(null);
+    const preloadAudioRef = useRef<HTMLAudioElement | null>(null);
     const currentTrackIdRef = useRef<string | null>(null);
+    const activeLoadedTrackIdRef = useRef<string | null>(null);
     const shuffledIndicesRef = useRef<number[]>([]);
     const isSeekingRef = useRef(false);
     const hasPreloadedRef = useRef<string | null>(null);
+    const resolvedVideoMap = useRef<Map<string, string>>((() => {
+        try {
+            const saved = localStorage.getItem('slothify_video_cache');
+            if (saved) {
+                return new Map(JSON.parse(saved));
+            }
+        } catch (e) {}
+        return new Map();
+    })());
+
+    const persistVideoCache = useCallback(() => {
+        try {
+            const entries = Array.from(resolvedVideoMap.current.entries()).slice(-500);
+            localStorage.setItem('slothify_video_cache', JSON.stringify(entries));
+        } catch (e) {}
+    }, []);
 
     // Sync Audio Element with Prop State
     useEffect(() => {
@@ -68,12 +104,86 @@ const Player: React.FC<PlayerProps> = ({
         if (audioRef.current) audioRef.current.volume = isMuted ? 0 : volume;
     }, [volume, isMuted]);
 
-    // Main Track Loader
+    // Helper: Determine next track in queue or from smart suggestions
+    const getNextTrack = useCallback((): Track | null => {
+        if (!currentTrack) return null;
+        if (queue.length > 1) {
+            const currentIndex = queue.findIndex(t => t.id === currentTrack.id);
+            if (currentIndex >= 0 && currentIndex < queue.length - 1) {
+                return queue[currentIndex + 1];
+            }
+            if (repeatMode === 'all') {
+                return queue[0];
+            }
+        }
+        // If queue has ended or only 1 song, pick top smart suggestion
+        if (smartSuggestions.length > 0) {
+            return smartSuggestions[0];
+        }
+        return null;
+    }, [currentTrack, queue, repeatMode, smartSuggestions]);
+
+    // Proactive resolution helper: resolves a track's YouTube videoId into resolvedVideoMap
+    const resolveTrackVideo = useCallback(async (track: Track): Promise<string | null> => {
+        if (resolvedVideoMap.current.has(track.id)) {
+            return resolvedVideoMap.current.get(track.id)!;
+        }
+        try {
+            const query = `${track.name} ${track.artists[0]?.name || ''} audio`;
+            const res = await fetch(`${API_BASE}/api/youtube/search?q=${encodeURIComponent(query)}`);
+            if (res.ok) {
+                const data = await res.json();
+                if (data.videoId) {
+                    resolvedVideoMap.current.set(track.id, data.videoId);
+                    persistVideoCache();
+                    // Pre-warm the stream in backend RAM
+                    fetch(`${API_BASE}/api/youtube/preload/${data.videoId}`).catch(() => {});
+                    return data.videoId;
+                }
+            }
+        } catch (e) { }
+        return null;
+    }, [persistVideoCache]);
+
+    // Keep latest helpers in refs to prevent unnecessary loader re-triggers
+    const getNextTrackRef = useRef(getNextTrack);
+    getNextTrackRef.current = getNextTrack;
+    const resolveTrackVideoRef = useRef(resolveTrackVideo);
+    resolveTrackVideoRef.current = resolveTrackVideo;
+
+    // 1. Fetch Spotify Smart Suggestions based on current track's mood & style
+    useEffect(() => {
+        if (!currentTrack) return;
+        const artist = currentTrack.artists[0]?.name || '';
+        setIsLoadingSuggestions(true);
+
+        fetch(`${API_BASE}/api/recommendations/smart?track=${encodeURIComponent(currentTrack.name)}&artist=${encodeURIComponent(artist)}`)
+            .then(res => res.json())
+            .then(data => {
+                const tracks = data.tracks || [];
+                setSmartSuggestions(tracks);
+
+                // If queue only has current song, automatically append suggestions for endless mood radio
+                if (queue.length <= 1 && tracks.length > 0 && onQueueChange) {
+                    onQueueChange([currentTrack, ...tracks.slice(0, 5)]);
+                }
+            })
+            .catch(err => console.warn('Failed to load smart mood suggestions:', err))
+            .finally(() => setIsLoadingSuggestions(false));
+    }, [currentTrack?.id]);
+
+    // 2. Main Track Loader with Fast Start (STABLE: only triggers on genuine track ID changes)
     useEffect(() => {
         if (!currentTrack || !audioRef.current) return;
 
         const audio = audioRef.current;
         const trackId = currentTrack.id;
+
+        // Guard: Prevent re-initializing the audio if already loaded
+        if (activeLoadedTrackIdRef.current === trackId) {
+            return;
+        }
+        activeLoadedTrackIdRef.current = trackId;
         currentTrackIdRef.current = trackId;
 
         hasPreloadedRef.current = null;
@@ -90,19 +200,23 @@ const Player: React.FC<PlayerProps> = ({
             setProgress(0);
 
             try {
-                const query = `${currentTrack.name} ${currentTrack.artists[0].name} audio`;
-                const res = await fetch(`${API_BASE}/api/youtube/search?q=${encodeURIComponent(query)}`, {
-                    signal,
-                    credentials: 'include'
-                });
+                let videoId = resolvedVideoMap.current.get(trackId);
 
-                if (!res.ok) throw new Error('Search failed');
-                const data = await res.json();
+                if (!videoId) {
+                    const query = `${currentTrack.name} ${currentTrack.artists[0]?.name || ''} audio`;
+                    const res = await fetch(`${API_BASE}/api/youtube/search?q=${encodeURIComponent(query)}`, { signal });
+                    if (!res.ok) throw new Error('Search failed');
+                    const data = await res.json();
+                    videoId = data.videoId;
+                    if (videoId) {
+                        resolvedVideoMap.current.set(trackId, videoId);
+                        persistVideoCache();
+                    }
+                }
 
-                if (currentTrackIdRef.current !== trackId) return;
+                if (currentTrackIdRef.current !== trackId || !videoId) return;
 
-                // Pass the stream token to the backend to avoid 401
-                audio.src = `${API_BASE}/api/youtube/stream/${data.videoId}?token=${data.streamToken}`;
+                audio.src = `${API_BASE}/api/youtube/stream/${videoId}`;
                 audio.load();
 
                 audio.oncanplay = () => {
@@ -111,6 +225,12 @@ const Player: React.FC<PlayerProps> = ({
                         audioRef.current.play()
                             .then(() => setIsPlaying(true))
                             .catch(err => { if (err.name !== 'AbortError') setIsPlaying(false); });
+
+                        // ✅ PROACTIVE PRELOAD: While first song starts, resolve next track's video in background
+                        const next = getNextTrackRef.current();
+                        if (next && next.id !== trackId) {
+                            resolveTrackVideoRef.current(next);
+                        }
                     }
                 };
             } catch (err: any) {
@@ -127,33 +247,44 @@ const Player: React.FC<PlayerProps> = ({
 
     const togglePlay = useCallback((e?: React.MouseEvent) => {
         if (e) e.stopPropagation();
+        if (!currentTrack) return;
         setIsPlaying(!isPlaying);
-    }, [isPlaying, setIsPlaying]);
+    }, [currentTrack, isPlaying, setIsPlaying]);
 
     const handleSkipForward = useCallback((e?: React.SyntheticEvent) => {
         if (e) e.stopPropagation();
-        if (!currentTrack || queue.length === 0) return;
+        if (!currentTrack) return;
 
+        // Check if there is a next track in queue
         const currentIndex = queue.findIndex(t => t.id === currentTrack.id);
-        let nextIndex;
-
-        if (isShuffle) {
-            if (shuffledIndicesRef.current.length !== queue.length) {
-                const indices = Array.from({ length: queue.length }, (_, i) => i);
-                for (let i = indices.length - 1; i > 0; i--) {
-                    const j = Math.floor(Math.random() * (i + 1));
-                    [indices[i], indices[j]] = [indices[j], indices[i]];
+        if (currentIndex >= 0 && currentIndex < queue.length - 1) {
+            let nextIndex = currentIndex + 1;
+            if (isShuffle) {
+                if (shuffledIndicesRef.current.length !== queue.length) {
+                    const indices = Array.from({ length: queue.length }, (_, i) => i);
+                    for (let i = indices.length - 1; i > 0; i--) {
+                        const j = Math.floor(Math.random() * (i + 1));
+                        [indices[i], indices[j]] = [indices[j], indices[i]];
+                    }
+                    shuffledIndicesRef.current = indices;
                 }
-                shuffledIndicesRef.current = indices;
+                const currentShuffledPos = shuffledIndicesRef.current.indexOf(currentIndex);
+                const nextShuffledPos = (currentShuffledPos + 1) % shuffledIndicesRef.current.length;
+                nextIndex = shuffledIndicesRef.current[nextShuffledPos];
             }
-            let currentShuffledPos = shuffledIndicesRef.current.indexOf(currentIndex);
-            const nextShuffledPos = (currentShuffledPos + 1) % shuffledIndicesRef.current.length;
-            nextIndex = shuffledIndicesRef.current[nextShuffledPos];
-        } else {
-            nextIndex = (currentIndex + 1) % queue.length;
+            onTrackChange(queue[nextIndex]);
+            return;
         }
-        onTrackChange(queue[nextIndex]);
-    }, [currentTrack, queue, isShuffle, onTrackChange]);
+
+        // If at end of queue, play top smart mood suggestion
+        if (smartSuggestions.length > 0) {
+            const nextSuggestion = smartSuggestions[0];
+            if (onQueueChange) {
+                onQueueChange([...queue, nextSuggestion]);
+            }
+            onTrackChange(nextSuggestion);
+        }
+    }, [currentTrack, queue, isShuffle, smartSuggestions, onTrackChange, onQueueChange]);
 
     const handleSkipBack = useCallback((e?: React.SyntheticEvent) => {
         if (e) e.stopPropagation();
@@ -184,6 +315,7 @@ const Player: React.FC<PlayerProps> = ({
         setTimeout(() => { isSeekingRef.current = false; }, 300);
     };
 
+    // 3. Time Update & GAPLESS PRELOADER (Triggers at 15 seconds remaining)
     const onTimeUpdate = () => {
         if (!audioRef.current) return;
         const audio = audioRef.current;
@@ -192,36 +324,21 @@ const Player: React.FC<PlayerProps> = ({
             setProgress(audio.currentTime);
         }
 
-        // ✅ FIXED PRE-LOAD LOGIC
+        // Preload next track when <= 15 seconds remaining
         const timeRemaining = duration - audio.currentTime;
-        if (duration > 15 && timeRemaining <= 10 && !hasPreloadedRef.current && !isPreloading && queue.length > 0) {
-
-            const currentIndex = queue.findIndex(t => t.id === currentTrack?.id);
-            const nextTrack = queue[(currentIndex + 1) % queue.length];
-
+        if (duration > 15 && timeRemaining <= 15 && !hasPreloadedRef.current) {
+            const nextTrack = getNextTrack();
             if (nextTrack && nextTrack.id !== currentTrack?.id) {
-                setIsPreloading(true);
                 hasPreloadedRef.current = nextTrack.id;
-                console.log(`[Slothify] Pre-loading: ${nextTrack.name}`);
+                console.log(`[Slothify] Preloading next song buffer: ${nextTrack.name}`);
 
-                const query = `${nextTrack.name} ${nextTrack.artists[0].name} audio`;
-
-                fetch(`${API_BASE}/api/youtube/search?q=${encodeURIComponent(query)}`, { credentials: 'include' })
-                    .then(res => res.json())
-                    .then(data => {
-                        // ✅ Pass credentials and token to avoid 401
-                        return fetch(`${API_BASE}/api/youtube/stream/${data.videoId}?token=${data.streamToken}`, {
-                            credentials: 'include'
-                        });
-                    })
-                    .then(() => {
-                        setIsPreloading(false);
-                    })
-                    .catch(err => {
-                        console.error("[Slothify] Pre-load failed:", err);
-                        setIsPreloading(false);
-                        hasPreloadedRef.current = null; // Allow retry if it failed
-                    });
+                resolveTrackVideo(nextTrack).then(videoId => {
+                    if (videoId && preloadAudioRef.current) {
+                        // Buffer in browser HTTP cache using hidden audio element
+                        preloadAudioRef.current.src = `${API_BASE}/api/youtube/stream/${videoId}`;
+                        preloadAudioRef.current.load();
+                    }
+                });
             }
         }
     };
@@ -233,11 +350,9 @@ const Player: React.FC<PlayerProps> = ({
         return `${minutes}:${seconds.toString().padStart(2, '0')}`;
     };
 
-    const isLiked = currentTrack && likedTrackIds.has(currentTrack.id);
-    if (!currentTrack) return null;
-
     return (
         <>
+            {/* Main Audio Element */}
             <audio
                 ref={audioRef}
                 loop={repeatMode === 'one'}
@@ -249,23 +364,133 @@ const Player: React.FC<PlayerProps> = ({
                 onError={() => setAudioError('Playback error')}
             />
 
-            {/* EXPANDED MOBILE PLAYER */}
-            {isExpanded ? (
-                <div className="md:hidden fixed inset-0 bg-gradient-to-b from-[#505050] to-[#121212] z-[100] flex flex-col h-[100dvh] px-6 pt-safe pb-8 animate-in slide-in-from-bottom duration-300">
-                    <header className="flex items-center justify-between h-16 mb-4">
-                        <button onClick={onToggleExpand}><ChevronDown size={32} className="text-white" /></button>
-                        <div className="flex flex-col items-center">
-                            <span className="text-[10px] font-bold text-white uppercase tracking-widest opacity-80">PLAYING FROM ALBUM</span>
-                            <span className="text-xs font-bold text-white truncate max-w-[200px]">{currentTrack.album.name}</span>
+            {/* Hidden Preloader Audio Element (Warms up browser cache for next song) */}
+            <audio ref={preloadAudioRef} preload="auto" className="hidden" />
+
+            {/* QUEUE & SMART SUGGESTIONS MODAL */}
+            {isQueueVisible && (
+                <div className="fixed inset-y-0 right-0 w-full sm:w-96 bg-[#121212]/95 backdrop-blur-xl border-l border-white/10 z-[120] p-6 flex flex-col shadow-2xl animate-in slide-in-from-right duration-300">
+                    <div className="flex items-center justify-between pb-4 border-b border-white/10">
+                        <div className="flex items-center space-x-2">
+                            <ListMusic size={22} className="text-[#f5d0b5]" />
+                            <h2 className="text-lg font-black text-white">Play Queue</h2>
                         </div>
-                        <MoreVertical size={24} className="text-white" />
+                        <button onClick={onToggleQueue} className="p-2 text-stone-400 hover:text-white rounded-lg hover:bg-white/5">
+                            <X size={20} />
+                        </button>
+                    </div>
+
+                    <div className="flex-1 overflow-y-auto space-y-6 pt-4 scrollbar-hide">
+                        {/* Now Playing */}
+                        {currentTrack && (
+                            <div>
+                                <span className="text-xs font-bold text-stone-400 uppercase tracking-wider">Now Playing</span>
+                                <div className="flex items-center space-x-3 mt-2 p-2 bg-white/5 rounded-xl border border-white/5">
+                                    <img src={currentTrack.album?.images?.[0]?.url || 'https://images.unsplash.com/photo-1518199266791-5375a83190b7?w=100'} className="w-12 h-12 rounded-lg object-cover" alt="" />
+                                    <div className="flex-1 min-w-0">
+                                        <h4 className={`text-sm font-bold truncate ${isOcean ? 'text-blue-400' : 'text-[#f5d0b5]'}`}>{currentTrack.name}</h4>
+                                        <p className="text-xs text-stone-400 truncate">{currentTrack.artists[0]?.name}</p>
+                                    </div>
+                                    <div className={`w-2 h-2 rounded-full animate-ping mr-2 ${isOcean ? 'bg-blue-500' : 'bg-[#f5d0b5]'}`} />
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Next in Queue */}
+                        {queue.length > 1 && (
+                            <div>
+                                <span className="text-xs font-bold text-stone-400 uppercase tracking-wider">Next In Queue</span>
+                                <div className="space-y-1 mt-2">
+                                    {queue.filter(t => t.id !== currentTrack?.id).map((t, idx) => (
+                                        <div
+                                            key={`${t.id}_${idx}`}
+                                            onClick={() => onTrackChange(t)}
+                                            className="flex items-center space-x-3 p-2 rounded-xl hover:bg-white/5 cursor-pointer group transition-colors"
+                                        >
+                                            <img src={t.album?.images?.[0]?.url || 'https://images.unsplash.com/photo-1518199266791-5375a83190b7?w=100'} className="w-10 h-10 rounded-lg object-cover" alt="" />
+                                            <div className="flex-1 min-w-0">
+                                                <h4 className={`text-xs font-bold text-white truncate transition-colors ${isOcean ? 'group-hover:text-blue-400' : 'group-hover:text-[#f5d0b5]'}`}>{t.name}</h4>
+                                                <p className="text-[10px] text-stone-400 truncate">{t.artists[0]?.name}</p>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Smart Mood Suggestions */}
+                        <div>
+                            <div className="flex items-center justify-between">
+                                <div className="flex items-center space-x-2">
+                                    <Sparkles size={16} className="text-purple-400" />
+                                    <span className="text-xs font-bold text-purple-400 uppercase tracking-wider">Spotify Smart Suggestions</span>
+                                </div>
+                                <span className="text-[10px] text-slate-500">Mood Autoplay</span>
+                            </div>
+                            <p className="text-[11px] text-slate-400 mt-1 mb-3">
+                                Matching the mood and energy of <span className="text-slate-300 font-semibold">{currentTrack.name}</span>
+                            </p>
+
+                            {isLoadingSuggestions ? (
+                                <div className="flex items-center justify-center py-6">
+                                    <Loader2 size={20} className="animate-spin text-purple-400" />
+                                </div>
+                            ) : (
+                                <div className="space-y-1">
+                                    {smartSuggestions.map((t) => (
+                                        <div
+                                            key={t.id}
+                                            className="flex items-center justify-between p-2 rounded-xl hover:bg-white/5 group transition-colors"
+                                        >
+                                            <div
+                                                onClick={() => onTrackChange(t)}
+                                                className="flex items-center space-x-3 flex-1 min-w-0 cursor-pointer"
+                                            >
+                                                <img src={t.album.images[0]?.url} className="w-10 h-10 rounded-lg object-cover" alt="" />
+                                                <div className="flex-1 min-w-0">
+                                                    <h4 className="text-xs font-bold text-white group-hover:text-purple-400 truncate">{t.name}</h4>
+                                                    <p className="text-[10px] text-slate-400 truncate">{t.artists[0]?.name}</p>
+                                                </div>
+                                            </div>
+                                            <button
+                                                onClick={() => {
+                                                    if (onQueueChange) {
+                                                        onQueueChange([...queue, t]);
+                                                    }
+                                                }}
+                                                className="p-1.5 text-slate-500 hover:text-white rounded-lg hover:bg-white/10"
+                                                title="Add to queue"
+                                            >
+                                                <Plus size={16} />
+                                            </button>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* EXPANDED MOBILE PLAYER - Only rendered when track is active */}
+            {isExpanded && currentTrack ? (
+                <div className={`md:hidden fixed inset-0 z-[100] flex flex-col h-[100dvh] px-6 pt-safe pb-8 animate-in slide-in-from-bottom duration-300 ${isOcean ? 'bg-gradient-to-b from-[#0a152d] via-[#060c1c] to-[#03060f]' : 'bg-gradient-to-b from-[#181926] via-[#0d0e14] to-[#07080b]'}`}>
+                    <header className="flex items-center justify-between h-16 mb-4">
+                        <button onClick={onToggleExpand}><ChevronDown size={30} className="text-white" /></button>
+                        <div className="flex flex-col items-center">
+                            <span className="text-[10px] font-bold text-stone-400 uppercase tracking-widest flex items-center gap-1.5">
+                                <span className={`w-1.5 h-1.5 rounded-full animate-pulse ${isOcean ? 'bg-blue-400' : 'bg-[#f5d0b5]'}`} /> Slothify Music
+                            </span>
+                            <span className="text-xs font-semibold text-slate-300 truncate max-w-[200px] mt-0.5">{currentTrack.album?.name || ''}</span>
+                        </div>
+                        <MoreVertical size={22} className="text-white" />
                     </header>
 
                     <div className="flex-1 flex items-center justify-center mb-8 w-full">
-                        <div className="w-full aspect-square relative shadow-[0_10px_40px_rgba(0,0,0,0.6)]">
-                            <img src={currentTrack.album.images[0]?.url} alt="" className="w-full h-full object-cover rounded-md" />
+                        <div className="w-full aspect-square relative shadow-[0_20px_50px_rgba(0,0,0,0.7)]">
+                            <img src={currentTrack.album?.images?.[0]?.url || 'https://images.unsplash.com/photo-1518199266791-5375a83190b7?w=300'} alt="" className="w-full h-full object-cover rounded-2xl" />
                             {isBuffering && (
-                                <div className="absolute inset-0 flex items-center justify-center bg-black/20 rounded-md">
+                                <div className="absolute inset-0 flex items-center justify-center bg-black/40 rounded-2xl backdrop-blur-sm">
                                     <Loader2 className="w-12 h-12 text-white animate-spin" />
                                 </div>
                             )}
@@ -275,116 +500,212 @@ const Player: React.FC<PlayerProps> = ({
                     <div className="flex justify-between items-end mb-6">
                         <div className="flex flex-col min-w-0 pr-4">
                             <h2 className="text-2xl font-bold text-white truncate leading-tight mb-1">{currentTrack.name}</h2>
-                            <p className="text-lg text-slate-300 truncate">{currentTrack.artists[0].name}</p>
+                            <p className="text-base text-slate-400 truncate">{currentTrack.artists[0]?.name}</p>
                         </div>
-                        <button onClick={() => onToggleLike(currentTrack.id)} className="mb-1">
-                            <Heart size={28} className={isLiked ? "fill-[#3b82f6] text-[#3b82f6]" : "text-white"} />
+                        <button onClick={() => onToggleLike(currentTrack.id, currentTrack)} className="mb-1 p-1">
+                            <Heart size={26} className={isLiked ? (isOcean ? "fill-blue-400 text-blue-400" : "fill-[#f5d0b5] text-[#f5d0b5]") : "text-white"} />
                         </button>
                     </div>
 
                     <div className="space-y-2 mb-6">
                         <div className="relative group h-1 w-full bg-white/20 rounded-full">
-                            <div className="absolute h-full bg-white rounded-full" style={{ width: `${(progress / (duration || 1)) * 100}%` }} />
+                            <div className={`absolute h-full rounded-full ${isOcean ? 'bg-blue-600' : 'bg-[#f5d0b5]'}`} style={{ width: `${(progress / (currentDuration || 1)) * 100}%` }} />
                             <input
-                                type="range" min="0" max={duration || 0} value={progress}
+                                type="range" min="0" max={currentDuration || 0} value={progress}
                                 onChange={(e) => setProgress(Number(e.target.value))}
                                 onMouseDown={() => isSeekingRef.current = true}
                                 onMouseUp={(e) => handleSeekEnd(Number(e.currentTarget.value))}
-                                onTouchStart={() => isSeekingRef.current = true}
-                                onTouchEnd={(e) => handleSeekEnd(Number(e.currentTarget.value))}
+                                touch-action="none"
                                 className="absolute w-full h-full opacity-0 cursor-pointer z-10"
                             />
                         </div>
-                        <div className="flex justify-between text-xs text-slate-400 font-medium">
-                            <span>{formatTime(progress)}</span><span>{formatTime(duration)}</span>
+                        <div className="flex justify-between text-xs text-stone-400 font-medium font-mono">
+                            <span>{formatTime(progress)}</span><span>{formatTime(currentDuration)}</span>
                         </div>
                     </div>
 
                     <div className="flex justify-between items-center mb-8 px-2">
-                        <button onClick={onToggleShuffle}><Shuffle size={24} className={isShuffle ? "text-[#3b82f6]" : "text-white"} /></button>
-                        <button onClick={handleSkipBack}><SkipBack size={36} className="text-white fill-white" /></button>
-                        <button onClick={togglePlay} className="w-16 h-16 bg-white rounded-full flex items-center justify-center hover:scale-105 active:scale-95 transition-all shadow-lg text-black">
-                            {isPlaying ? <Pause size={32} fill="currentColor" /> : <Play size={32} fill="currentColor" className="ml-1" />}
+                        <button onClick={onToggleShuffle}><Shuffle size={22} className={isShuffle ? (isOcean ? "text-blue-400" : "text-[#f5d0b5]") : "text-stone-400"} /></button>
+                        <button onClick={handleSkipBack}><SkipBack size={32} className="text-white fill-white" /></button>
+                        <button onClick={togglePlay} className={`w-16 h-16 rounded-full flex items-center justify-center hover:scale-105 active:scale-95 transition-all shadow-xl ${isOcean ? 'bg-blue-600 text-white shadow-blue-500/40' : 'bg-[#f5d0b5] text-black'}`}>
+                            {isPlaying ? <Pause size={30} fill="currentColor" /> : <Play size={30} fill="currentColor" className="ml-1" />}
                         </button>
-                        <button onClick={handleSkipForward}><SkipForward size={36} className="text-white fill-white" /></button>
-                        <button onClick={() => setRepeatMode(prev => prev === 'off' ? 'all' : prev === 'all' ? 'one' : 'off')} className={repeatMode !== 'off' ? "text-[#3b82f6]" : "text-white"}>
-                            {repeatMode === 'one' ? <Repeat1 size={24} /> : <Repeat size={24} />}
+                        <button onClick={handleSkipForward}><SkipForward size={32} className="text-white fill-white" /></button>
+                        <button onClick={() => setRepeatMode(prev => prev === 'off' ? 'all' : prev === 'all' ? 'one' : 'off')} className={repeatMode !== 'off' ? (isOcean ? "text-blue-400" : "text-[#f5d0b5]") : "text-stone-400"}>
+                            {repeatMode === 'one' ? <Repeat1 size={22} /> : <Repeat size={22} />}
                         </button>
                     </div>
                 </div>
-            ) : (
-                /* DESKTOP PLAYER + MOBILE MINI */
+            ) : currentTrack ? (
+                /* DESKTOP PLAYER + MOBILE MINI - Real-time active track */
                 <>
-                    <div className="md:hidden fixed bottom-[4.5rem] left-2 right-2 h-14 bg-[#3E3E3E] rounded-md flex items-center px-2 justify-between shadow-lg z-[80]" onClick={() => onToggleExpand()}>
+                    <div className={`md:hidden fixed bottom-[4.5rem] left-3 right-3 h-14 backdrop-blur-xl border border-white/10 rounded-2xl flex items-center px-2.5 justify-between shadow-2xl z-[80] bg-black/35`} onClick={() => onToggleExpand()}>
                         <div className="flex items-center space-x-3 flex-1 min-w-0">
-                            <img src={currentTrack.album.images[0]?.url} className="w-10 h-10 rounded-sm object-cover" alt="" />
+                            <img src={currentTrack.album?.images?.[0]?.url || 'https://images.unsplash.com/photo-1518199266791-5375a83190b7?w=100'} className="w-10 h-10 rounded-xl object-cover" alt="" />
                             <div className="flex flex-col min-w-0 ml-1">
                                 <span className="text-sm font-bold text-white truncate leading-tight">{currentTrack.name}</span>
-                                <span className="text-[11px] text-slate-300 truncate leading-tight">{currentTrack.artists[0].name}</span>
+                                <span className="text-[11px] text-slate-400 truncate leading-tight">{currentTrack.artists[0]?.name}</span>
                             </div>
                         </div>
-                        <div className="flex items-center space-x-3 mr-2">
-                            <Heart size={24} className={isLiked ? "fill-[#3b82f6] text-[#3b82f6]" : "text-white"} onClick={(e) => { e.stopPropagation(); onToggleLike(currentTrack.id); }} />
-                            <button onClick={(e) => { togglePlay(e); }} className="text-white">
-                                {isPlaying ? <Pause size={28} fill="currentColor" /> : <Play size={28} fill="currentColor" />}
+                        <div className="flex items-center space-x-3 mr-1">
+                            <Heart size={22} className={isLiked ? (isOcean ? "fill-blue-400 text-blue-400" : "fill-[#f5d0b5] text-[#f5d0b5]") : "text-slate-300"} onClick={(e) => { e.stopPropagation(); onToggleLike(currentTrack.id, currentTrack); }} />
+                            <button onClick={(e) => { togglePlay(e); }} className={`w-9 h-9 rounded-full flex items-center justify-center ${isOcean ? 'bg-blue-600 text-white' : 'bg-[#f5d0b5] text-black'}`}>
+                                {isPlaying ? <Pause size={20} fill="currentColor" /> : <Play size={20} fill="currentColor" className="ml-0.5" />}
                             </button>
                         </div>
-                        <div className="absolute bottom-0 left-2 right-2 h-[2px] bg-white/20 rounded-full">
-                            <div className="h-full bg-white" style={{ width: `${(progress / (duration || 1)) * 100}%` }}></div>
+                        <div className="absolute bottom-0 left-3 right-3 h-[2px] bg-white/10 rounded-full overflow-hidden">
+                            <div className={`h-full ${isOcean ? 'bg-blue-400' : 'bg-[#f5d0b5]'}`} style={{ width: `${(progress / (currentDuration || 1)) * 100}%` }}></div>
                         </div>
                     </div>
 
-                    <div className="hidden md:flex fixed bottom-0 left-0 right-0 h-24 bg-[#181818] border-t border-[#282828] z-[80] items-center justify-between px-6">
-                        <div className="flex items-center space-x-4 w-[30%] min-w-0">
-                            <img src={currentTrack.album.images[0]?.url} className="w-14 h-14 rounded shadow-lg object-cover" alt="" />
-                            <div className="flex flex-col min-w-0">
-                                <span className="text-sm font-bold truncate text-white hover:underline cursor-pointer">{currentTrack.name}</span>
-                                <span className="text-xs text-slate-400 hover:text-white cursor-pointer truncate">{currentTrack.artists[0].name}</span>
+                    <div className={`hidden md:flex fixed md:bottom-3.5 md:left-[256px] md:right-6 h-[72px] backdrop-blur-2xl rounded-2xl z-[70] items-center justify-between px-5 shadow-2xl select-none transition-all duration-300 bg-black/35 hover:bg-black/45 border border-white/10 shadow-black/80`}>
+                        {/* Left: Track Info - Click to Open Vintage Turntable */}
+                        <div
+                            onClick={() => setIsTurntableOpen && setIsTurntableOpen(true)}
+                            className="flex items-center space-x-3.5 w-[28%] min-w-0 cursor-pointer group"
+                            title="Open Vintage Turntable Player"
+                        >
+                            <div className="relative flex-shrink-0">
+                                <img
+                                    src={currentTrack.album?.images?.[0]?.url || 'https://images.unsplash.com/photo-1518199266791-5375a83190b7?w=100'}
+                                    className={`w-11 h-11 rounded-xl object-cover shadow-md transition-all ${isOcean ? 'group-hover:ring-2 group-hover:ring-blue-500/50' : 'group-hover:ring-2 group-hover:ring-[#f5d0b5]/50'}`}
+                                    alt=""
+                                />
+                                <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity rounded-xl flex items-center justify-center">
+                                    <Disc size={16} className={`${isOcean ? 'text-blue-400' : 'text-[#f5d0b5]'} ${isPlaying ? 'animate-spin' : ''}`} />
+                                </div>
                             </div>
-                            <button onClick={(e) => { e.stopPropagation(); onToggleLike(currentTrack.id); }} className="p-2 text-slate-400 hover:text-white transition-colors ml-2">
-                                <Heart size={18} className={isLiked ? "fill-[#3b82f6] text-[#3b82f6]" : ""} />
+                            <div className="flex flex-col min-w-0">
+                                <span className={`text-xs font-semibold truncate text-white transition-colors leading-tight flex items-center gap-1.5 ${isOcean ? 'group-hover:text-blue-400' : 'group-hover:text-[#f5d0b5]'}`}>
+                                    {currentTrack.name}
+                                </span>
+                                <span className="text-[11px] text-[#8a8489] hover:text-white cursor-pointer truncate mt-0.5 leading-tight">
+                                    {currentTrack.artists[0]?.name}
+                                </span>
+                            </div>
+                            <button
+                                onClick={(e) => { e.stopPropagation(); onToggleLike(currentTrack.id, currentTrack); }}
+                                className={`p-1.5 transition-colors ml-1 ${isOcean ? 'text-[#8a8489] hover:text-blue-400' : 'text-[#8a8489] hover:text-[#f5d0b5]'}`}
+                                title="Like"
+                            >
+                                <Heart size={16} className={isLiked ? (isOcean ? "fill-blue-400 text-blue-400" : "fill-[#f5d0b5] text-[#f5d0b5]") : ""} />
                             </button>
                         </div>
 
-                        <div className="flex flex-col items-center w-[40%] space-y-2">
-                            <div className="flex items-center space-x-6">
-                                <button onClick={onToggleShuffle} className={`hover:text-white transition-colors ${isShuffle ? 'text-[#3b82f6]' : 'text-slate-400'}`}><Shuffle size={18} /></button>
-                                <button onClick={handleSkipBack} className="text-slate-400 hover:text-white transition-colors"><SkipBack size={22} fill="currentColor" /></button>
-                                <button onClick={togglePlay} className="w-8 h-8 bg-white text-black rounded-full flex items-center justify-center hover:scale-105 transition-transform shadow-lg">
-                                    {isBuffering ? <Loader2 size={18} className="animate-spin" /> : isPlaying ? <Pause size={18} fill="currentColor" /> : <Play size={18} fill="currentColor" className="ml-0.5" />}
-                                </button>
-                                <button onClick={handleSkipForward} className="text-slate-400 hover:text-white transition-colors"><SkipForward size={22} fill="currentColor" /></button>
-                                <button onClick={() => setRepeatMode(prev => prev === 'off' ? 'all' : prev === 'all' ? 'one' : 'off')} className={`hover:text-white transition-colors ${repeatMode !== 'off' ? 'text-[#3b82f6]' : 'text-slate-400'}`}>
-                                    {repeatMode === 'one' ? <Repeat1 size={18} /> : <Repeat size={18} />}
-                                </button>
-                            </div>
-                            <div className="flex items-center w-full max-w-lg space-x-2 text-xs text-[#b3b3b3] font-mono">
-                                <span className="w-8 text-right">{formatTime(progress)}</span>
-                                <div className="relative h-1 flex-1 bg-[#4d4d4d] rounded-full group">
-                                    <div className="absolute h-full bg-white group-hover:bg-[#3b82f6] rounded-full" style={{ width: `${(progress / (duration || 1)) * 100}%` }} />
-                                    <input type="range" min="0" max={duration || 0} value={progress} onChange={(e) => handleSeekEnd(Number(e.target.value))} className="absolute w-full h-full opacity-0 cursor-pointer z-10" />
-                                </div>
-                                <span className="w-8">{formatTime(duration)}</span>
-                            </div>
+                        {/* Center: Playback Controls */}
+                        <div className="flex items-center space-x-5 justify-center">
+                            <button
+                                onClick={onToggleShuffle}
+                                title="Shuffle"
+                                className={`transition-colors ${isShuffle ? (isOcean ? 'text-blue-400' : 'text-[#f5d0b5]') : 'text-[#8a8489] hover:text-white'}`}
+                            >
+                                <Shuffle size={16} />
+                            </button>
+                            <button
+                                onClick={handleSkipBack}
+                                title="Previous"
+                                className="text-[#8a8489] hover:text-white transition-colors"
+                            >
+                                <SkipBack size={18} fill="currentColor" />
+                            </button>
+                            <button
+                                onClick={togglePlay}
+                                title={isPlaying ? "Pause" : "Play"}
+                                className={`w-9 h-9 rounded-full flex items-center justify-center hover:scale-105 active:scale-95 transition-all shadow-md ${isOcean ? 'bg-blue-600 hover:bg-blue-500 text-white shadow-blue-600/30' : 'bg-[#f5d0b5] hover:bg-[#ebd0bc] text-black shadow-[#f5d0b5]/15'}`}
+                            >
+                                {isBuffering ? (
+                                    <Loader2 size={16} className="animate-spin" />
+                                ) : isPlaying ? (
+                                    <Pause size={16} fill="currentColor" />
+                                ) : (
+                                    <Play size={16} fill="currentColor" className="ml-0.5" />
+                                )}
+                            </button>
+                            <button
+                                onClick={handleSkipForward}
+                                title="Next"
+                                className="text-[#8a8489] hover:text-white transition-colors"
+                            >
+                                <SkipForward size={18} fill="currentColor" />
+                            </button>
+                            <button
+                                onClick={() => setRepeatMode(prev => prev === 'off' ? 'all' : prev === 'all' ? 'one' : 'off')}
+                                title="Repeat"
+                                className={`transition-colors ${repeatMode !== 'off' ? (isOcean ? 'text-blue-400' : 'text-[#f5d0b5]') : 'text-[#8a8489] hover:text-white'}`}
+                            >
+                                {repeatMode === 'one' ? <Repeat1 size={16} /> : <Repeat size={16} />}
+                            </button>
                         </div>
 
-                        <div className="flex items-center justify-end w-[30%] space-x-4">
-                            <button className="text-slate-400 hover:text-white"><Mic2 size={18} /></button>
-                            <button onClick={onToggleQueue} className={`transition-colors ${isQueueVisible ? 'text-[#3b82f6]' : 'text-slate-400 hover:text-white'}`}><ListMusic size={18} /></button>
-                            <button className="text-slate-400 hover:text-white"><MonitorSpeaker size={18} /></button>
-                            <div className="flex items-center space-x-2 w-24 group relative">
-                                <button onClick={() => setIsMuted(!isMuted)} className="text-slate-400 hover:text-white">
-                                    {isMuted || volume === 0 ? <VolumeX size={18} /> : volume < 0.5 ? <Volume1 size={18} /> : <Volume2 size={18} />}
-                                </button>
-                                <div className="relative h-1 flex-1 bg-[#4d4d4d] rounded-full">
-                                    <div className="absolute h-full bg-white group-hover:bg-[#3b82f6] rounded-full" style={{ width: `${isMuted ? 0 : volume * 100}%` }} />
-                                    <input type="range" min="0" max="1" step="0.01" value={volume} onChange={(e) => { setVolume(parseFloat(e.target.value)); setIsMuted(false); }} className="absolute top-1/2 -translate-y-1/2 left-0 w-full h-[20px] opacity-0 cursor-pointer z-20" />
+                        {/* Right: Progress Slider & Volume */}
+                        <div className="flex items-center justify-end space-x-3 w-[38%]">
+                            <div className="flex items-center space-x-2 text-[11px] text-[#8a8489] font-mono">
+                                <span>{formatTime(progress)}</span>
+                                <div className="relative h-1 w-32 md:w-44 bg-[#232029] rounded-full group cursor-pointer">
+                                    <div
+                                        className={`absolute h-full rounded-full ${isOcean ? 'bg-blue-600' : 'bg-[#f5d0b5]'}`}
+                                        style={{ width: `${(progress / (currentDuration || 1)) * 100}%` }}
+                                    />
+                                    <input
+                                        type="range"
+                                        min="0"
+                                        max={currentDuration || 0}
+                                        value={progress}
+                                        onChange={(e) => handleSeekEnd(Number(e.target.value))}
+                                        className="absolute w-full h-full opacity-0 cursor-pointer z-10"
+                                    />
                                 </div>
+                                <span>{formatTime(currentDuration)}</span>
+                            </div>
+
+                            <div className="flex items-center space-x-2 pl-2">
+                                <button
+                                    onClick={() => setIsTurntableOpen && setIsTurntableOpen(true)}
+                                    title="Open Vintage Vinyl Turntable"
+                                    className={`p-1.5 rounded-lg transition-colors ${isOcean ? 'text-[#8a8489] hover:text-blue-400 hover:bg-blue-500/10' : 'text-[#8a8489] hover:text-[#f5d0b5] hover:bg-white/5'}`}
+                                >
+                                    <Disc size={17} className={isPlaying ? "animate-spin" : ""} />
+                                </button>
+                                <button
+                                    onClick={() => setIsMuted(!isMuted)}
+                                    className="text-[#8a8489] hover:text-white transition-colors"
+                                >
+                                    {isMuted || volume === 0 ? <VolumeX size={16} /> : volume < 0.5 ? <Volume1 size={16} /> : <Volume2 size={16} />}
+                                </button>
+                                <button
+                                    onClick={onToggleQueue}
+                                    title="Queue"
+                                    className={`transition-colors ${isQueueVisible ? (isOcean ? 'text-blue-400' : 'text-[#f5d0b5]') : 'text-[#8a8489] hover:text-white'}`}
+                                >
+                                    <ListMusic size={16} />
+                                </button>
                             </div>
                         </div>
                     </div>
                 </>
-            )}
+            ) : null}
+
+            {/* VINTAGE VINYL TURNTABLE PLAYER MODAL */}
+            <VintageTurntable
+                isOpen={Boolean(isTurntableOpen)}
+                onClose={() => setIsTurntableOpen && setIsTurntableOpen(false)}
+                currentTrack={currentTrack}
+                isPlaying={isPlaying}
+                onPlayPause={setIsPlaying}
+                onTrackChange={onTrackChange}
+                queue={queue}
+                progress={progress}
+                duration={currentDuration}
+                onSeek={handleSeekEnd}
+                isShuffle={isShuffle}
+                onToggleShuffle={onToggleShuffle}
+                repeatMode={repeatMode}
+                onToggleRepeat={() => setRepeatMode(prev => prev === 'off' ? 'all' : prev === 'all' ? 'one' : 'off')}
+                isLiked={Boolean(isLiked)}
+                onToggleLike={() => currentTrack && onToggleLike(currentTrack.id, currentTrack)}
+                volume={volume}
+                onVolumeChange={setVolume}
+            />
         </>
     );
 };
