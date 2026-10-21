@@ -57,6 +57,7 @@ const Player: React.FC<PlayerProps> = ({
     // Smart Mood Suggestions
     const [smartSuggestions, setSmartSuggestions] = useState<Track[]>([]);
     const [isLoadingSuggestions, setIsLoadingSuggestions] = useState(false);
+    const [activeEngine, setActiveEngine] = useState<'youtube' | 'jiosaavn' | null>(null);
 
     // Guard & Caching Refs
     const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -80,6 +81,23 @@ const Player: React.FC<PlayerProps> = ({
         try {
             const entries = Array.from(resolvedVideoMap.current.entries()).slice(-500);
             localStorage.setItem('slothify_video_cache', JSON.stringify(entries));
+        } catch (e) {}
+    }, []);
+
+    const resolvedSaavnMap = useRef<Map<string, string>>((() => {
+        try {
+            const saved = localStorage.getItem('slothify_saavn_cache');
+            if (saved) {
+                return new Map(JSON.parse(saved));
+            }
+        } catch (e) {}
+        return new Map();
+    })());
+
+    const persistSaavnCache = useCallback(() => {
+        try {
+            const entries = Array.from(resolvedSaavnMap.current.entries()).slice(-500);
+            localStorage.setItem('slothify_saavn_cache', JSON.stringify(entries));
         } catch (e) {}
     }, []);
 
@@ -124,33 +142,62 @@ const Player: React.FC<PlayerProps> = ({
         return null;
     }, [currentTrack, queue, repeatMode, smartSuggestions]);
 
-    // Proactive resolution helper: resolves a track's YouTube videoId into resolvedVideoMap
-    const resolveTrackVideo = useCallback(async (track: Track): Promise<string | null> => {
-        if (resolvedVideoMap.current.has(track.id)) {
-            return resolvedVideoMap.current.get(track.id)!;
-        }
-        try {
-            const query = `${track.name} ${track.artists[0]?.name || ''} audio`;
-            const res = await fetch(`${API_BASE}/api/youtube/search?q=${encodeURIComponent(query)}`);
-            if (res.ok) {
-                const data = await res.json();
-                if (data.videoId) {
-                    resolvedVideoMap.current.set(track.id, data.videoId);
-                    persistVideoCache();
-                    // Pre-warm the stream in backend RAM
-                    fetch(`${API_BASE}/api/youtube/preload/${data.videoId}`).catch(() => {});
-                    return data.videoId;
+    // Proactive preload helper: pre-resolves next track, skipping YouTube completely if found on JioSaavn
+    const preloadNextTrack = useCallback(async (track: Track) => {
+        const providerPref = localStorage.getItem('slothify_audio_provider') || 'auto';
+        const trackTitle = track.name || '';
+        const trackArtist = track.artists[0]?.name || '';
+        const cleanTitle = trackTitle.replace(/\([^)]*\)/g, '').replace(/\[[^\]]*\]/g, '').replace(/["'’]/g, '').trim();
+        const songQuery = `${cleanTitle} ${trackArtist}`.trim();
+
+        // 1. If JioSaavn or Auto, pre-check JioSaavn first
+        if (providerPref === 'jiosaavn' || providerPref === 'auto') {
+            try {
+                let songId = track.id.startsWith('saavn_') ? track.id.replace('saavn_', '') : resolvedSaavnMap.current.get(track.id);
+                if (!songId) {
+                    const sRes = await fetch(`${API_BASE}/api/saavn/search?q=${encodeURIComponent(songQuery)}&title=${encodeURIComponent(trackTitle)}&artist=${encodeURIComponent(trackArtist)}`);
+                    if (sRes.ok) {
+                        const sData = await sRes.json();
+                        if (sData.videoId) {
+                            songId = sData.videoId;
+                            resolvedSaavnMap.current.set(track.id, songId);
+                            persistSaavnCache();
+                        }
+                    }
                 }
-            }
-        } catch (e) { }
-        return null;
-    }, [persistVideoCache]);
+                if (songId) {
+                    // Pre-warm JioSaavn in server cache — SKIP YouTube / yt-dlp completely!
+                    fetch(`${API_BASE}/api/saavn/stream/${songId}`).catch(() => {});
+                    return;
+                }
+            } catch { }
+        }
+
+        // 2. Only if YouTube is chosen or if JioSaavn was not found, resolve YouTube
+        if (providerPref === 'youtube' || providerPref === 'auto') {
+            try {
+                if (resolvedVideoMap.current.has(track.id)) {
+                    return;
+                }
+                const ytQuery = `${cleanTitle} ${trackArtist} audio`.trim();
+                const res = await fetch(`${API_BASE}/api/youtube/search?q=${encodeURIComponent(ytQuery)}`);
+                if (res.ok) {
+                    const data = await res.json();
+                    if (data.videoId) {
+                        resolvedVideoMap.current.set(track.id, data.videoId);
+                        persistVideoCache();
+                        fetch(`${API_BASE}/api/youtube/preload/${data.videoId}`).catch(() => {});
+                    }
+                }
+            } catch { }
+        }
+    }, [persistVideoCache, persistSaavnCache]);
 
     // Keep latest helpers in refs to prevent unnecessary loader re-triggers
     const getNextTrackRef = useRef(getNextTrack);
     getNextTrackRef.current = getNextTrack;
-    const resolveTrackVideoRef = useRef(resolveTrackVideo);
-    resolveTrackVideoRef.current = resolveTrackVideo;
+    const preloadNextTrackRef = useRef(preloadNextTrack);
+    preloadNextTrackRef.current = preloadNextTrack;
 
     // 1. Fetch Spotify Smart Suggestions based on current track's mood & style
     useEffect(() => {
@@ -201,23 +248,102 @@ const Player: React.FC<PlayerProps> = ({
             setProgress(0);
 
             try {
-                let videoId = resolvedVideoMap.current.get(trackId);
+                const trackTitle = currentTrack.name || '';
+                const trackArtist = currentTrack.artists[0]?.name || '';
+                const cleanTitle = trackTitle.replace(/\([^)]*\)/g, '').replace(/\[[^\]]*\]/g, '').replace(/["'’]/g, '').trim();
+                const songQuery = `${cleanTitle} ${trackArtist}`.trim();
+                const providerPref = localStorage.getItem('slothify_audio_provider') || 'auto';
 
-                if (!videoId) {
-                    const query = `${currentTrack.name} ${currentTrack.artists[0]?.name || ''} audio`;
-                    const res = await fetch(`${API_BASE}/api/youtube/search?q=${encodeURIComponent(query)}`, { signal });
-                    if (!res.ok) throw new Error('Search failed');
-                    const data = await res.json();
-                    videoId = data.videoId;
-                    if (videoId) {
-                        resolvedVideoMap.current.set(trackId, videoId);
-                        persistVideoCache();
+                let directUrl: string | null = null;
+                let resolvedEngine: 'youtube' | 'jiosaavn' = 'youtube';
+
+                // Helper: resolve via JioSaavn 320kbps
+                const resolveSaavn = async (): Promise<string | null> => {
+                    try {
+                        let songId = trackId.startsWith('saavn_') ? trackId.replace('saavn_', '') : resolvedSaavnMap.current.get(trackId);
+                        if (!songId) {
+                            const sRes = await fetch(`${API_BASE}/api/saavn/search?q=${encodeURIComponent(songQuery)}&title=${encodeURIComponent(trackTitle)}&artist=${encodeURIComponent(trackArtist)}`, { signal });
+                            if (!sRes.ok) return null;
+                            const sData = await sRes.json();
+                            songId = sData.videoId;
+                            if (songId) {
+                                resolvedSaavnMap.current.set(trackId, songId);
+                                persistSaavnCache();
+                            }
+                        }
+                        if (!songId) return null;
+                        const stRes = await fetch(`${API_BASE}/api/saavn/stream/${songId}`, { signal });
+                        if (!stRes.ok) return null;
+                        const stData = await stRes.json();
+                        return stData.success && stData.url ? stData.url : null;
+                    } catch {
+                        return null;
+                    }
+                };
+
+                // Helper: resolve via YouTube (Cobalt & Piped)
+                const resolveYouTube = async (): Promise<string | null> => {
+                    try {
+                        let videoId = resolvedVideoMap.current.get(trackId);
+                        if (!videoId) {
+                            const ytQuery = `${cleanTitle} ${trackArtist} audio`.trim();
+                            const res = await fetch(`${API_BASE}/api/youtube/search?q=${encodeURIComponent(ytQuery)}`, { signal });
+                            if (!res.ok) return null;
+                            const data = await res.json();
+                            videoId = data.videoId;
+                            if (videoId) {
+                                resolvedVideoMap.current.set(trackId, videoId);
+                                persistVideoCache();
+                            }
+                        }
+                        if (!videoId) return null;
+                        const streamRes = await fetch(`${API_BASE}/api/youtube/stream/${videoId}`, { signal });
+                        if (!streamRes.ok) return null;
+                        const streamData = await streamRes.json();
+                        return streamData.success && streamData.url ? streamData.url : null;
+                    } catch {
+                        return null;
+                    }
+                };
+
+                // Priority based on user selection with seamless fallback
+                if (providerPref === 'jiosaavn') {
+                    directUrl = await resolveSaavn();
+                    if (directUrl) {
+                        resolvedEngine = 'jiosaavn';
+                    } else {
+                        console.warn('[Player] JioSaavn unavailable for this track, falling back to YouTube');
+                        directUrl = await resolveYouTube();
+                        if (directUrl) resolvedEngine = 'youtube';
+                    }
+                } else if (providerPref === 'youtube') {
+                    directUrl = await resolveYouTube();
+                    if (directUrl) {
+                        resolvedEngine = 'youtube';
+                    } else {
+                        console.warn('[Player] YouTube unavailable for this track, falling back to JioSaavn');
+                        directUrl = await resolveSaavn();
+                        if (directUrl) resolvedEngine = 'jiosaavn';
+                    }
+                } else {
+                    // Auto mode: try JioSaavn first for crystal-clear 320kbps CD quality, fallback to YouTube
+                    directUrl = await resolveSaavn();
+                    if (directUrl) {
+                        resolvedEngine = 'jiosaavn';
+                    } else {
+                        directUrl = await resolveYouTube();
+                        if (directUrl) resolvedEngine = 'youtube';
                     }
                 }
 
-                if (currentTrackIdRef.current !== trackId || !videoId) return;
+                if (!directUrl) {
+                    throw new Error('All audio providers failed to extract track');
+                }
 
-                audio.src = `${API_BASE}/api/youtube/stream/${videoId}`;
+                if (currentTrackIdRef.current !== trackId || !audioRef.current) return;
+
+                setActiveEngine(resolvedEngine);
+                audio.src = directUrl;
                 audio.load();
 
                 audio.oncanplay = () => {
@@ -227,10 +353,10 @@ const Player: React.FC<PlayerProps> = ({
                             .then(() => setIsPlaying(true))
                             .catch(err => { if (err.name !== 'AbortError') setIsPlaying(false); });
 
-                        // ✅ PROACTIVE PRELOAD: While first song starts, resolve next track's video in background
+                        // ✅ PROACTIVE PRELOAD: While first song starts, pre-warm next track (JioSaavn preferred)
                         const next = getNextTrackRef.current();
                         if (next && next.id !== trackId) {
-                            resolveTrackVideoRef.current(next);
+                            preloadNextTrackRef.current(next);
                         }
                     }
                 };
@@ -333,13 +459,7 @@ const Player: React.FC<PlayerProps> = ({
                 hasPreloadedRef.current = nextTrack.id;
                 console.log(`[Slothify] Preloading next song buffer: ${nextTrack.name}`);
 
-                resolveTrackVideo(nextTrack).then(videoId => {
-                    if (videoId && preloadAudioRef.current) {
-                        // Buffer in browser HTTP cache using hidden audio element
-                        preloadAudioRef.current.src = `${API_BASE}/api/youtube/stream/${videoId}`;
-                        preloadAudioRef.current.load();
-                    }
-                });
+                preloadNextTrack(nextTrack);
             }
         }
     };
@@ -577,9 +697,22 @@ const Player: React.FC<PlayerProps> = ({
                                 </div>
                             </div>
                             <div className="flex flex-col min-w-0">
-                                <span className={`text-xs font-semibold truncate text-white transition-colors leading-tight flex items-center gap-1.5 ${isOcean ? 'group-hover:text-blue-400' : 'group-hover:text-[#f5d0b5]'}`}>
-                                    {currentTrack.name}
-                                </span>
+                                <div className="flex items-center gap-1.5 truncate">
+                                    <span className={`text-xs font-semibold truncate text-white transition-colors leading-tight ${isOcean ? 'group-hover:text-blue-400' : 'group-hover:text-[#f5d0b5]'}`}>
+                                        {currentTrack.name}
+                                    </span>
+                                    {activeEngine && (
+                                        <span className={`text-[9px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded flex-shrink-0 border ${
+                                            activeEngine === 'jiosaavn'
+                                                ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30'
+                                                : isOcean
+                                                    ? 'bg-blue-500/15 text-blue-300 border-blue-500/30'
+                                                    : 'bg-[#f5d0b5]/15 text-[#f5d0b5] border-[#f5d0b5]/30'
+                                        }`} title={activeEngine === 'jiosaavn' ? 'Streaming via JioSaavn (320kbps CD Quality)' : 'Streaming via YouTube (Cobalt / Piped)'}>
+                                            {activeEngine === 'jiosaavn' ? '320k Saavn' : 'YouTube'}
+                                        </span>
+                                    )}
+                                </div>
                                 <span className="text-[11px] text-[#8a8489] hover:text-white cursor-pointer truncate mt-0.5 leading-tight">
                                     {currentTrack.artists[0]?.name}
                                 </span>

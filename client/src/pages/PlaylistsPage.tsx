@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Playlist, User } from '../types';
-import { ListMusic, Plus, Play, Search, Sparkles, X, Music2 } from 'lucide-react';
+import { ListMusic, Plus, Play, Search, Sparkles, X, Music2, Trash2 } from 'lucide-react';
 import axios from 'axios';
 import { useCache } from '../context/CacheContext';
 import { useTheme } from '../context/ThemeContext';
@@ -46,46 +46,78 @@ const defaultPlaylists = [
 export const PlaylistsPage: React.FC<PlaylistsPageProps> = ({ isAuthenticated, user, onOpenAuth }) => {
   const navigate = useNavigate();
   const { isOcean } = useTheme();
-  const { cache, setLibraryPlaylists } = useCache();
-  const [playlists, setPlaylists] = useState<any[]>(cache.libraryPlaylists || []);
-  const [isLoading, setIsLoading] = useState(!cache.libraryPlaylists);
+  const { cache, setLibraryPlaylists, removePlaylistFromCache } = useCache();
+  const [playlists, setPlaylists] = useState<any[]>(() => {
+    return isAuthenticated ? (cache.libraryPlaylists || []) : [];
+  });
+  const [isLoading, setIsLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [newPlaylistName, setNewPlaylistName] = useState('');
+  const [playlistToDelete, setPlaylistToDelete] = useState<any | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  const confirmDeletePlaylist = async () => {
+    if (!playlistToDelete) return;
+    setIsDeleting(true);
+    try {
+      await axios.delete(`/api/me/playlists/${playlistToDelete.id}`);
+    } catch (err) {
+      console.error('Failed to delete playlist on server:', err);
+    } finally {
+      removePlaylistFromCache(playlistToDelete.id);
+      setPlaylists(prev => prev.filter(p => p.id !== playlistToDelete.id));
+      window.dispatchEvent(new Event('slothify_playlists_updated'));
+      setIsDeleting(false);
+      setPlaylistToDelete(null);
+    }
+  };
 
   const fetchPlaylists = async () => {
+    if (!isAuthenticated) {
+      setPlaylists([]);
+      setIsLoading(false);
+      return;
+    }
     try {
       setIsLoading(true);
       const res = await axios.get('/api/me/playlists');
-      if (Array.isArray(res.data) && res.data.length > 0) {
+      if (Array.isArray(res.data)) {
         setPlaylists(res.data);
         setLibraryPlaylists(res.data);
       } else {
-        setPlaylists(defaultPlaylists);
+        setPlaylists([]);
       }
     } catch (err) {
-      setPlaylists(defaultPlaylists);
+      setPlaylists([]);
     } finally {
       setIsLoading(false);
     }
   };
 
   useEffect(() => {
-    fetchPlaylists();
-    const handleUpdate = () => {
+    if (isAuthenticated) {
       fetchPlaylists();
+    } else {
+      setPlaylists([]);
+    }
+    const handleUpdate = () => {
+      if (isAuthenticated) fetchPlaylists();
+      else setPlaylists([]);
     };
     window.addEventListener('slothify_playlists_updated', handleUpdate);
     return () => {
       window.removeEventListener('slothify_playlists_updated', handleUpdate);
     };
-  }, []);
+  }, [isAuthenticated]);
 
   useEffect(() => {
-    if (cache.libraryPlaylists && cache.libraryPlaylists.length > 0) {
+    if (isAuthenticated && cache.libraryPlaylists) {
       setPlaylists(cache.libraryPlaylists);
+    } else if (!isAuthenticated) {
+      setPlaylists([]);
     }
-  }, [cache.libraryPlaylists]);
+  }, [cache.libraryPlaylists, isAuthenticated]);
 
   const handleCreatePlaylist = async () => {
     const name = newPlaylistName.trim() || `My Playlist #${playlists.length + 1}`;
@@ -192,6 +224,18 @@ export const PlaylistsPage: React.FC<PlaylistsPageProps> = ({ isAuthenticated, u
                   />
                   <div className="absolute inset-0 bg-black/20 group-hover:bg-black/40 transition-colors" />
 
+                  {/* Hover Delete Button on top right */}
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setPlaylistToDelete(playlist);
+                    }}
+                    title="Delete Playlist"
+                    className="absolute top-2.5 right-2.5 w-8 h-8 rounded-full flex items-center justify-center bg-black/70 hover:bg-rose-600 text-white/80 hover:text-white shadow-lg opacity-0 group-hover:opacity-100 transition-all duration-200 z-10 hover:scale-110 active:scale-90"
+                  >
+                    <Trash2 size={13} />
+                  </button>
+
                   {/* Hover Play Button */}
                   <div
                     className={`absolute bottom-2.5 right-2.5 w-10 h-10 rounded-full flex items-center justify-center shadow-2xl opacity-0 translate-y-2 group-hover:opacity-100 group-hover:translate-y-0 transition-all duration-300 ${
@@ -218,14 +262,30 @@ export const PlaylistsPage: React.FC<PlaylistsPageProps> = ({ isAuthenticated, u
           })}
         </div>
       ) : (
-        <div className="flex flex-col items-center justify-center py-20 text-center space-y-3">
+        <div className="flex flex-col items-center justify-center py-20 text-center space-y-4">
           <div className="p-4 rounded-full bg-white/[0.04] border border-white/[0.08] text-slate-400">
             <Music2 size={32} />
           </div>
-          <p className="text-white font-bold text-base">No playlists found</p>
-          <p className="text-slate-400 text-xs max-w-sm">
-            {searchQuery ? `No results matching "${searchQuery}"` : "You haven't created any playlists yet."}
+          <p className="text-white font-bold text-base">
+            {!isAuthenticated ? 'Sign In to View Playlists' : 'No playlists found'}
           </p>
+          <p className="text-slate-400 text-xs max-w-sm">
+            {!isAuthenticated
+              ? 'Log in to create, save, and sync your personalized music collections.'
+              : (searchQuery ? `No results matching "${searchQuery}"` : "You haven't created any playlists yet.")}
+          </p>
+          {!isAuthenticated && onOpenAuth && (
+            <button
+              onClick={onOpenAuth}
+              className={`mt-2 px-6 py-2.5 rounded-xl font-bold text-xs uppercase tracking-wider transition-all shadow-lg ${
+                isOcean
+                  ? 'bg-gradient-to-r from-blue-600 to-cyan-500 text-white shadow-blue-500/25 hover:from-blue-500 hover:to-cyan-400'
+                  : 'bg-[#f5d0b5] text-black shadow-[#f5d0b5]/20 hover:bg-[#ebd0bc]'
+              }`}
+            >
+              Sign In / Register
+            </button>
+          )}
         </div>
       )}
 
@@ -279,6 +339,39 @@ export const PlaylistsPage: React.FC<PlaylistsPageProps> = ({ isAuthenticated, u
                 }`}
               >
                 Create Playlist
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {playlistToDelete && (
+        <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+          <div className="bg-[#18181b] border border-white/10 rounded-2xl max-w-sm w-full p-6 space-y-4 shadow-2xl text-center animate-in zoom-in-95 duration-200">
+            <div className="w-12 h-12 rounded-full bg-rose-500/20 text-rose-400 mx-auto flex items-center justify-center border border-rose-500/30">
+              <Trash2 size={24} />
+            </div>
+            <div className="space-y-1">
+              <h3 className="text-lg font-bold text-white">Delete Playlist?</h3>
+              <p className="text-xs text-slate-400 leading-relaxed">
+                Are you sure you want to delete <span className="text-white font-semibold">&ldquo;{playlistToDelete.name}&rdquo;</span>? This will permanently remove it from your account and cloud database.
+              </p>
+            </div>
+            <div className="flex gap-3 pt-2">
+              <button
+                onClick={() => setPlaylistToDelete(null)}
+                disabled={isDeleting}
+                className="flex-1 py-2.5 rounded-xl text-xs font-bold bg-white/10 hover:bg-white/15 text-white transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmDeletePlaylist}
+                disabled={isDeleting}
+                className="flex-1 py-2.5 rounded-xl text-xs font-bold bg-rose-600 hover:bg-rose-500 text-white transition-colors flex items-center justify-center gap-1.5 shadow-lg shadow-rose-600/30"
+              >
+                {isDeleting ? 'Deleting...' : 'Delete Permanently'}
               </button>
             </div>
           </div>

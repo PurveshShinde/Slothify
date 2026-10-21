@@ -11,8 +11,8 @@ router.get('/search', async (req, res) => {
     }
 
     try {
-        const audioPlugin = pluginRegistry.getAudioPlugin();
-        const result = await audioPlugin.search(q);
+        const ytPlugin = pluginRegistry.getAudioPluginByName('YouTubeAudio') || pluginRegistry.getAudioPlugin();
+        const result = await ytPlugin.search(q);
         res.json(result);
     } catch (err: any) {
         console.error('[/api/youtube/search] Error:', err.message);
@@ -25,12 +25,12 @@ router.get('/search', async (req, res) => {
 router.get('/stream/:videoId', async (req, res) => {
     const { videoId } = req.params;
     if (!videoId) {
-        return res.status(400).json({ error: 'Missing videoId' });
+        return res.status(400).json({ success: false, error: 'Missing videoId' });
     }
 
     try {
-        const audioPlugin = pluginRegistry.getAudioPlugin();
-        await audioPlugin.stream(videoId, req, res);
+        const ytPlugin = pluginRegistry.getAudioPluginByName('YouTubeAudio') || pluginRegistry.getAudioPlugin();
+        await ytPlugin.stream(videoId, req, res);
     } catch (err: any) {
         console.error('[/api/youtube/stream] Error:', err.message);
         if (!res.headersSent) {
@@ -45,9 +45,9 @@ router.get('/preload/:videoId', async (req, res) => {
     if (!videoId) return res.status(400).json({ error: 'Missing videoId' });
 
     try {
-        const audioPlugin = pluginRegistry.getAudioPlugin();
-        if (audioPlugin.preload) {
-            audioPlugin.preload(videoId).catch(() => {});
+        const ytPlugin = pluginRegistry.getAudioPluginByName('YouTubeAudio') || pluginRegistry.getAudioPlugin();
+        if (ytPlugin.preload) {
+            ytPlugin.preload(videoId).catch(() => {});
         }
         res.json({ status: 'preloading', videoId });
     } catch (err: any) {

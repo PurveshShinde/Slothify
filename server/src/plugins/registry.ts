@@ -1,6 +1,7 @@
 import type { MetadataPlugin, AudioPlugin } from './interfaces.js';
 import { SpotifyScraperPlugin } from './metadata/SpotifyScraperPlugin.js';
 import { YouTubeAudioPlugin } from './audio/YouTubeAudioPlugin.js';
+import { JioSaavnAudioPlugin } from './audio/JioSaavnAudioPlugin.js';
 
 class PluginRegistry {
     private metadataPlugins = new Map<string, MetadataPlugin>();
@@ -13,9 +14,11 @@ class PluginRegistry {
         // Register default plugins
         const spotifyScraper = new SpotifyScraperPlugin();
         const youtubeAudio = new YouTubeAudioPlugin();
+        const jiosaavnAudio = new JioSaavnAudioPlugin();
 
         this.registerMetadataPlugin(spotifyScraper);
         this.registerAudioPlugin(youtubeAudio);
+        this.registerAudioPlugin(jiosaavnAudio);
     }
 
     registerMetadataPlugin(plugin: MetadataPlugin) {
@@ -40,6 +43,14 @@ class PluginRegistry {
         this.activeAudioPluginName = name;
     }
 
+    getActiveAudioPluginName(): string {
+        return this.activeAudioPluginName;
+    }
+
+    getAvailableAudioPlugins(): string[] {
+        return Array.from(this.audioPlugins.keys());
+    }
+
     getMetadataPlugin(): MetadataPlugin {
         const plugin = this.metadataPlugins.get(this.activeMetadataPluginName);
         if (!plugin) {
@@ -54,6 +65,10 @@ class PluginRegistry {
             throw new Error(`Active audio plugin "${this.activeAudioPluginName}" not found.`);
         }
         return plugin;
+    }
+
+    getAudioPluginByName(name: string): AudioPlugin | undefined {
+        return this.audioPlugins.get(name);
     }
 }
 

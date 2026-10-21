@@ -54,8 +54,26 @@ export const POPULAR_SPOTIFY_PLAYLISTS = [
     { id: '37i9dQZF1DX4JAvHpjipBk', name: "New Music Friday", description: "The best new releases of the week.", image: 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=600' },
     { id: '37i9dQZF1DXdbXrPNafg9d', name: "All Out 70s", description: "From disco to classic rock, the best of the 70s.", image: 'https://images.unsplash.com/photo-1516450360452-9312f5e86fc7?w=600' },
     { id: '37i9dQZF1DWV7EzJMK2FUI', name: "Jazz in the Background", description: "Soft, unobtrusive jazz vibes.", image: 'https://images.unsplash.com/photo-1511192336575-5a79af67a629?w=600' },
-    { id: '37i9dQZF1DX6VdMW310YC9', name: "Top Gaming Tracks", description: "High-octane soundscapes for your gaming sessions.", image: 'https://images.unsplash.com/photo-1509198397868-475647b2a1e5?w=600' }
 ];
+
+function decodeHtmlEntities(str: string): string {
+    if (!str) return '';
+    return str
+        .replace(/&quot;/g, '"')
+        .replace(/&amp;/g, '&')
+        .replace(/&#039;/g, "'")
+        .replace(/&lt;/g, '<')
+        .replace(/&gt;/g, '>');
+}
+
+function cleanSearchQuery(q: string): string {
+    return q
+        .replace(/\bby\b/gi, ' ')
+        .replace(/\([^)]*\)/g, ' ')
+        .replace(/["'’]/g, '')
+        .replace(/\s+/g, ' ')
+        .trim();
+}
 
 export class SpotifyScraperPlugin implements MetadataPlugin {
     readonly name = 'SpotifyScraper';
@@ -141,68 +159,175 @@ export class SpotifyScraperPlugin implements MetadataPlugin {
     }
 
     /**
-     * Search tracks using open metadata search (iTunes + Deezer fallback)
+     * Search tracks using Hybrid Search (JioSaavn + iTunes + Deezer):
+     * - Direct JioSaavn album/song URL support
+     * - JioSaavn's superior hit ranking for popular original songs
+     * - HTML entity decoding
+     * - Query cleaning (removes "by" keyword, e.g. "eyes dont lie by isabel larose")
+     * - iTunes fallback & enrichment with smart deduplication
      */
     async searchTracks(query: string, limit: number = 20): Promise<Track[]> {
-        if (!query.trim()) return [];
+        const raw = query.trim();
+        if (!raw) return [];
 
-        try {
-            // First try iTunes Search API (very fast, reliable, high quality artwork)
-            const itunesRes = await axios.get('https://itunes.apple.com/search', {
+        // 1. Direct JioSaavn Album URL support (e.g. https://www.jiosaavn.com/album/eyes-dont-lie/k6vk9964rnM_)
+        const albumMatch = raw.match(/jiosaavn\.com\/album\/[^/]+\/([a-zA-Z0-9_-]+)/);
+        if (albumMatch) {
+            const token = albumMatch[1];
+            try {
+                const aRes = await axios.get(`https://www.jiosaavn.com/api.php?__call=webapi.get&token=${encodeURIComponent(token)}&type=album&_format=json&_marker=0&cc=in`, { timeout: 6000 });
+                if (Array.isArray(aRes.data?.songs) && aRes.data.songs.length > 0) {
+                    return aRes.data.songs.map((s: any) => ({
+                        id: `saavn_${s.id}`,
+                        uri: `spotify:track:saavn_${s.id}`,
+                        name: decodeHtmlEntities(s.song || s.title),
+                        artists: [{ name: decodeHtmlEntities(s.primary_artists || s.singers || aRes.data.primary_artists || 'Unknown Artist') }],
+                        album: {
+                            name: decodeHtmlEntities(s.album || aRes.data.title || s.song),
+                            images: [{ url: (s.image || aRes.data.image || '').replace('150x150', '500x500') }]
+                        },
+                        duration_ms: (Number(s.duration) || 180) * 1000,
+                        preview_url: s.media_preview_url || null
+                    }));
+                }
+            } catch (err: any) {
+                console.warn('[SpotifyScraper] JioSaavn album URL parse failed:', err.message);
+            }
+        }
+
+        // 2. Direct JioSaavn Song URL support (e.g. https://www.jiosaavn.com/song/love-me-like-you-do/NgUBWTdKB3A)
+        const songMatch = raw.match(/jiosaavn\.com\/song\/[^/]+\/([a-zA-Z0-9_-]+)/);
+        if (songMatch) {
+            const token = songMatch[1];
+            try {
+                const sRes = await axios.get(`https://www.jiosaavn.com/api.php?__call=webapi.get&token=${encodeURIComponent(token)}&type=song&_format=json&_marker=0&cc=in`, { timeout: 6000 });
+                const song = sRes.data?.[Object.keys(sRes.data)[0]];
+                if (song && song.id) {
+                    return [{
+                        id: `saavn_${song.id}`,
+                        uri: `spotify:track:saavn_${song.id}`,
+                        name: decodeHtmlEntities(song.song || song.title),
+                        artists: [{ name: decodeHtmlEntities(song.primary_artists || song.singers || 'Unknown Artist') }],
+                        album: {
+                            name: decodeHtmlEntities(song.album || song.song),
+                            images: [{ url: (song.image || '').replace('150x150', '500x500') }]
+                        },
+                        duration_ms: (Number(song.duration) || 180) * 1000,
+                        preview_url: song.media_preview_url || null
+                    }];
+                }
+            } catch (err: any) {
+                console.warn('[SpotifyScraper] JioSaavn song URL parse failed:', err.message);
+            }
+        }
+
+        // Clean query: strip "by" keyword (e.g. "eyes dont lie by isabel larose" -> "eyes dont lie isabel larose")
+        const cleanQuery = cleanSearchQuery(raw);
+
+        const results: Track[] = [];
+        const seenKeys = new Set<string>();
+
+        // 3. Parallel Search: JioSaavn + iTunes
+        const [saavnRes, itunesRes] = await Promise.allSettled([
+            axios.get('https://www.jiosaavn.com/api.php', {
                 params: {
-                    term: query,
+                    __call: 'search.getResults',
+                    _format: 'json',
+                    _marker: '0',
+                    cc: 'in',
+                    p: 1,
+                    n: limit,
+                    q: cleanQuery
+                },
+                timeout: 5000
+            }),
+            axios.get('https://itunes.apple.com/search', {
+                params: {
+                    term: cleanQuery,
                     entity: 'song',
                     limit
                 },
                 timeout: 5000
-            });
+            })
+        ]);
 
-            if (itunesRes.data?.results?.length) {
-                return itunesRes.data.results.map((item: any) => ({
-                    id: String(item.trackId),
-                    uri: `spotify:track:${item.trackId}`,
-                    name: item.trackName,
-                    artists: [{ name: item.artistName }],
-                    album: {
-                        name: item.collectionName || item.trackName,
-                        images: [{
-                            url: item.artworkUrl100 ? item.artworkUrl100.replace('100x100bb', '600x600bb') : ''
-                        }]
-                    },
-                    duration_ms: item.trackTimeMillis || 180000,
-                    preview_url: item.previewUrl || null
-                }));
+        // A. Process JioSaavn results first (highest relevance for original studio tracks)
+        if (saavnRes.status === 'fulfilled' && Array.isArray(saavnRes.value.data?.results)) {
+            for (const item of saavnRes.value.data.results) {
+                const name = decodeHtmlEntities(item.song || item.title);
+                const artist = decodeHtmlEntities(item.primary_artists || item.singers || 'Unknown Artist');
+                const normKey = `${name.toLowerCase()} - ${artist.toLowerCase()}`;
+                if (!seenKeys.has(normKey)) {
+                    seenKeys.add(normKey);
+                    results.push({
+                        id: `saavn_${item.id}`,
+                        uri: `spotify:track:saavn_${item.id}`,
+                        name,
+                        artists: [{ name: artist }],
+                        album: {
+                            name: decodeHtmlEntities(item.album || name),
+                            images: [{ url: (item.image || '').replace('150x150', '500x500') }]
+                        },
+                        duration_ms: (Number(item.duration) || 180) * 1000,
+                        preview_url: item.media_preview_url || null
+                    });
+                }
             }
-        } catch (err: any) {
-            console.warn('[SpotifyScraper] iTunes search fallback error:', err.message);
         }
 
-        try {
-            // Deezer Search API fallback
-            const deezerRes = await axios.get('https://api.deezer.com/search', {
-                params: { q: query, limit },
-                timeout: 5000
-            });
-
-            if (deezerRes.data?.data?.length) {
-                return deezerRes.data.data.map((item: any) => ({
-                    id: String(item.id),
-                    uri: `spotify:track:${item.id}`,
-                    name: item.title,
-                    artists: [{ name: item.artist?.name || 'Unknown Artist' }],
-                    album: {
-                        name: item.album?.title || item.title,
-                        images: [{ url: item.album?.cover_medium || item.album?.cover || '' }]
-                    },
-                    duration_ms: (item.duration || 180) * 1000,
-                    preview_url: item.preview || null
-                }));
+        // B. Merge distinct iTunes results for comprehensive library coverage
+        if (itunesRes.status === 'fulfilled' && Array.isArray(itunesRes.value.data?.results)) {
+            for (const item of itunesRes.value.data.results) {
+                const name = item.trackName;
+                const artist = item.artistName || 'Unknown Artist';
+                const normKey = `${name.toLowerCase()} - ${artist.toLowerCase()}`;
+                if (!seenKeys.has(normKey)) {
+                    seenKeys.add(normKey);
+                    results.push({
+                        id: String(item.trackId),
+                        uri: `spotify:track:${item.trackId}`,
+                        name,
+                        artists: [{ name: artist }],
+                        album: {
+                            name: item.collectionName || item.trackName,
+                            images: [{
+                                url: item.artworkUrl100 ? item.artworkUrl100.replace('100x100bb', '600x600bb') : ''
+                            }]
+                        },
+                        duration_ms: item.trackTimeMillis || 180000,
+                        preview_url: item.previewUrl || null
+                    });
+                }
             }
-        } catch (err: any) {
-            console.warn('[SpotifyScraper] Deezer search fallback error:', err.message);
         }
 
-        return [];
+        // C. Deezer fallback if both returned 0 results
+        if (results.length === 0) {
+            try {
+                const deezerRes = await axios.get('https://api.deezer.com/search', {
+                    params: { q: cleanQuery, limit },
+                    timeout: 5000
+                });
+                if (deezerRes.data?.data?.length) {
+                    return deezerRes.data.data.map((item: any) => ({
+                        id: String(item.id),
+                        uri: `spotify:track:${item.id}`,
+                        name: item.title,
+                        artists: [{ name: item.artist?.name || 'Unknown Artist' }],
+                        album: {
+                            name: item.album?.title || item.title,
+                            images: [{ url: item.album?.cover_medium || item.album?.cover || '' }]
+                        },
+                        duration_ms: (item.duration || 180) * 1000,
+                        preview_url: item.preview || null
+                    }));
+                }
+            } catch (err: any) {
+                console.warn('[SpotifyScraper] Deezer search fallback error:', err.message);
+            }
+        }
+
+        return results.slice(0, limit);
     }
 
     /**

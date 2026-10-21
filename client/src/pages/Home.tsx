@@ -3,7 +3,7 @@ import { Track, Playlist, Artist } from '../types';
 import axios from 'axios';
 import {
   Play, Pause, Heart, MoreHorizontal, ChevronLeft, ChevronRight,
-  Search, Bell, Sparkles, RefreshCw, ArrowDown
+  Search, Bell, Sparkles, RefreshCw, ArrowDown, Settings
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useCache } from '../context/CacheContext';
@@ -384,7 +384,7 @@ const Home: React.FC<HomeProps> = ({
             }`}
             title="Settings & Profile"
           >
-            <Sparkles size={14} />
+            <Settings size={15} />
           </button>
         </div>
       </div>

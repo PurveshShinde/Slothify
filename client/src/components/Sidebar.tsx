@@ -28,7 +28,9 @@ const Sidebar: React.FC<SidebarProps> = ({ user, isAuthenticated, onOpenAuth, on
   const navigate = useNavigate();
   const { isOcean } = useTheme();
   const { cache, setLibraryPlaylists } = useCache();
-  const [sidebarPlaylists, setSidebarPlaylists] = useState<any[]>(cache.libraryPlaylists || []);
+  const [sidebarPlaylists, setSidebarPlaylists] = useState<any[]>(() => {
+    return isAuthenticated ? (cache.libraryPlaylists || []) : [];
+  });
   const [showProfileMenu, setShowProfileMenu] = useState(false);
   const [localAvatar, setLocalAvatar] = useState<string>(() => {
     return localStorage.getItem('slothify_local_avatar') || '/avatars/ghost.png';
@@ -47,23 +49,31 @@ const Sidebar: React.FC<SidebarProps> = ({ user, isAuthenticated, onOpenAuth, on
   };
 
   useEffect(() => {
-    if (!cache.libraryPlaylists) {
+    if (isAuthenticated) {
       fetchPlaylists();
+    } else {
+      setSidebarPlaylists([]);
     }
     const handleUpdate = () => {
-      fetchPlaylists();
+      if (isAuthenticated) {
+        fetchPlaylists();
+      } else {
+        setSidebarPlaylists([]);
+      }
     };
     window.addEventListener('slothify_playlists_updated', handleUpdate);
     return () => {
       window.removeEventListener('slothify_playlists_updated', handleUpdate);
     };
-  }, []);
+  }, [isAuthenticated]);
 
   useEffect(() => {
-    if (cache.libraryPlaylists) {
+    if (isAuthenticated && cache.libraryPlaylists) {
       setSidebarPlaylists(cache.libraryPlaylists);
+    } else if (!isAuthenticated) {
+      setSidebarPlaylists([]);
     }
-  }, [cache.libraryPlaylists]);
+  }, [cache.libraryPlaylists, isAuthenticated]);
 
   useEffect(() => {
     const handleAvatarUpdate = () => {
@@ -88,21 +98,20 @@ const Sidebar: React.FC<SidebarProps> = ({ user, isAuthenticated, onOpenAuth, on
         : 'text-[#8a8489] hover:text-white hover:bg-white/[0.03]'
     }`;
 
-  const currentList = playlists.length > 0 ? playlists : sidebarPlaylists;
+  const currentList = isAuthenticated ? (playlists.length > 0 ? playlists : sidebarPlaylists) : [];
 
-  const displayedPlaylists = currentList.length > 0
+  const displayedPlaylists = isAuthenticated && currentList.length > 0
     ? currentList.map(p => ({
         id: p.id,
         name: p.name,
         image: p.images?.[0]?.url || 'https://images.unsplash.com/photo-1518609878373-06d740f60d8b?w=100'
       }))
-    : defaultPlaylists;
+    : [];
 
   return (
     <aside className={`hidden md:flex w-60 flex-shrink-0 flex-col p-4 space-y-5 border-r select-none transition-colors duration-300 z-20 bg-black/35 backdrop-blur-2xl border-white/10`}>
-      {/* Brand Header: Sparkle + Spaced Wordmark */}
-      <div className="pt-2 pb-3 px-2 flex flex-col items-center justify-center space-y-1">
-        <Sparkles size={14} className={`${isOcean ? 'text-[#60a5fa]' : 'text-[#f5d0b5]'} opacity-90 animate-pulse`} />
+      {/* Brand Header: Clean Wordmark */}
+      <div className="pt-3 pb-3 px-2 flex flex-col items-center justify-center">
         <h1 className="text-xs font-bold tracking-[0.35em] text-[#e8ded6] uppercase text-center pl-1">
           Slothify
         </h1>
@@ -161,22 +170,30 @@ const Sidebar: React.FC<SidebarProps> = ({ user, isAuthenticated, onOpenAuth, on
         </div>
 
         <div className="space-y-1">
-          {displayedPlaylists.map(item => (
-            <div
-              key={item.id}
-              onClick={() => navigate(`/playlist/${item.id}`)}
-              className="flex items-center space-x-2.5 px-2 py-1.5 rounded-lg hover:bg-white/[0.03] transition-colors cursor-pointer group"
-            >
-              <img
-                src={item.image}
-                alt={item.name}
-                className="w-5 h-5 rounded-md object-cover flex-shrink-0"
-              />
-              <span className="text-xs text-[#c4beb6] group-hover:text-white truncate">
-                {item.name}
-              </span>
+          {displayedPlaylists.length > 0 ? (
+            displayedPlaylists.map(item => (
+              <div
+                key={item.id}
+                onClick={() => navigate(`/playlist/${item.id}`)}
+                className="flex items-center space-x-2.5 px-2 py-1.5 rounded-lg hover:bg-white/[0.03] transition-colors cursor-pointer group"
+              >
+                <img
+                  src={item.image}
+                  alt={item.name}
+                  className="w-5 h-5 rounded-md object-cover flex-shrink-0"
+                />
+                <span className="text-xs text-[#c4beb6] group-hover:text-white truncate">
+                  {item.name}
+                </span>
+              </div>
+            ))
+          ) : (
+            <div className="px-2 py-4 text-center">
+              <p className="text-[11px] text-[#8a8489]">
+                {isAuthenticated ? 'No playlists yet' : 'Sign in to create playlists'}
+              </p>
             </div>
-          ))}
+          )}
         </div>
       </div>
 

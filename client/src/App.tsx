@@ -321,6 +321,7 @@ const App: React.FC = () => {
       localStorage.removeItem('slothify_browser_cache_v2');
       localStorage.removeItem('slothify_browser_cache_v1');
     } catch (e) { }
+    window.dispatchEvent(new Event('slothify_playlists_updated'));
     fetchLikedSongs();
   };
 

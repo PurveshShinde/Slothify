@@ -5,22 +5,115 @@ import axios from 'axios';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useTheme } from '../context/ThemeContext';
 
-const OCEAN_CATEGORIES = [
-  { name: 'Deep Sea Ambient', color: 'bg-gradient-to-br from-[#1e3a8a] to-[#0f172a]' },
-  { name: 'Azure Waves', color: 'bg-gradient-to-br from-[#0284c7] to-[#0369a1]' },
-  { name: 'Electric Pop', color: 'bg-gradient-to-br from-[#2563eb] to-[#1d4ed8]' },
-  { name: 'Midnight Chill', color: 'bg-gradient-to-br from-[#0c4a6e] to-[#082f49]' },
-  { name: 'Ocean Rock', color: 'bg-gradient-to-br from-[#3b82f6] to-[#1e40af]' },
-  { name: 'Coastal Acoustic', color: 'bg-gradient-to-br from-[#0ea5e9] to-[#0369a1]' },
+interface CategoryItem {
+  name: string;
+  subtitle: string;
+  tag: string;
+  color: string;
+  image: string;
+  query?: string;
+}
+
+const OCEAN_CATEGORIES: CategoryItem[] = [
+  {
+    name: 'Deep Sea Ambient',
+    subtitle: 'Calm depths & ethereal soundscapes',
+    tag: 'Ambient',
+    color: 'bg-gradient-to-br from-[#0c1f4a] via-[#1e3a8a] to-[#0284c7]',
+    image: 'https://images.unsplash.com/photo-1682687220063-4742bd7fd538?w=500&auto=format&fit=crop&q=80',
+    query: 'Deep Sea Ambient instrumental'
+  },
+  {
+    name: 'Azure Waves',
+    subtitle: 'Tropical vibes & chill summer rhythms',
+    tag: 'Tropical',
+    color: 'bg-gradient-to-br from-[#0369a1] via-[#0284c7] to-[#38bdf8]',
+    image: 'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=500&auto=format&fit=crop&q=80',
+    query: 'Tropical House summer chill'
+  },
+  {
+    name: 'Electric Pop',
+    subtitle: 'Synthwaves & neon dance anthems',
+    tag: 'Electronic',
+    color: 'bg-gradient-to-br from-[#312e81] via-[#2563eb] to-[#0ea5e9]',
+    image: 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=500&auto=format&fit=crop&q=80',
+    query: 'Top Pop Hits 2024'
+  },
+  {
+    name: 'Midnight Chill',
+    subtitle: 'Late night lofi & moonlit beats',
+    tag: 'Lo-Fi',
+    color: 'bg-gradient-to-br from-[#030712] via-[#0f172a] to-[#1e293b]',
+    image: 'https://images.unsplash.com/photo-1509198397868-475647b2a1e5?w=500&auto=format&fit=crop&q=80',
+    query: 'Midnight Lofi Chill beats'
+  },
+  {
+    name: 'Ocean Rock',
+    subtitle: 'Coastal riffs & alternative power',
+    tag: 'Rock',
+    color: 'bg-gradient-to-br from-[#1e3a8a] via-[#1d4ed8] to-[#2563eb]',
+    image: 'https://images.unsplash.com/photo-1465847899084-d164df4dedc6?w=500&auto=format&fit=crop&q=80',
+    query: 'Modern Rock alternative'
+  },
+  {
+    name: 'Coastal Acoustic',
+    subtitle: 'Unplugged guitars & organic surf',
+    tag: 'Acoustic',
+    color: 'bg-gradient-to-br from-[#082f49] via-[#0369a1] to-[#38bdf8]',
+    image: 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=500&auto=format&fit=crop&q=80',
+    query: 'Acoustic Guitar chill folk'
+  },
 ];
 
-const AUTUMN_CATEGORIES = [
-  { name: 'Indie & Folk', color: 'bg-gradient-to-br from-[#c87d46] to-[#9c5929]' },
-  { name: 'Acoustic', color: 'bg-gradient-to-br from-[#b86237] to-[#78391b]' },
-  { name: 'Pop Hits', color: 'bg-gradient-to-br from-[#d49b6a] to-[#a36838]' },
-  { name: 'Chill & Lofi', color: 'bg-gradient-to-br from-[#8a5d3b] to-[#4e341f]' },
-  { name: 'Rock & Classics', color: 'bg-gradient-to-br from-[#a76d49] to-[#6d4025]' },
-  { name: 'Jazz & Soul', color: 'bg-gradient-to-br from-[#be8056] to-[#884e2a]' },
+const AUTUMN_CATEGORIES: CategoryItem[] = [
+  {
+    name: 'Indie & Folk',
+    subtitle: 'Golden forest acoustic & storytelling',
+    tag: 'Indie',
+    color: 'bg-gradient-to-br from-[#451a03] via-[#78350f] to-[#b45309]',
+    image: 'https://images.unsplash.com/photo-1509114397022-ed747cca3f65?w=500&auto=format&fit=crop&q=80',
+    query: 'Indie Folk acoustic'
+  },
+  {
+    name: 'Warm Acoustic',
+    subtitle: 'Handpicked strings & fireside melodies',
+    tag: 'Unplugged',
+    color: 'bg-gradient-to-br from-[#7c2d12] via-[#9a3412] to-[#ea580c]',
+    image: 'https://images.unsplash.com/photo-1510915361894-db8b60106cb1?w=500&auto=format&fit=crop&q=80',
+    query: 'Acoustic Morning chill'
+  },
+  {
+    name: 'Pop Hits',
+    subtitle: 'Golden hour anthems & top radio',
+    tag: 'Trending',
+    color: 'bg-gradient-to-br from-[#78350f] via-[#b45309] to-[#d97706]',
+    image: 'https://images.unsplash.com/photo-1470225620780-dba8ba36b745?w=500&auto=format&fit=crop&q=80',
+    query: 'Top Hits Radio'
+  },
+  {
+    name: 'Chill & Lofi',
+    subtitle: 'Rainy window study & cozy coffee',
+    tag: 'Study & Chill',
+    color: 'bg-gradient-to-br from-[#291e17] via-[#432818] to-[#78350f]',
+    image: 'https://images.unsplash.com/photo-1501386761578-eac5c94b800a?w=500&auto=format&fit=crop&q=80',
+    query: 'Lofi Hip Hop chill beats'
+  },
+  {
+    name: 'Rock & Classics',
+    subtitle: 'Timeless vintage vinyl & legendary riffs',
+    tag: 'Classics',
+    color: 'bg-gradient-to-br from-[#422006] via-[#713f12] to-[#a16207]',
+    image: 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=500&auto=format&fit=crop&q=80',
+    query: 'Classic Rock legendary hits'
+  },
+  {
+    name: 'Jazz & Soul',
+    subtitle: 'Moody saxophone & amber lounges',
+    tag: 'Jazz',
+    color: 'bg-gradient-to-br from-[#3b120c] via-[#5c2419] to-[#991b1b]',
+    image: 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=500&auto=format&fit=crop&q=80',
+    query: 'Coffee Table Jazz soul'
+  },
 ];
 
 interface SearchProps {
@@ -50,30 +143,42 @@ const Search: React.FC<SearchProps> = ({ isAuthenticated, onPlayTrack }) => {
 
   const updateQuery = (newQuery: string) => {
     setQuery(newQuery);
-    if (newQuery) setSearchParams({ q: newQuery });
-    else setSearchParams({});
   };
 
   useEffect(() => {
-    if (!query.trim()) {
+    const trimmed = query.trim();
+    if (!trimmed) {
       setResults([]);
+      setSearchParams({}, { replace: true });
       return;
     }
 
+    const abortController = new AbortController();
+
     const timer = setTimeout(async () => {
+      setSearchParams({ q: trimmed }, { replace: true });
       setIsLoading(true);
       try {
-        const res = await axios.get(`/api/search?q=${encodeURIComponent(query)}`);
-        setResults(res.data);
-      } catch (err) {
-        console.error(err);
+        const res = await axios.get(`/api/search?q=${encodeURIComponent(trimmed)}`, {
+          signal: abortController.signal
+        });
+        if (Array.isArray(res.data)) {
+          setResults(res.data);
+        }
+      } catch (err: any) {
+        if (err.name !== 'CanceledError' && !axios.isCancel(err)) {
+          console.error('Search request failed:', err);
+        }
       } finally {
         setIsLoading(false);
       }
     }, 350);
 
-    return () => clearTimeout(timer);
-  }, [query]);
+    return () => {
+      clearTimeout(timer);
+      abortController.abort();
+    };
+  }, [query, setSearchParams]);
 
   const openPlaylistModal = async (track: Track, e: React.MouseEvent) => {
     e.stopPropagation();
@@ -260,20 +365,57 @@ const Search: React.FC<SearchProps> = ({ isAuthenticated, onPlayTrack }) => {
         </div>
       ) : (
         <div className="space-y-4 pt-2">
-          <h2 className="text-sm font-bold tracking-wider text-[#8a8489] uppercase">
-            {isOcean ? 'Browse Ocean Genres' : 'Browse Autumn Genres'}
-          </h2>
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-3.5">
+          <div className="flex items-center justify-between">
+            <h2 className="text-sm font-bold tracking-wider text-[#8a8489] uppercase">
+              {isOcean ? 'Browse Ocean Genres' : 'Browse Autumn Genres'}
+            </h2>
+            <span className="text-[11px] text-[#6e686e] font-medium hidden sm:inline-block">
+              Click any genre to explore curated tracks
+            </span>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {categories.map((cat) => (
               <div
                 key={cat.name}
-                onClick={() => updateQuery(cat.name)}
-                className={`${cat.color} aspect-[16/9] rounded-2xl p-5 relative overflow-hidden cursor-pointer hover:scale-[1.02] transition-transform shadow-lg border border-white/10`}
+                onClick={() => updateQuery(cat.query || cat.name)}
+                className={`group relative aspect-[16/10] sm:aspect-[16/9] rounded-2xl p-5 overflow-hidden cursor-pointer shadow-lg hover:shadow-2xl transition-all duration-300 hover:scale-[1.02] border border-white/10 ${cat.color}`}
               >
-                <span className="text-base md:text-lg font-bold text-white relative z-10 tracking-tight">
-                  {cat.name}
-                </span>
-                <div className="absolute -bottom-6 -right-6 w-24 h-24 bg-white/10 rounded-full blur-xl pointer-events-none" />
+                {/* Ambient dynamic glow */}
+                <div className="absolute -top-10 -left-10 w-32 h-32 bg-white/10 rounded-full blur-2xl pointer-events-none group-hover:scale-150 transition-transform duration-500" />
+                
+                {/* Content Left */}
+                <div className="relative z-10 flex flex-col justify-between h-full max-w-[62%] sm:max-w-[65%]">
+                  <div>
+                    <span className="inline-block text-[10px] font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-black/30 backdrop-blur-md text-white/90 border border-white/10 mb-2">
+                      {cat.tag}
+                    </span>
+                    <h3 className="text-base sm:text-lg md:text-xl font-extrabold text-white tracking-tight leading-snug drop-shadow group-hover:text-white transition-colors">
+                      {cat.name}
+                    </h3>
+                    <p className="text-[11px] sm:text-xs text-white/70 mt-1 line-clamp-2 leading-relaxed">
+                      {cat.subtitle}
+                    </p>
+                  </div>
+
+                  <div className="flex items-center gap-1.5 text-[11px] font-semibold text-white/90 opacity-0 group-hover:opacity-100 transition-opacity duration-200 mt-2">
+                    <span className="p-1 rounded-full bg-white/20 backdrop-blur-md">
+                      <Play size={10} fill="white" className="text-white ml-0.5" />
+                    </span>
+                    <span>Explore</span>
+                  </div>
+                </div>
+
+                {/* Signature Tilted Artwork Cover (Spotify style) */}
+                <div className="absolute -bottom-3 -right-3 w-28 h-28 sm:w-32 sm:h-32 rotate-[18deg] group-hover:rotate-[12deg] group-hover:scale-110 group-hover:-translate-x-1 group-hover:-translate-y-1 transition-all duration-300 rounded-xl overflow-hidden shadow-2xl border-2 border-white/20 pointer-events-none">
+                  <img
+                    src={cat.image}
+                    alt={cat.name}
+                    className="w-full h-full object-cover"
+                    loading="lazy"
+                  />
+                  <div className="absolute inset-0 bg-gradient-to-tr from-black/40 via-transparent to-white/10 pointer-events-none" />
+                </div>
               </div>
             ))}
           </div>

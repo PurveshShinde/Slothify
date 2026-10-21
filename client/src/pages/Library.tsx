@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Playlist, User } from '../types';
-import { Music2, RefreshCw, ArrowDown, Plus, Search, ArrowUpDown, LayoutGrid, Heart, Pin } from 'lucide-react';
+import { Music2, RefreshCw, ArrowDown, Plus, Search, ArrowUpDown, LayoutGrid, Heart, Pin, Trash2 } from 'lucide-react';
 import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
 import { useCache } from '../context/CacheContext';
@@ -20,10 +20,30 @@ type FilterType = 'Playlists' | 'Albums' | 'Artists';
 const Library: React.FC<LibraryProps> = ({ isAuthenticated, user, likedTrackIds, likedSongsTotal, onOpenAuth, initialFilter }) => {
   const navigate = useNavigate();
   const { isOcean } = useTheme();
-  const { cache, setLibraryPlaylists } = useCache();
-  const [playlists, setPlaylists] = useState<Playlist[]>(cache.libraryPlaylists || []);
-  const [isLoading, setIsLoading] = useState(!cache.libraryPlaylists);
+  const { cache, setLibraryPlaylists, removePlaylistFromCache } = useCache();
+  const [playlists, setPlaylists] = useState<Playlist[]>(() => {
+    return isAuthenticated ? (cache.libraryPlaylists || []) : [];
+  });
+  const [isLoading, setIsLoading] = useState(isAuthenticated && !cache.libraryPlaylists);
   const [activeFilter, setActiveFilter] = useState<FilterType | null>(initialFilter || null);
+  const [playlistToDelete, setPlaylistToDelete] = useState<any | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  const confirmDeletePlaylist = async () => {
+    if (!playlistToDelete) return;
+    setIsDeleting(true);
+    try {
+      await axios.delete(`/api/me/playlists/${playlistToDelete.id}`);
+    } catch (err) {
+      console.error('Failed to delete playlist on server:', err);
+    } finally {
+      removePlaylistFromCache(playlistToDelete.id);
+      setPlaylists(prev => prev.filter(p => p.id !== playlistToDelete.id));
+      window.dispatchEvent(new Event('slothify_playlists_updated'));
+      setIsDeleting(false);
+      setPlaylistToDelete(null);
+    }
+  };
 
   useEffect(() => {
     if (initialFilter !== undefined) {
@@ -79,15 +99,27 @@ const Library: React.FC<LibraryProps> = ({ isAuthenticated, user, likedTrackIds,
   };
 
   const fetchPlaylists = (isRefresh = false) => {
+    if (!isAuthenticated) {
+      setPlaylists([]);
+      setIsLoading(false);
+      return;
+    }
     if (!isRefresh && cache.libraryPlaylists) return;
 
     setIsLoading(!isRefresh);
     axios.get('/api/me/playlists')
       .then(res => {
-        setPlaylists(res.data);
-        setLibraryPlaylists(res.data);
+        if (Array.isArray(res.data)) {
+          setPlaylists(res.data);
+          setLibraryPlaylists(res.data);
+        } else {
+          setPlaylists([]);
+        }
       })
-      .catch(err => console.error(err))
+      .catch(err => {
+        console.error(err);
+        setPlaylists([]);
+      })
       .finally(() => {
         setIsLoading(false);
         setIsRefreshing(false);
@@ -96,25 +128,38 @@ const Library: React.FC<LibraryProps> = ({ isAuthenticated, user, likedTrackIds,
   };
 
   useEffect(() => {
+    if (!isAuthenticated) {
+      setPlaylists([]);
+      setIsLoading(false);
+      return;
+    }
     if (!cache.libraryPlaylists) {
       fetchPlaylists();
     } else {
       setIsLoading(false);
     }
     const handleUpdate = () => {
-      fetchPlaylists(true);
+      if (isAuthenticated) {
+        fetchPlaylists(true);
+      } else {
+        setPlaylists([]);
+      }
     };
     window.addEventListener('slothify_playlists_updated', handleUpdate);
     return () => {
       window.removeEventListener('slothify_playlists_updated', handleUpdate);
     };
-  }, []);
+  }, [isAuthenticated]);
 
   useEffect(() => {
+    if (!isAuthenticated) {
+      setPlaylists([]);
+      return;
+    }
     if (cache.libraryPlaylists) {
       setPlaylists(cache.libraryPlaylists);
     }
-  }, [cache.libraryPlaylists]);
+  }, [cache.libraryPlaylists, isAuthenticated]);
 
   // Pull-to-Refresh Handlers
   const handleTouchStart = (e: React.TouchEvent) => {
@@ -179,7 +224,7 @@ const Library: React.FC<LibraryProps> = ({ isAuthenticated, user, likedTrackIds,
     </div>
   );
 
-  if (!isAuthenticated && playlists.length === 0 && likedSongsTotal === 0) {
+  if (!isAuthenticated) {
     return (
       <div className="flex flex-col items-center justify-center h-[70vh] text-center space-y-6 px-4">
         <div className={`p-6 border rounded-full shadow-xl ${
@@ -190,7 +235,7 @@ const Library: React.FC<LibraryProps> = ({ isAuthenticated, user, likedTrackIds,
         <div className="space-y-2 max-w-sm">
           <h2 className="text-2xl font-bold text-white">Your library is ready</h2>
           <p className="text-slate-400 text-sm">
-            Log in to sync your playlists and liked songs with Zero-Knowledge encryption, or create playlists right here.
+            Sign in to create, organize, and sync your private playlists and liked tracks across your devices.
           </p>
         </div>
         <div className="flex flex-col sm:flex-row items-center gap-3">
@@ -198,23 +243,13 @@ const Library: React.FC<LibraryProps> = ({ isAuthenticated, user, likedTrackIds,
             onClick={onOpenAuth}
             className={`px-6 py-3 rounded-full font-bold text-sm shadow-lg hover:scale-105 active:scale-95 transition-all border ${
               isOcean
-                ? 'bg-[#1e293b] hover:bg-[#334155] text-blue-400 border-blue-500/30'
-                : 'bg-[#241c19] hover:bg-[#2e2320] text-[#f5d0b5] border-[#f5d0b5]/25'
+                ? 'bg-blue-600 hover:bg-blue-500 text-white border-blue-500/40 shadow-blue-500/30'
+                : 'bg-[#f5d0b5] hover:bg-[#ebd0bc] text-black border-[#f5d0b5]/25 shadow-[#c87d46]/20'
             }`}
           >
             Log In / Sign Up
           </button>
-          <button
-            onClick={() => {
-              setNewPlaylistName('My Playlist #1');
-              setIsModalOpen(true);
-            }}
-            className="px-6 py-3 bg-white/10 hover:bg-white/20 text-white rounded-full font-bold text-sm transition-all"
-          >
-            Create Playlist
-          </button>
         </div>
-        <CreatePlaylistModal />
       </div>
     );
   }
@@ -349,19 +384,32 @@ const Library: React.FC<LibraryProps> = ({ isAuthenticated, user, likedTrackIds,
             <div
               key={playlist.id}
               onClick={() => navigate(`/playlist/${playlist.id}`)}
-              className="flex items-center space-x-3 p-2 rounded-md hover:bg-[#1a1a1a] active:bg-[#121212] transition-colors cursor-pointer"
+              className="group flex items-center justify-between p-2 rounded-md hover:bg-white/[0.04] active:bg-white/[0.06] transition-colors cursor-pointer"
             >
-              <img
-                src={playlist.images[0]?.url || `https://picsum.photos/seed/${playlist.id}/200`}
-                className="w-16 h-16 rounded-sm object-cover flex-shrink-0"
-                alt={playlist.name}
-              />
-              <div className="flex-1 min-w-0 flex flex-col justify-center">
-                <h3 className="font-medium text-white text-base truncate">{playlist.name}</h3>
-                <p className="text-sm text-[#b3b3b3] truncate mt-0.5">
-                  Playlist • {playlist.owner.display_name}
-                </p>
+              <div className="flex items-center space-x-3 min-w-0 flex-1">
+                <img
+                  src={playlist.images[0]?.url || `https://picsum.photos/seed/${playlist.id}/200`}
+                  className="w-14 h-14 rounded-md object-cover flex-shrink-0"
+                  alt={playlist.name}
+                />
+                <div className="flex-1 min-w-0 flex flex-col justify-center">
+                  <h3 className="font-semibold text-white text-sm truncate group-hover:text-blue-400 transition-colors">{playlist.name}</h3>
+                  <p className="text-xs text-[#8a8489] truncate mt-0.5">
+                    Playlist • {playlist.owner?.display_name || 'Slothify'}
+                  </p>
+                </div>
               </div>
+
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setPlaylistToDelete(playlist);
+                }}
+                title="Delete Playlist"
+                className="p-2 text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 rounded-lg opacity-0 group-hover:opacity-100 transition-all flex-shrink-0 ml-2"
+              >
+                <Trash2 size={16} />
+              </button>
             </div>
           ))
         )}
@@ -375,6 +423,39 @@ const Library: React.FC<LibraryProps> = ({ isAuthenticated, user, likedTrackIds,
       </div>
 
       <CreatePlaylistModal />
+
+      {/* Delete Confirmation Modal */}
+      {playlistToDelete && (
+        <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+          <div className="bg-[#18181b] border border-white/10 rounded-2xl max-w-sm w-full p-6 space-y-4 shadow-2xl text-center animate-in zoom-in-95 duration-200">
+            <div className="w-12 h-12 rounded-full bg-rose-500/20 text-rose-400 mx-auto flex items-center justify-center border border-rose-500/30">
+              <Trash2 size={24} />
+            </div>
+            <div className="space-y-1">
+              <h3 className="text-lg font-bold text-white">Delete Playlist?</h3>
+              <p className="text-xs text-slate-400 leading-relaxed">
+                Are you sure you want to delete <span className="text-white font-semibold">&ldquo;{playlistToDelete.name}&rdquo;</span>? This will permanently remove it from your account and cloud database.
+              </p>
+            </div>
+            <div className="flex gap-3 pt-2">
+              <button
+                onClick={() => setPlaylistToDelete(null)}
+                disabled={isDeleting}
+                className="flex-1 py-2.5 rounded-xl text-xs font-bold bg-white/10 hover:bg-white/15 text-white transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmDeletePlaylist}
+                disabled={isDeleting}
+                className="flex-1 py-2.5 rounded-xl text-xs font-bold bg-rose-600 hover:bg-rose-500 text-white transition-colors flex items-center justify-center gap-1.5 shadow-lg shadow-rose-600/30"
+              >
+                {isDeleting ? 'Deleting...' : 'Delete Permanently'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

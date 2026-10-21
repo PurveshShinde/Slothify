@@ -2,9 +2,7 @@ import type { Request, Response } from 'express';
 import yts from 'yt-search';
 import path from 'path';
 import fs from 'fs';
-import { spawn, type ChildProcess } from 'child_process';
-import https from 'https';
-import axios from 'axios';
+import { spawn } from 'child_process';
 import { fileURLToPath } from 'url';
 import type { AudioPlugin, AudioSearchResult } from '../interfaces.js';
 
@@ -16,103 +14,165 @@ const searchCache = new Map<string, AudioSearchResult>();
 const streamUrlCache = new Map<string, { url: string; expiresAt: number }>();
 const pendingExtractions = new Map<string, Promise<string>>();
 
-export class YouTubeAudioPlugin implements AudioPlugin {
-    readonly name = 'YouTubeAudio';
-
-    private ytdlpPath: string;
-    private downloadPromise: Promise<string> | null = null;
-
-    constructor() {
-        const isWindows = process.platform === 'win32';
-        const binaryName = isWindows ? 'yt-dlp.exe' : 'yt-dlp_linux';
-        const localPath = path.resolve(__dirname, '../../../', binaryName);
-
-        if (fs.existsSync(localPath)) {
-            this.ytdlpPath = localPath;
-        } else {
-            const cwdPath = path.resolve(process.cwd(), binaryName);
-            if (fs.existsSync(cwdPath)) {
-                this.ytdlpPath = cwdPath;
-            } else {
-                this.ytdlpPath = isWindows ? binaryName : path.join('/tmp', binaryName);
-            }
-        }
+/**
+ * Extract audio stream URL using Cobalt API with Piped & binary fallbacks
+ */
+export async function getStreamUrl(videoId: string): Promise<string> {
+    const now = Date.now();
+    const cached = streamUrlCache.get(videoId);
+    if (cached && cached.expiresAt > now) {
+        return cached.url;
     }
 
-    private async ensureBinary(): Promise<string> {
-        if (fs.existsSync(this.ytdlpPath)) {
-            return this.ytdlpPath;
-        }
+    if (pendingExtractions.has(videoId)) {
+        return pendingExtractions.get(videoId)!;
+    }
 
-        const isWindows = process.platform === 'win32';
-        const binaryName = isWindows ? 'yt-dlp.exe' : 'yt-dlp_linux';
+    const extractionPromise = (async () => {
+        const targetUrl = `https://www.youtube.com/watch?v=${videoId}`;
 
-        const possiblePaths = [
-            path.resolve(process.cwd(), binaryName),
-            path.resolve(__dirname, '../../../', binaryName),
-            isWindows ? '' : path.join('/tmp', binaryName)
-        ].filter(Boolean);
-
-        for (const p of possiblePaths) {
-            if (fs.existsSync(p)) {
-                this.ytdlpPath = p;
-                return p;
+        // 1. Cobalt API Extraction
+        try {
+            console.log(`[YouTubeAudioPlugin] Attempting Cobalt extraction for: ${videoId}`);
+            const cobaltBase = process.env.COBALT_API_URL || 'https://api.cobalt.tools';
+            const headers: Record<string, string> = {
+                'Accept': 'application/json',
+                'Content-Type': 'application/json',
+            };
+            if (process.env.COBALT_API_KEY) {
+                headers['Authorization'] = `Bearer ${process.env.COBALT_API_KEY}`;
             }
-        }
 
-        if (this.downloadPromise) {
-            return this.downloadPromise;
-        }
-
-        const targetPath = isWindows
-            ? path.resolve(__dirname, '../../../', binaryName)
-            : path.join('/tmp', binaryName);
-
-        const downloadUrl = isWindows
-            ? 'https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp.exe'
-            : 'https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_linux';
-
-        this.downloadPromise = (async () => {
-            console.log(`[YouTubeAudioPlugin] Downloading standalone ${binaryName} to ${targetPath}...`);
-
-            await new Promise<void>((resolve, reject) => {
-                const file = fs.createWriteStream(targetPath);
-                const getWithRedirect = (url: string) => {
-                    https.get(url, (res) => {
-                        if (res.statusCode === 301 || res.statusCode === 302) {
-                            getWithRedirect(res.headers.location!);
-                        } else if (res.statusCode === 200) {
-                            res.pipe(file);
-                            file.on('finish', () => {
-                                file.close();
-                                if (!isWindows) {
-                                    try {
-                                        fs.chmodSync(targetPath, '755');
-                                    } catch (e) { }
-                                }
-                                resolve();
-                            });
-                        } else {
-                            reject(new Error(`Download failed with status ${res.statusCode}`));
-                        }
-                    }).on('error', (err) => {
-                        fs.unlink(targetPath, () => { });
-                        reject(err);
-                    });
-                };
-                getWithRedirect(downloadUrl);
+            const response = await fetch(cobaltBase, {
+                method: 'POST',
+                headers,
+                body: JSON.stringify({
+                    url: targetUrl,
+                    downloadMode: 'audio',
+                    audioFormat: 'mp3',
+                    audioBitrate: '320'
+                })
             });
 
-            this.ytdlpPath = targetPath;
-            return targetPath;
-        })();
-
-        try {
-            return await this.downloadPromise;
-        } finally {
-            this.downloadPromise = null;
+            if (response.ok) {
+                const data = (await response.json()) as any;
+                if (data.url) {
+                    console.log(`[YouTubeAudioPlugin] ✅ Cobalt extraction succeeded for ${videoId}`);
+                    streamUrlCache.set(videoId, {
+                        url: data.url,
+                        expiresAt: Date.now() + 3.5 * 60 * 60 * 1000
+                    });
+                    return data.url;
+                }
+            } else {
+                const errText = await response.text();
+                console.warn(`[YouTubeAudioPlugin] Cobalt API returned status ${response.status}:`, errText.substring(0, 150));
+            }
+        } catch (cobaltErr: any) {
+            console.warn('[YouTubeAudioPlugin] Cobalt error:', cobaltErr.message);
         }
+
+        // 2. Piped API Fallback (Multiple redundant instances)
+        const pipedInstances = [
+            'https://pipedapi.kavin.rocks',
+            'https://api.piped.private.coffee',
+            'https://pipedapi.adminforge.de',
+            'https://pipedapi.ducks.party',
+            'https://pipedapi.reallyaweso.me'
+        ];
+
+        for (const instance of pipedInstances) {
+            try {
+                console.log(`[YouTubeAudioPlugin] Trying Piped fallback instance: ${instance}`);
+                const response = await fetch(`${instance}/streams/${videoId}`, {
+                    headers: { 'User-Agent': 'Mozilla/5.0' },
+                    signal: AbortSignal.timeout(4000)
+                });
+
+                if (response.ok) {
+                    const data = (await response.json()) as any;
+                    const audioStreams = data.audioStreams;
+                    if (audioStreams && audioStreams.length > 0) {
+                        audioStreams.sort((a: any, b: any) => (b.bitrate || 0) - (a.bitrate || 0));
+                        const directUrl = audioStreams[0].url;
+                        console.log(`[YouTubeAudioPlugin] ✅ Piped extraction succeeded via ${instance}`);
+                        streamUrlCache.set(videoId, {
+                            url: directUrl,
+                            expiresAt: Date.now() + 3.5 * 60 * 60 * 1000
+                        });
+                        return directUrl;
+                    }
+                }
+            } catch (pipedErr) {
+                // Continue to next instance
+            }
+        }
+
+        // 3. Local yt-dlp binary fallback if available on host
+        try {
+            const isWindows = process.platform === 'win32';
+            const binaryName = isWindows ? 'yt-dlp.exe' : 'yt-dlp_linux';
+            const possiblePaths = [
+                path.resolve(__dirname, '../../../', binaryName),
+                path.resolve(process.cwd(), binaryName),
+                path.join('/tmp', binaryName)
+            ];
+            const binPath = possiblePaths.find(p => fs.existsSync(p));
+
+            if (binPath) {
+                console.log(`[YouTubeAudioPlugin] Using local yt-dlp binary at: ${binPath}`);
+                const url = await new Promise<string>((resolve, reject) => {
+                    const child = spawn(binPath, [
+                        targetUrl,
+                        '-f', '140/251/bestaudio/ba/b',
+                        '-g',
+                        '--no-playlist',
+                        '--quiet',
+                        '--no-warnings'
+                    ]);
+
+                    let stdout = '';
+                    let stderr = '';
+                    child.stdout?.on('data', d => { stdout += d.toString(); });
+                    child.stderr?.on('data', d => { stderr += d.toString(); });
+
+                    child.on('close', code => {
+                        const direct = stdout.trim();
+                        if (code === 0 && direct && direct.startsWith('http')) {
+                            resolve(direct);
+                        } else {
+                            reject(new Error(`yt-dlp failed: ${stderr || 'code ' + code}`));
+                        }
+                    });
+
+                    child.on('error', reject);
+                });
+
+                console.log(`[YouTubeAudioPlugin] ✅ Local yt-dlp succeeded for ${videoId}`);
+                streamUrlCache.set(videoId, {
+                    url,
+                    expiresAt: Date.now() + 3.5 * 60 * 60 * 1000
+                });
+                return url;
+            }
+        } catch (ytErr: any) {
+            console.warn('[YouTubeAudioPlugin] yt-dlp fallback error:', ytErr.message);
+        }
+
+        throw new Error('All audio stream extraction methods failed');
+    })();
+
+    pendingExtractions.set(videoId, extractionPromise);
+
+    try {
+        return await extractionPromise;
+    } finally {
+        pendingExtractions.delete(videoId);
     }
+}
+
+export class YouTubeAudioPlugin implements AudioPlugin {
+    readonly name = 'YouTubeAudio';
 
     /**
      * Search YouTube with in-memory caching for instant repeated queries
@@ -120,7 +180,6 @@ export class YouTubeAudioPlugin implements AudioPlugin {
     async search(query: string): Promise<AudioSearchResult> {
         const cleanQuery = query.trim().toLowerCase();
 
-        // Check memory cache first (0 ms response)
         const cached = searchCache.get(cleanQuery);
         if (cached) {
             return cached;
@@ -142,7 +201,6 @@ export class YouTubeAudioPlugin implements AudioPlugin {
             streamToken: 'direct-stream'
         };
 
-        // Store in cache (capped at 500 items)
         if (searchCache.size > 500) {
             const firstKey = searchCache.keys().next().value;
             if (firstKey) searchCache.delete(firstKey);
@@ -153,70 +211,10 @@ export class YouTubeAudioPlugin implements AudioPlugin {
     }
 
     /**
-     * Extract direct audio stream URL with in-memory caching and lock deduplication
+     * Extract stream URL via Cobalt / Piped / yt-dlp
      */
     async extractStreamUrl(videoId: string): Promise<string> {
-        const now = Date.now();
-        const cached = streamUrlCache.get(videoId);
-        if (cached && cached.expiresAt > now) {
-            return cached.url;
-        }
-
-        // Deduplicate simultaneous requests for same videoId
-        if (pendingExtractions.has(videoId)) {
-            return pendingExtractions.get(videoId)!;
-        }
-
-        const extractionPromise = (async () => {
-            const binPath = await this.ensureBinary();
-            const ytUrl = `https://www.youtube.com/watch?v=${videoId}`;
-
-            return new Promise<string>((resolve, reject) => {
-                const child = spawn(binPath, [
-                    ytUrl,
-                    '-f', '140/251/bestaudio/ba/b',
-                    '-g',
-                    '--no-playlist',
-                    '--quiet',
-                    '--no-warnings',
-                    '--no-check-certificates'
-                ]);
-
-                let stdout = '';
-                let stderr = '';
-
-                child.stdout?.on('data', (d) => {
-                    stdout += d.toString();
-                });
-
-                child.stderr?.on('data', (d) => {
-                    stderr += d.toString();
-                });
-
-                child.on('close', (code) => {
-                    pendingExtractions.delete(videoId);
-                    const url = stdout.trim();
-                    if (code === 0 && url && url.startsWith('http')) {
-                        // Cache for 3.5 hours (Google video URLs typically expire after 6h)
-                        streamUrlCache.set(videoId, {
-                            url,
-                            expiresAt: Date.now() + 3.5 * 60 * 60 * 1000
-                        });
-                        resolve(url);
-                    } else {
-                        reject(new Error(`Failed to extract stream URL: ${stderr || 'Unknown error'}`));
-                    }
-                });
-
-                child.on('error', (err) => {
-                    pendingExtractions.delete(videoId);
-                    reject(err);
-                });
-            });
-        })();
-
-        pendingExtractions.set(videoId, extractionPromise);
-        return extractionPromise;
+        return getStreamUrl(videoId);
     }
 
     /**
@@ -224,103 +222,32 @@ export class YouTubeAudioPlugin implements AudioPlugin {
      */
     async preload(videoId: string): Promise<void> {
         try {
-            await this.extractStreamUrl(videoId);
+            await getStreamUrl(videoId);
         } catch (err: any) {
             console.warn(`[YouTubeAudioPlugin] Preload failed for ${videoId}:`, err.message);
         }
     }
 
     /**
-     * Stream audio directly to client:
-     * - Uses direct URL proxy with Range header forwarding for instant playback and seeking
-     * - Falls back to piped stdout if needed
-     * - NO DISK STORAGE / ZERO SERVER CACHE
+     * Stream audio directly / return direct stream URL
      */
     async stream(videoId: string, req: Request, res: Response): Promise<void> {
-        let directUrl: string | null = null;
-
         try {
-            directUrl = await this.extractStreamUrl(videoId);
-        } catch (extractErr: any) {
-            console.warn(`[YouTubeAudioPlugin] URL extraction failed, falling back to direct pipe:`, extractErr.message);
-        }
-
-        // OPTION A: Fast HTTP Range Proxy via direct URL (Instant TTFB ~100ms)
-        if (directUrl) {
-            try {
-                const clientRange = req.headers.range;
-                const response = await axios({
-                    method: 'GET',
-                    url: directUrl,
-                    responseType: 'stream',
-                    headers: {
-                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-                        ...(clientRange ? { 'Range': clientRange } : {})
-                    },
-                    validateStatus: (status) => status < 400
-                });
-
-                res.status(response.status);
-                res.setHeader('Content-Type', String(response.headers['content-type'] || 'audio/mp4'));
-                res.setHeader('Cache-Control', 'public, max-age=604800, immutable');
-                res.setHeader('Accept-Ranges', 'bytes');
-
-                if (response.headers['content-range']) {
-                    res.setHeader('Content-Range', String(response.headers['content-range']));
-                }
-                if (response.headers['content-length']) {
-                    res.setHeader('Content-Length', String(response.headers['content-length']));
-                }
-
-                response.data.pipe(res);
-
-                req.on('close', () => {
-                    try { response.data.destroy(); } catch (e) { }
-                });
-
-                return;
-            } catch (proxyErr: any) {
-                console.warn(`[YouTubeAudioPlugin] Proxy stream failed, falling back to pipe:`, proxyErr.message);
-            }
-        }
-
-        // OPTION B: Fallback stdout pipe if direct extraction fails
-        const binPath = await this.ensureBinary();
-        const ytUrl = `https://www.youtube.com/watch?v=${videoId}`;
-
-        res.setHeader('Content-Type', 'audio/mp4');
-        res.setHeader('Cache-Control', 'public, max-age=604800, immutable');
-        res.setHeader('Accept-Ranges', 'none');
-
-        const ytdlpArgs = [
-            ytUrl,
-            '-f', '140/251/bestaudio/ba/b',
-            '-o', '-',
-            '--no-playlist',
-            '--no-warnings',
-            '--quiet'
-        ];
-
-        let child: ChildProcess | null = null;
-        try {
-            child = spawn(binPath, ytdlpArgs);
-            child.stdout?.pipe(res);
-
-            req.on('close', () => {
-                if (child && !child.killed) {
-                    try { child.kill('SIGTERM'); } catch (e) { }
-                }
-            });
-
-            res.on('close', () => {
-                if (child && !child.killed) {
-                    try { child.kill('SIGTERM'); } catch (e) { }
-                }
-            });
-        } catch (err: any) {
-            console.error('[YouTubeAudioPlugin] Pipe stream error:', err);
+            const audioUrl = await getStreamUrl(videoId);
             if (!res.headersSent) {
-                res.status(500).json({ error: 'Failed to initiate audio stream' });
+                res.json({
+                    success: true,
+                    url: audioUrl
+                });
+            }
+        } catch (err: any) {
+            console.error('[YouTubeAudioPlugin] Stream failed:', err.message);
+            if (!res.headersSent) {
+                res.status(500).json({
+                    success: false,
+                    error: 'Extraction failed',
+                    details: err.message
+                });
             }
         }
     }

@@ -309,6 +309,16 @@ class LocalLibraryStore {
         return playlist;
     }
 
+    deletePlaylist(id: string): boolean {
+        const initialLen = this.data.playlists.length;
+        this.data.playlists = this.data.playlists.filter(p => p.id !== id);
+        if (this.data.playlists.length !== initialLen) {
+            this.save();
+            return true;
+        }
+        return false;
+    }
+
     getLikedTracks(): { items: Track[]; total: number } {
         return {
             items: this.data.likedTracks,

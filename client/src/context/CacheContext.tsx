@@ -11,6 +11,7 @@ interface CacheContextType {
     setHomeData: (data: any) => void;
     setLibraryPlaylists: (data: any[]) => void;
     setPlaylistDetail: (id: string, data: any) => void;
+    removePlaylistFromCache: (id: string) => void;
     clearCache: () => void;
 }
 
@@ -51,10 +52,24 @@ export const CacheProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     const setPlaylistDetail = (id: string, data: any) =>
         setCache(prev => ({ ...prev, playlistDetails: { ...prev.playlistDetails, [id]: data } }));
 
+    const removePlaylistFromCache = (id: string) => {
+        setCache(prev => {
+            const nextDetails = { ...prev.playlistDetails };
+            delete nextDetails[id];
+            const nextLibrary = prev.libraryPlaylists ? prev.libraryPlaylists.filter(p => p.id !== id) : null;
+            return {
+                ...prev,
+                playlistDetails: nextDetails,
+                libraryPlaylists: nextLibrary
+            };
+        });
+    };
+
     const clearCache = () => {
         try {
             localStorage.removeItem(STORAGE_KEY);
             localStorage.removeItem('slothify_video_cache');
+            localStorage.removeItem('slothify_saavn_cache');
         } catch (e) { }
         setCache({
             homeData: null,
@@ -64,7 +79,7 @@ export const CacheProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     };
 
     return (
-        <CacheContext.Provider value={{ cache, setHomeData, setLibraryPlaylists, setPlaylistDetail, clearCache }}>
+        <CacheContext.Provider value={{ cache, setHomeData, setLibraryPlaylists, setPlaylistDetail, removePlaylistFromCache, clearCache }}>
             {children}
         </CacheContext.Provider>
     );

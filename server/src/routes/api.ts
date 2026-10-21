@@ -295,6 +295,70 @@ router.delete('/playlists/:id/tracks', async (req, res) => {
     }
 });
 
+// Delete playlist permanently (from encrypted MongoDB and local library)
+router.delete('/me/playlists/:id', async (req, res) => {
+    const { id } = req.params;
+    if (!id) {
+        return res.status(400).json({ error: 'Playlist ID is required' });
+    }
+
+    try {
+        let deletedFromDb = false;
+        if (req.user && isDbConnected()) {
+            const delResult = await EncryptedPlaylist.deleteOne({
+                playlistId: id,
+                userId: req.user.userId
+            });
+            deletedFromDb = (delResult.deletedCount ?? 0) > 0;
+        }
+
+        const deletedFromLocal = localLibrary.deletePlaylist(id);
+
+        return res.json({
+            success: true,
+            message: 'Playlist permanently deleted',
+            id,
+            deletedFromDb,
+            deletedFromLocal
+        });
+    } catch (err: any) {
+        console.error('[/api/me/playlists/:id DELETE] Error:', err);
+        res.status(500).json({ error: 'Failed to delete playlist', details: err.message });
+    }
+});
+
+// Alias DELETE /playlists/:id for direct calls
+router.delete('/playlists/:id', async (req, res) => {
+    const { id } = req.params;
+    if (!id) {
+        return res.status(400).json({ error: 'Playlist ID is required' });
+    }
+
+    try {
+        let deletedFromDb = false;
+        if (req.user && isDbConnected()) {
+            const delResult = await EncryptedPlaylist.deleteOne({
+                playlistId: id,
+                userId: req.user.userId
+            });
+            deletedFromDb = (delResult.deletedCount ?? 0) > 0;
+        }
+
+        const deletedFromLocal = localLibrary.deletePlaylist(id);
+
+        return res.json({
+            success: true,
+            message: 'Playlist permanently deleted',
+            id,
+            deletedFromDb,
+            deletedFromLocal
+        });
+    } catch (err: any) {
+        console.error('[/api/playlists/:id DELETE] Error:', err);
+        res.status(500).json({ error: 'Failed to delete playlist', details: err.message });
+    }
+});
+
 // Recently played / Listening History / Trending
 router.get('/me/recent', async (req, res) => {
     try {

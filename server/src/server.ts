@@ -9,6 +9,7 @@ import authRoutes from './routes/auth.js';
 import apiRoutes from './routes/api.js';
 import youtubeRoutes from './routes/youtube.js';
 import audioRoutes from './routes/audio.js';
+import saavnRoutes from './routes/saavn.js';
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -64,6 +65,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api', apiRoutes);
 app.use('/api/youtube', youtubeRoutes);
 app.use('/api/audio', audioRoutes);
+app.use('/api/saavn', saavnRoutes);
 
 // Health check endpoint for Render
 app.get('/health', (req, res) => {

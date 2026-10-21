@@ -66,7 +66,7 @@ const PlaylistDetail: React.FC<PlaylistDetailProps> = ({
   const { id: paramId } = useParams();
   const id = isLikedView ? 'liked' : paramId || '';
 
-  const { cache, setPlaylistDetail } = useCache();
+  const { cache, setPlaylistDetail, removePlaylistFromCache } = useCache();
 
   // Cache check
   const cachedData = cache.playlistDetails[id];
@@ -77,6 +77,8 @@ const PlaylistDetail: React.FC<PlaylistDetailProps> = ({
   const [sortBy, setSortBy] = useState<SortOption>('az');
   const [showSortMenu, setShowSortMenu] = useState(false);
   const [isLoading, setIsLoading] = useState(!cachedData);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showSearchBar, setShowSearchBar] = useState(false);
   const [contributorProfiles, setContributorProfiles] = useState<Record<string, any>>({});
   const [localAvatar, setLocalAvatar] = useState<string>(() => {
@@ -273,6 +275,22 @@ const PlaylistDetail: React.FC<PlaylistDetailProps> = ({
       } catch (err) {
         console.error("Failed to remove track", err);
       }
+    }
+  };
+
+  const handleDeletePlaylist = async () => {
+    if (!id || isLikedView) return;
+    setIsDeleting(true);
+    try {
+      await axios.delete(`/api/me/playlists/${id}`);
+    } catch (err) {
+      console.error('Failed to delete playlist on server:', err);
+    } finally {
+      removePlaylistFromCache(id);
+      window.dispatchEvent(new Event('slothify_playlists_updated'));
+      setIsDeleting(false);
+      setShowDeleteConfirm(false);
+      navigate('/playlists');
     }
   };
 
@@ -539,6 +557,16 @@ const PlaylistDetail: React.FC<PlaylistDetailProps> = ({
           </div>
 
           <div className="flex items-center space-x-3 text-slate-400">
+            {!isLikedView && (
+              <button
+                onClick={() => setShowDeleteConfirm(true)}
+                title="Delete this playlist permanently"
+                className="flex items-center gap-1.5 px-3.5 py-2 rounded-full text-xs font-semibold text-rose-400 hover:text-white bg-rose-500/10 hover:bg-rose-600/90 border border-rose-500/20 shadow-sm transition-all duration-200 active:scale-95"
+              >
+                <Trash2 size={15} />
+                <span>Delete Playlist</span>
+              </button>
+            )}
             <MoreHorizontal size={24} className="hover:text-white cursor-pointer transition-colors" />
           </div>
         </div>
@@ -635,6 +663,39 @@ const PlaylistDetail: React.FC<PlaylistDetailProps> = ({
           )}
         </div>
       </div>
+
+      {/* Delete Confirmation Modal */}
+      {showDeleteConfirm && (
+        <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+          <div className="bg-[#18181b] border border-white/10 rounded-2xl max-w-sm w-full p-6 space-y-4 shadow-2xl text-center animate-in zoom-in-95 duration-200">
+            <div className="w-12 h-12 rounded-full bg-rose-500/20 text-rose-400 mx-auto flex items-center justify-center border border-rose-500/30">
+              <Trash2 size={24} />
+            </div>
+            <div className="space-y-1">
+              <h3 className="text-lg font-bold text-white">Delete Playlist?</h3>
+              <p className="text-xs text-slate-400 leading-relaxed">
+                Are you sure you want to delete <span className="text-white font-semibold">&ldquo;{displayName}&rdquo;</span>? This will permanently remove it from your encrypted library and cloud database.
+              </p>
+            </div>
+            <div className="flex gap-3 pt-2">
+              <button
+                onClick={() => setShowDeleteConfirm(false)}
+                disabled={isDeleting}
+                className="flex-1 py-2.5 rounded-xl text-xs font-bold bg-white/10 hover:bg-white/15 text-white transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleDeletePlaylist}
+                disabled={isDeleting}
+                className="flex-1 py-2.5 rounded-xl text-xs font-bold bg-rose-600 hover:bg-rose-500 text-white transition-colors flex items-center justify-center gap-1.5 shadow-lg shadow-rose-600/30"
+              >
+                {isDeleting ? 'Deleting...' : 'Delete Permanently'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

@@ -5,7 +5,7 @@ import {
     User as UserIcon, Shield, Coffee, Info, Globe, Check, Trash2, Cpu, LogIn, LogOut,
     Lock, KeyRound, Headphones, Palette, Upload, RotateCcw, Image as ImageIcon,
     Sparkles, Smile, Camera, X, CheckSquare, Square, Download, ExternalLink,
-    Loader2, ListMusic, CheckCircle2, ChevronRight, HelpCircle, Layers
+    Loader2, ListMusic, CheckCircle2, ChevronRight, HelpCircle, Layers, Radio
 } from 'lucide-react';
 import axios from 'axios';
 import { useCache } from '../context/CacheContext';
@@ -51,6 +51,17 @@ const Settings: React.FC<SettingsProps> = ({ user, isAuthenticated, onOpenAuth, 
     const [isDeletingAccount, setIsDeletingAccount] = useState(false);
     const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
     const [deleteError, setDeleteError] = useState<string | null>(null);
+
+    // Audio Engine & Source Selection
+    const [audioProvider, setAudioProvider] = useState<'auto' | 'jiosaavn' | 'youtube'>(() => {
+        return (localStorage.getItem('slothify_audio_provider') as any) || 'auto';
+    });
+
+    const handleSelectAudioProvider = (provider: 'auto' | 'jiosaavn' | 'youtube') => {
+        setAudioProvider(provider);
+        localStorage.setItem('slothify_audio_provider', provider);
+        axios.post('/api/audio/provider', { provider }).catch(() => {});
+    };
 
     // Spotify Account & Playlist Import State
     const [spotifyCredential, setSpotifyCredential] = useState('');
@@ -323,7 +334,111 @@ const Settings: React.FC<SettingsProps> = ({ user, isAuthenticated, onOpenAuth, 
                 </div>
             </div>
 
-            {/* 2. Theme & Atmosphere Selection */}
+            {/* 2. Audio Engine Selection */}
+            <SectionTitle>Audio Engine & Stream Source</SectionTitle>
+            <div className="grid gap-4 md:grid-cols-3 mb-8">
+                {/* Auto / Smart Fallback */}
+                <div
+                    onClick={() => handleSelectAudioProvider('auto')}
+                    className={`relative p-5 rounded-2xl border cursor-pointer transition-all duration-300 group ${
+                        audioProvider === 'auto'
+                            ? isOcean
+                                ? 'bg-gradient-to-br from-[#0c1836] via-[#09132b] to-[#060d1e] border-blue-500 shadow-xl shadow-blue-500/20 ring-1 ring-blue-500/50'
+                                : 'bg-gradient-to-br from-[#241a16] via-[#1a120e] to-[#120c09] border-[#c87d46] shadow-xl shadow-[#c87d46]/20 ring-1 ring-[#c87d46]/50'
+                            : 'bg-[#111827]/40 border-white/5 hover:border-white/20'
+                    }`}
+                >
+                    <div className="flex items-start justify-between">
+                        <div className="flex items-center space-x-3.5">
+                            <div className={`w-10 h-10 rounded-xl flex items-center justify-center shadow-lg ${
+                                isOcean ? 'bg-blue-600 shadow-blue-600/30' : 'bg-[#c87d46] shadow-[#c87d46]/30'
+                            }`}>
+                                <Sparkles size={20} className="text-white" />
+                            </div>
+                            <div>
+                                <div className="flex items-center space-x-2">
+                                    <h4 className="font-bold text-white text-base">Smart Auto</h4>
+                                    <span className="text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                                        Recommended
+                                    </span>
+                                </div>
+                                <p className="text-xs text-slate-400 mt-0.5">Tries JioSaavn 320k first, seamlessly falls back to Piped</p>
+                            </div>
+                        </div>
+                        <div className={`w-6 h-6 rounded-full flex items-center justify-center transition-all ${
+                            audioProvider === 'auto' ? (isOcean ? 'bg-blue-600 text-white' : 'bg-[#c87d46] text-white') : 'border border-white/20'
+                        }`}>
+                            {audioProvider === 'auto' && <Check size={14} strokeWidth={3} />}
+                        </div>
+                    </div>
+                </div>
+
+                {/* JioSaavn Engine */}
+                <div
+                    onClick={() => handleSelectAudioProvider('jiosaavn')}
+                    className={`relative p-5 rounded-2xl border cursor-pointer transition-all duration-300 group ${
+                        audioProvider === 'jiosaavn'
+                            ? 'bg-gradient-to-br from-[#062c1e] via-[#041d14] to-[#02100b] border-emerald-500 shadow-xl shadow-emerald-500/20 ring-1 ring-emerald-500/50'
+                            : 'bg-[#111827]/40 border-white/5 hover:border-white/20'
+                    }`}
+                >
+                    <div className="flex items-start justify-between">
+                        <div className="flex items-center space-x-3.5">
+                            <div className="w-10 h-10 rounded-xl bg-emerald-600 flex items-center justify-center shadow-lg shadow-emerald-600/30">
+                                <Headphones size={20} className="text-white" />
+                            </div>
+                            <div>
+                                <div className="flex items-center space-x-2">
+                                    <h4 className="font-bold text-white text-base">JioSaavn</h4>
+                                    <span className="text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                                        320kbps CD Quality
+                                    </span>
+                                </div>
+                                <p className="text-xs text-slate-400 mt-0.5">Direct 320kbps master audio streams via Saavn CDN</p>
+                            </div>
+                        </div>
+                        <div className={`w-6 h-6 rounded-full flex items-center justify-center transition-all ${
+                            audioProvider === 'jiosaavn' ? 'bg-emerald-600 text-white' : 'border border-white/20'
+                        }`}>
+                            {audioProvider === 'jiosaavn' && <Check size={14} strokeWidth={3} />}
+                        </div>
+                    </div>
+                </div>
+
+                {/* Piped (YouTube Engine) */}
+                <div
+                    onClick={() => handleSelectAudioProvider('youtube')}
+                    className={`relative p-5 rounded-2xl border cursor-pointer transition-all duration-300 group ${
+                        audioProvider === 'youtube'
+                            ? 'bg-gradient-to-br from-[#2c0b0e] via-[#1d0709] to-[#120405] border-rose-500 shadow-xl shadow-rose-500/20 ring-1 ring-rose-500/50'
+                            : 'bg-[#111827]/40 border-white/5 hover:border-white/20'
+                    }`}
+                >
+                    <div className="flex items-start justify-between">
+                        <div className="flex items-center space-x-3.5">
+                            <div className="w-10 h-10 rounded-xl bg-rose-600 flex items-center justify-center shadow-lg shadow-rose-600/30">
+                                <Radio size={20} className="text-white" />
+                            </div>
+                            <div>
+                                <div className="flex items-center space-x-2">
+                                    <h4 className="font-bold text-white text-base">Piped (YouTube)</h4>
+                                    <span className="text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full bg-rose-500/20 text-rose-300 border border-rose-500/30">
+                                        Direct Stream
+                                    </span>
+                                </div>
+                                <p className="text-xs text-slate-400 mt-0.5">Direct GoogleVideo audio streams via Piped API instances</p>
+                            </div>
+                        </div>
+                        <div className={`w-6 h-6 rounded-full flex items-center justify-center transition-all ${
+                            audioProvider === 'youtube' ? 'bg-rose-600 text-white' : 'border border-white/20'
+                        }`}>
+                            {audioProvider === 'youtube' && <Check size={14} strokeWidth={3} />}
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            {/* 3. Theme & Atmosphere Selection */}
             <SectionTitle>Theme & Atmosphere</SectionTitle>
             <div className="grid gap-4 md:grid-cols-2 mb-6">
                 {/* Ocean Theme (Default) Card */}
@@ -817,7 +932,11 @@ const Settings: React.FC<SettingsProps> = ({ user, isAuthenticated, onOpenAuth, 
 
             {/* 4. Privacy & Data Usage */}
             <SectionTitle>Privacy & Data Usage</SectionTitle>
-            <div className="bg-[#1F2937]/30 rounded-2xl p-6 border border-white/5">
+            <div className={`rounded-2xl p-6 border transition-all duration-300 ${
+                isOcean
+                    ? 'bg-[#0f172a]/50 border-blue-500/20 shadow-lg shadow-blue-500/5'
+                    : 'bg-[#1F2937]/30 border-white/5'
+            }`}>
                 <div className="flex items-start space-x-4">
                     <Shield className={`${isOcean ? 'text-blue-400' : 'text-[#f5d0b5]'} flex-shrink-0 mt-1`} size={24} />
                     <div className="space-y-4">
@@ -829,7 +948,14 @@ const Settings: React.FC<SettingsProps> = ({ user, isAuthenticated, onOpenAuth, 
                         </div>
                         <div className="flex flex-wrap gap-2">
                             {['Zero Login Required', 'Client-Side Cache', 'High-Fidelity Audio', 'Real-Time Privacy', 'Ad-Free Streams'].map(tag => (
-                                <span key={tag} className="px-3 py-1 bg-[#f5d0b5]/10 text-[#f5d0b5] border border-[#f5d0b5]/20 rounded-full text-xs font-bold">
+                                <span
+                                    key={tag}
+                                    className={`px-3 py-1 rounded-full text-xs font-bold border transition-colors ${
+                                        isOcean
+                                            ? 'bg-blue-500/10 text-cyan-300 border-blue-500/25'
+                                            : 'bg-[#f5d0b5]/10 text-[#f5d0b5] border-[#f5d0b5]/20'
+                                    }`}
+                                >
                                     {tag}
                                 </span>
                             ))}
@@ -893,14 +1019,22 @@ const Settings: React.FC<SettingsProps> = ({ user, isAuthenticated, onOpenAuth, 
 
             {/* 5. Support the Developer */}
             <SectionTitle>Support the Developer ☕</SectionTitle>
-            <div className="bg-gradient-to-r from-[#c87d46]/20 via-[#d97736]/15 to-[#f5d0b5]/10 rounded-3xl p-8 border border-white/10 text-center space-y-4">
+            <div className={`rounded-3xl p-8 border text-center space-y-4 transition-all duration-300 ${
+                isOcean
+                    ? 'bg-gradient-to-r from-blue-900/30 via-indigo-900/20 to-blue-950/40 border-blue-500/20 shadow-xl shadow-blue-500/5'
+                    : 'bg-gradient-to-r from-[#c87d46]/20 via-[#d97736]/15 to-[#f5d0b5]/10 border-[#f5d0b5]/20 shadow-xl shadow-[#c87d46]/5'
+            }`}>
                 <h3 className="text-2xl font-black text-white">Love using Slothify?</h3>
                 <p className="text-slate-300 max-w-md mx-auto">
                     If you enjoy discovering and streaming music with Slothify, consider supporting its open-source development!
                 </p>
                 <button
                     onClick={() => window.open('https://buymeacoffee.com/purvesh.dev', '_blank')}
-                    className="inline-flex items-center space-x-3 px-8 py-4 bg-[#f5d0b5] hover:bg-[#ebd0bc] text-black rounded-full font-black text-lg transition-transform hover:scale-105 active:scale-95 shadow-xl shadow-[#f5d0b5]/10"
+                    className={`inline-flex items-center space-x-3 px-8 py-4 rounded-full font-black text-lg transition-transform hover:scale-105 active:scale-95 shadow-xl ${
+                        isOcean
+                            ? 'bg-gradient-to-r from-blue-600 to-cyan-500 hover:from-blue-500 hover:to-cyan-400 text-white shadow-blue-500/25'
+                            : 'bg-[#f5d0b5] hover:bg-[#ebd0bc] text-black shadow-[#f5d0b5]/20'
+                    }`}
                 >
                     <Coffee size={24} />
                     <span>Buy Me a Coffee</span>
@@ -910,17 +1044,21 @@ const Settings: React.FC<SettingsProps> = ({ user, isAuthenticated, onOpenAuth, 
             {/* 6. About & Legal */}
             <div className="text-center pt-12 pb-6 space-y-3">
                 <div className="flex items-center justify-center space-x-4 text-xs text-slate-400">
-                    <button onClick={() => navigate('/terms')} className="hover:text-[#f5d0b5] underline transition-colors">
+                    <button onClick={() => navigate('/terms')} className={`underline transition-colors ${
+                        isOcean ? 'hover:text-cyan-400' : 'hover:text-[#f5d0b5]'
+                    }`}>
                         Terms & Conditions
                     </button>
                     <span>•</span>
-                    <button onClick={() => navigate('/privacy')} className="hover:text-[#f5d0b5] underline transition-colors">
+                    <button onClick={() => navigate('/privacy')} className={`underline transition-colors ${
+                        isOcean ? 'hover:text-cyan-400' : 'hover:text-[#f5d0b5]'
+                    }`}>
                         Privacy Policy
                     </button>
                 </div>
                 <div className="flex items-center justify-center space-x-2 text-slate-500 font-bold">
                     <Info size={16} />
-                    <span>Slothify v2.0.0</span>
+                    <span>Slothify v1.0.1</span>
                 </div>
                 <p className="text-slate-600 text-sm">Modular Plugin & Scraper Architecture</p>
             </div>
