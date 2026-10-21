@@ -4,7 +4,7 @@ import path from 'path';
 import fs from 'fs';
 import { spawn, type ChildProcess } from 'child_process';
 import https from 'https';
-import http from 'http';
+import axios from 'axios';
 import { fileURLToPath } from 'url';
 import type { AudioPlugin, AudioSearchResult } from '../interfaces.js';
 
@@ -20,16 +20,22 @@ export class YouTubeAudioPlugin implements AudioPlugin {
     readonly name = 'YouTubeAudio';
 
     private ytdlpPath: string;
+    private downloadPromise: Promise<string> | null = null;
 
     constructor() {
         const isWindows = process.platform === 'win32';
-        const binaryName = isWindows ? 'yt-dlp.exe' : 'yt-dlp';
+        const binaryName = isWindows ? 'yt-dlp.exe' : 'yt-dlp_linux';
         const localPath = path.resolve(__dirname, '../../../', binaryName);
 
         if (fs.existsSync(localPath)) {
             this.ytdlpPath = localPath;
         } else {
-            this.ytdlpPath = binaryName;
+            const cwdPath = path.resolve(process.cwd(), binaryName);
+            if (fs.existsSync(cwdPath)) {
+                this.ytdlpPath = cwdPath;
+            } else {
+                this.ytdlpPath = isWindows ? binaryName : path.join('/tmp', binaryName);
+            }
         }
     }
 
@@ -39,48 +45,73 @@ export class YouTubeAudioPlugin implements AudioPlugin {
         }
 
         const isWindows = process.platform === 'win32';
-        const binaryName = isWindows ? 'yt-dlp.exe' : 'yt-dlp';
-        const targetPath = path.resolve(__dirname, '../../../', binaryName);
+        const binaryName = isWindows ? 'yt-dlp.exe' : 'yt-dlp_linux';
 
-        if (fs.existsSync(targetPath)) {
-            this.ytdlpPath = targetPath;
-            return targetPath;
+        const possiblePaths = [
+            path.resolve(process.cwd(), binaryName),
+            path.resolve(__dirname, '../../../', binaryName),
+            isWindows ? '' : path.join('/tmp', binaryName)
+        ].filter(Boolean);
+
+        for (const p of possiblePaths) {
+            if (fs.existsSync(p)) {
+                this.ytdlpPath = p;
+                return p;
+            }
         }
+
+        if (this.downloadPromise) {
+            return this.downloadPromise;
+        }
+
+        const targetPath = isWindows
+            ? path.resolve(__dirname, '../../../', binaryName)
+            : path.join('/tmp', binaryName);
 
         const downloadUrl = isWindows
             ? 'https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp.exe'
-            : 'https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp';
+            : 'https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_linux';
 
-        console.log(`[YouTubeAudioPlugin] Downloading ${binaryName} for Render/Linux/Windows...`);
+        this.downloadPromise = (async () => {
+            console.log(`[YouTubeAudioPlugin] Downloading standalone ${binaryName} to ${targetPath}...`);
 
-        await new Promise<void>((resolve, reject) => {
-            const file = fs.createWriteStream(targetPath);
-            const getWithRedirect = (url: string) => {
-                https.get(url, (res) => {
-                    if (res.statusCode === 301 || res.statusCode === 302) {
-                        getWithRedirect(res.headers.location!);
-                    } else {
-                        res.pipe(file);
-                        file.on('finish', () => {
-                            file.close();
-                            if (!isWindows) {
-                                try {
-                                    fs.chmodSync(targetPath, '755');
-                                } catch (e) { }
-                            }
-                            resolve();
-                        });
-                    }
-                }).on('error', (err) => {
-                    fs.unlink(targetPath, () => { });
-                    reject(err);
-                });
-            };
-            getWithRedirect(downloadUrl);
-        });
+            await new Promise<void>((resolve, reject) => {
+                const file = fs.createWriteStream(targetPath);
+                const getWithRedirect = (url: string) => {
+                    https.get(url, (res) => {
+                        if (res.statusCode === 301 || res.statusCode === 302) {
+                            getWithRedirect(res.headers.location!);
+                        } else if (res.statusCode === 200) {
+                            res.pipe(file);
+                            file.on('finish', () => {
+                                file.close();
+                                if (!isWindows) {
+                                    try {
+                                        fs.chmodSync(targetPath, '755');
+                                    } catch (e) { }
+                                }
+                                resolve();
+                            });
+                        } else {
+                            reject(new Error(`Download failed with status ${res.statusCode}`));
+                        }
+                    }).on('error', (err) => {
+                        fs.unlink(targetPath, () => { });
+                        reject(err);
+                    });
+                };
+                getWithRedirect(downloadUrl);
+            });
 
-        this.ytdlpPath = targetPath;
-        return targetPath;
+            this.ytdlpPath = targetPath;
+            return targetPath;
+        })();
+
+        try {
+            return await this.downloadPromise;
+        } finally {
+            this.downloadPromise = null;
+        }
     }
 
     /**
@@ -111,8 +142,8 @@ export class YouTubeAudioPlugin implements AudioPlugin {
             streamToken: 'direct-stream'
         };
 
-        // Cache result in RAM (cap at 1000 items)
-        if (searchCache.size > 1000) {
+        // Store in cache (capped at 500 items)
+        if (searchCache.size > 500) {
             const firstKey = searchCache.keys().next().value;
             if (firstKey) searchCache.delete(firstKey);
         }
@@ -143,7 +174,7 @@ export class YouTubeAudioPlugin implements AudioPlugin {
             return new Promise<string>((resolve, reject) => {
                 const child = spawn(binPath, [
                     ytUrl,
-                    '-f', 'ba/bestaudio',
+                    '-f', '140/251/bestaudio/ba/b',
                     '-g',
                     '--no-playlist',
                     '--quiet',
@@ -216,68 +247,54 @@ export class YouTubeAudioPlugin implements AudioPlugin {
 
         // OPTION A: Fast HTTP Range Proxy via direct URL (Instant TTFB ~100ms)
         if (directUrl) {
-            const parsedUrl = new URL(directUrl);
-            const clientRange = req.headers.range;
+            try {
+                const clientRange = req.headers.range;
+                const response = await axios({
+                    method: 'GET',
+                    url: directUrl,
+                    responseType: 'stream',
+                    headers: {
+                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+                        ...(clientRange ? { 'Range': clientRange } : {})
+                    },
+                    validateStatus: (status) => status < 400
+                });
 
-            const headers: Record<string, string> = {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-            };
-            if (clientRange) {
-                headers['Range'] = clientRange;
-            }
-
-            const proxyReq = https.request({
-                protocol: parsedUrl.protocol,
-                hostname: parsedUrl.hostname,
-                port: parsedUrl.port || 443,
-                path: `${parsedUrl.pathname}${parsedUrl.search}`,
-                method: 'GET',
-                headers
-            }, (proxyRes) => {
-                const statusCode = proxyRes.statusCode || 200;
-
-                // Forward crucial headers
-                res.status(statusCode);
-                res.setHeader('Content-Type', proxyRes.headers['content-type'] || 'audio/webm');
+                res.status(response.status);
+                res.setHeader('Content-Type', String(response.headers['content-type'] || 'audio/mp4'));
                 res.setHeader('Cache-Control', 'public, max-age=604800, immutable');
                 res.setHeader('Accept-Ranges', 'bytes');
 
-                if (proxyRes.headers['content-range']) {
-                    res.setHeader('Content-Range', proxyRes.headers['content-range']);
+                if (response.headers['content-range']) {
+                    res.setHeader('Content-Range', String(response.headers['content-range']));
                 }
-                if (proxyRes.headers['content-length']) {
-                    res.setHeader('Content-Length', proxyRes.headers['content-length']);
+                if (response.headers['content-length']) {
+                    res.setHeader('Content-Length', String(response.headers['content-length']));
                 }
 
-                proxyRes.pipe(res);
+                response.data.pipe(res);
 
                 req.on('close', () => {
-                    proxyReq.destroy();
+                    try { response.data.destroy(); } catch (e) { }
                 });
-            });
 
-            proxyReq.on('error', (err) => {
-                console.error('[YouTubeAudioPlugin] Proxy request error:', err.message);
-                if (!res.headersSent) {
-                    res.status(500).json({ error: 'Failed to stream audio via proxy' });
-                }
-            });
-
-            proxyReq.end();
-            return;
+                return;
+            } catch (proxyErr: any) {
+                console.warn(`[YouTubeAudioPlugin] Proxy stream failed, falling back to pipe:`, proxyErr.message);
+            }
         }
 
         // OPTION B: Fallback stdout pipe if direct extraction fails
         const binPath = await this.ensureBinary();
         const ytUrl = `https://www.youtube.com/watch?v=${videoId}`;
 
-        res.setHeader('Content-Type', 'audio/webm');
+        res.setHeader('Content-Type', 'audio/mp4');
         res.setHeader('Cache-Control', 'public, max-age=604800, immutable');
         res.setHeader('Accept-Ranges', 'none');
 
         const ytdlpArgs = [
             ytUrl,
-            '-f', 'ba/bestaudio',
+            '-f', '140/251/bestaudio/ba/b',
             '-o', '-',
             '--no-playlist',
             '--no-warnings',
