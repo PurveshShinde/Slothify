@@ -51,6 +51,14 @@ app.use(cors({
 
 app.use(express.json());
 
+// Normalize duplicate slashes in request URLs (e.g. //api/search -> /api/search)
+app.use((req, _res, next) => {
+  if (req.url && req.url.includes('//')) {
+    req.url = req.url.replace(/\/{2,}/g, '/');
+  }
+  next();
+});
+
 // Mount Routes
 app.use('/api/auth', authRoutes);
 app.use('/api', apiRoutes);

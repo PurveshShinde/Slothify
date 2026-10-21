@@ -8,7 +8,8 @@ import { Track } from '../types';
 import VintageTurntable from './VintageTurntable';
 import { useTheme } from '../context/ThemeContext';
 
-const API_BASE = ((import.meta as any).env?.VITE_API_BASE || (import.meta as any).env?.VITE_API_URL || '').replace(/\/api\/?$/, '');
+const rawApiBase = ((import.meta as any).env?.VITE_API_BASE || (import.meta as any).env?.VITE_API_URL || '').trim();
+const API_BASE = rawApiBase.replace(/\/api\/?$/, '').replace(/\/+$/, '');
 
 interface PlayerProps {
     currentTrack: Track | null;

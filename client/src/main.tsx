@@ -5,7 +5,8 @@ import App from './App';
 import './index.css';
 import { ThemeProvider } from './context/ThemeContext';
 
-const apiBase = ((import.meta as any).env?.VITE_API_BASE || (import.meta as any).env?.VITE_API_URL || '').replace(/\/api\/?$/, '');
+const rawBase = ((import.meta as any).env?.VITE_API_BASE || (import.meta as any).env?.VITE_API_URL || '').trim();
+const apiBase = rawBase.replace(/\/api\/?$/, '').replace(/\/+$/, '');
 if (apiBase) {
   axios.defaults.baseURL = apiBase;
 }
