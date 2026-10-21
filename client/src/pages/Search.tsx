@@ -20,7 +20,7 @@ const OCEAN_CATEGORIES: CategoryItem[] = [
     subtitle: 'Calm depths & ethereal soundscapes',
     tag: 'Ambient',
     color: 'bg-gradient-to-br from-[#0c1f4a] via-[#1e3a8a] to-[#0284c7]',
-    image: 'https://images.unsplash.com/photo-1682687220063-4742bd7fd538?w=500&auto=format&fit=crop&q=80',
+    image: 'https://images.unsplash.com/photo-1544551763-46a013bb70d5?w=500&auto=format&fit=crop&q=80',
     query: 'Deep Sea Ambient instrumental'
   },
   {
@@ -28,7 +28,7 @@ const OCEAN_CATEGORIES: CategoryItem[] = [
     subtitle: 'Tropical vibes & chill summer rhythms',
     tag: 'Tropical',
     color: 'bg-gradient-to-br from-[#0369a1] via-[#0284c7] to-[#38bdf8]',
-    image: 'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=500&auto=format&fit=crop&q=80',
+    image: 'https://images.unsplash.com/photo-1505118380757-91f5f5632de0?w=500&auto=format&fit=crop&q=80',
     query: 'Tropical House summer chill'
   },
   {
@@ -36,7 +36,7 @@ const OCEAN_CATEGORIES: CategoryItem[] = [
     subtitle: 'Synthwaves & neon dance anthems',
     tag: 'Electronic',
     color: 'bg-gradient-to-br from-[#312e81] via-[#2563eb] to-[#0ea5e9]',
-    image: 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=500&auto=format&fit=crop&q=80',
+    image: 'https://images.unsplash.com/photo-1516450360452-9312f5e86fc7?w=500&auto=format&fit=crop&q=80',
     query: 'Top Pop Hits 2024'
   },
   {
@@ -44,7 +44,7 @@ const OCEAN_CATEGORIES: CategoryItem[] = [
     subtitle: 'Late night lofi & moonlit beats',
     tag: 'Lo-Fi',
     color: 'bg-gradient-to-br from-[#030712] via-[#0f172a] to-[#1e293b]',
-    image: 'https://images.unsplash.com/photo-1509198397868-475647b2a1e5?w=500&auto=format&fit=crop&q=80',
+    image: 'https://images.unsplash.com/photo-1518709268805-4e9042af9f23?w=500&auto=format&fit=crop&q=80',
     query: 'Midnight Lofi Chill beats'
   },
   {
@@ -52,7 +52,7 @@ const OCEAN_CATEGORIES: CategoryItem[] = [
     subtitle: 'Coastal riffs & alternative power',
     tag: 'Rock',
     color: 'bg-gradient-to-br from-[#1e3a8a] via-[#1d4ed8] to-[#2563eb]',
-    image: 'https://images.unsplash.com/photo-1465847899084-d164df4dedc6?w=500&auto=format&fit=crop&q=80',
+    image: 'https://images.unsplash.com/photo-1498038432885-c6f3f1b912ee?w=500&auto=format&fit=crop&q=80',
     query: 'Modern Rock alternative'
   },
   {
@@ -60,7 +60,7 @@ const OCEAN_CATEGORIES: CategoryItem[] = [
     subtitle: 'Unplugged guitars & organic surf',
     tag: 'Acoustic',
     color: 'bg-gradient-to-br from-[#082f49] via-[#0369a1] to-[#38bdf8]',
-    image: 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=500&auto=format&fit=crop&q=80',
+    image: 'https://images.unsplash.com/photo-1525201548942-d8732f6617a0?w=500&auto=format&fit=crop&q=80',
     query: 'Acoustic Guitar chill folk'
   },
 ];
@@ -71,7 +71,7 @@ const AUTUMN_CATEGORIES: CategoryItem[] = [
     subtitle: 'Golden forest acoustic & storytelling',
     tag: 'Indie',
     color: 'bg-gradient-to-br from-[#451a03] via-[#78350f] to-[#b45309]',
-    image: 'https://images.unsplash.com/photo-1509114397022-ed747cca3f65?w=500&auto=format&fit=crop&q=80',
+    image: 'https://images.unsplash.com/photo-1448375240586-882707db888b?w=500&auto=format&fit=crop&q=80',
     query: 'Indie Folk acoustic'
   },
   {
@@ -95,7 +95,7 @@ const AUTUMN_CATEGORIES: CategoryItem[] = [
     subtitle: 'Rainy window study & cozy coffee',
     tag: 'Study & Chill',
     color: 'bg-gradient-to-br from-[#291e17] via-[#432818] to-[#78350f]',
-    image: 'https://images.unsplash.com/photo-1501386761578-eac5c94b800a?w=500&auto=format&fit=crop&q=80',
+    image: 'https://images.unsplash.com/photo-1539185441755-769473a23570?w=500&auto=format&fit=crop&q=80',
     query: 'Lofi Hip Hop chill beats'
   },
   {
@@ -103,7 +103,7 @@ const AUTUMN_CATEGORIES: CategoryItem[] = [
     subtitle: 'Timeless vintage vinyl & legendary riffs',
     tag: 'Classics',
     color: 'bg-gradient-to-br from-[#422006] via-[#713f12] to-[#a16207]',
-    image: 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=500&auto=format&fit=crop&q=80',
+    image: 'https://images.unsplash.com/photo-1564186763535-ebb21ef5277f?w=500&auto=format&fit=crop&q=80',
     query: 'Classic Rock legendary hits'
   },
   {
@@ -111,7 +111,7 @@ const AUTUMN_CATEGORIES: CategoryItem[] = [
     subtitle: 'Moody saxophone & amber lounges',
     tag: 'Jazz',
     color: 'bg-gradient-to-br from-[#3b120c] via-[#5c2419] to-[#991b1b]',
-    image: 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=500&auto=format&fit=crop&q=80',
+    image: 'https://images.unsplash.com/photo-1525994886773-080587e161c2?w=500&auto=format&fit=crop&q=80',
     query: 'Coffee Table Jazz soul'
   },
 ];

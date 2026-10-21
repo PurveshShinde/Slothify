@@ -21,17 +21,17 @@ interface HomeProps {
   onOpenTurntable?: () => void;
 }
 
-// Curated default tracks matching the reference mockup aesthetic
+// Curated default tracks (Pinned #1: Isabel LaRosa - Eyes Don't Lie ‧ 2023)
 const DEFAULT_HERO_TRACK: Track = {
-  id: 'aiden-vale-perfect',
-  uri: 'spotify:track:aiden-vale-perfect',
-  name: 'Perfect',
-  artists: [{ name: 'Aiden Vale' }],
+  id: 'isabel-larosa-eyes-dont-lie',
+  uri: 'spotify:track:isabel-larosa-eyes-dont-lie',
+  name: "Eyes Don't Lie",
+  artists: [{ name: 'Isabel LaRosa' }],
   album: {
-    name: 'Perfect',
-    images: [{ url: 'https://images.unsplash.com/photo-1518199266791-5375a83190b7?w=800' }]
+    name: "Eyes Don't Lie",
+    images: [{ url: 'https://c.saavncdn.com/998/eyes-don-t-lie-English-2023-20230628022336-500x500.jpg' }]
   },
-  duration_ms: 252000
+  duration_ms: 150000 // 2:30
 };
 
 const DEFAULT_MADE_FOR_YOU = [
@@ -127,6 +127,17 @@ const DEFAULT_RECENT_TRACKS: Track[] = [
 
 const DEFAULT_POPULAR_TRACKS: Track[] = [
   {
+    id: 'isabel-larosa-eyes-dont-lie',
+    uri: 'spotify:track:isabel-larosa-eyes-dont-lie',
+    name: "Eyes Don't Lie",
+    artists: [{ name: 'Isabel LaRosa' }],
+    album: {
+      name: "Eyes Don't Lie",
+      images: [{ url: 'https://c.saavncdn.com/998/eyes-don-t-lie-English-2023-20230628022336-500x500.jpg' }]
+    },
+    duration_ms: 150000 // 2:30
+  },
+  {
     id: 'popular-1',
     uri: 'spotify:track:popular-1',
     name: 'Dusk Till Dawn',
@@ -158,17 +169,6 @@ const DEFAULT_POPULAR_TRACKS: Track[] = [
       images: [{ url: 'https://images.unsplash.com/photo-1516589178581-6cd7833ae3b2?w=200' }]
     },
     duration_ms: 208000 // 3:28
-  },
-  {
-    id: 'popular-4',
-    uri: 'spotify:track:popular-4',
-    name: 'Golden Hour',
-    artists: [{ name: 'Hollow Coves' }],
-    album: {
-      name: 'Golden Hour',
-      images: [{ url: 'https://images.unsplash.com/photo-1500485035595-cbe6f645feb1?w=200' }]
-    },
-    duration_ms: 216000 // 3:36
   }
 ];
 
@@ -275,8 +275,18 @@ const Home: React.FC<HomeProps> = ({
     }
   };
 
-  // Determine active hero track: use currentTrack if active, otherwise default featured "Perfect"
-  const heroTrack: Track = currentTrack || (topTracks.length > 0 ? topTracks[0] : DEFAULT_HERO_TRACK);
+  // Ensure "Eyes Don't Lie" by Isabel LaRosa stays pinned as track #1
+  const tracksWithPinnedFirst: Track[] = (() => {
+    const list = topTracks.length > 0 ? topTracks : DEFAULT_POPULAR_TRACKS;
+    if (list[0]?.name.toLowerCase().includes('eyes don')) {
+      return list;
+    }
+    const filtered = list.filter(t => !t.name.toLowerCase().includes('eyes don'));
+    return [DEFAULT_HERO_TRACK, ...filtered];
+  })();
+
+  // Determine active hero track: use currentTrack if active, otherwise the pinned first track
+  const heroTrack: Track = currentTrack || tracksWithPinnedFirst[0] || DEFAULT_HERO_TRACK;
   const isHeroLiked = heroTrack.id ? likedTrackIds?.has(heroTrack.id) : false;
 
   // Made for you cards: merge API featured playlists or use curated mockup defaults
@@ -300,9 +310,9 @@ const Home: React.FC<HomeProps> = ({
   );
 
   // Popular tracks list (guaranteed 4 items with rankings 01, 02, 03, 04)
-  const popularTracksList: Track[] = (topTracks.length >= 4
-    ? topTracks.slice(0, 4)
-    : [...topTracks, ...DEFAULT_POPULAR_TRACKS.slice(topTracks.length, 4)]
+  const popularTracksList: Track[] = (tracksWithPinnedFirst.length >= 4
+    ? tracksWithPinnedFirst.slice(0, 4)
+    : [...tracksWithPinnedFirst, ...DEFAULT_POPULAR_TRACKS.slice(tracksWithPinnedFirst.length, 4)]
   );
 
   return (
@@ -407,7 +417,7 @@ const Home: React.FC<HomeProps> = ({
         {/* Left: Album Artwork */}
         <div className="flex-shrink-0 w-44 h-44 sm:w-52 sm:h-52 md:w-56 md:h-56 relative rounded-2xl md:rounded-3xl overflow-hidden shadow-2xl shadow-black/90 ring-1 ring-white/10 group-hover:scale-[1.02] transition-transform duration-500">
           <img
-            src={heroTrack.album?.images?.[0]?.url || 'https://images.unsplash.com/photo-1518199266791-5375a83190b7?w=800'}
+            src={heroTrack.album?.images?.[0]?.url || 'https://c.saavncdn.com/998/eyes-don-t-lie-English-2023-20230628022336-500x500.jpg'}
             alt={heroTrack.name}
             className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
           />
@@ -445,12 +455,12 @@ const Home: React.FC<HomeProps> = ({
           {/* Stats Badge */}
           <div className="flex items-center space-x-2 text-xs text-[#8a8489] mt-2.5">
             <Heart size={13} className="text-[#8a8489]" />
-            <span>4.8M • Indie Pop</span>
+            <span>5.2M • Dark Pop • 2023</span>
           </div>
 
           {/* Quote / Subtitle */}
           <p className="text-xs text-[#8a8489] mt-2 max-w-md line-clamp-1 italic font-light">
-            Every moment with you feels like the perfect song.
+            You don't have to say a word, your eyes don't lie.
           </p>
 
           {/* Action Buttons: Play Pill, Heart Circle, More Circle */}

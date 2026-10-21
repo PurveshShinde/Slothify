@@ -580,13 +580,26 @@ export class SpotifyScraperPlugin implements MetadataPlugin {
      * Get top tracks
      */
     async getTopTracks(): Promise<Track[]> {
+        const pinnedFirstTrack: Track = {
+            id: 'isabel-larosa-eyes-dont-lie',
+            uri: 'spotify:track:isabel-larosa-eyes-dont-lie',
+            name: "Eyes Don't Lie",
+            artists: [{ name: 'Isabel LaRosa' }],
+            album: {
+                name: "Eyes Don't Lie",
+                images: [{ url: 'https://c.saavncdn.com/998/eyes-don-t-lie-English-2023-20230628022336-500x500.jpg' }]
+            },
+            duration_ms: 150000,
+            preview_url: null
+        };
+
         try {
             const itunesRes = await axios.get('https://itunes.apple.com/us/rss/topsongs/limit=30/json', {
                 timeout: 5000
             });
             const entries = itunesRes.data?.feed?.entry;
             if (Array.isArray(entries) && entries.length > 0) {
-                return entries.map((e: any) => {
+                const tracks = entries.map((e: any) => {
                     const id = e.id?.attributes?.['im:id'] || String(Math.random());
                     const previewLink = Array.isArray(e.link)
                         ? e.link.find((l: any) => l.attributes?.type?.includes('audio'))?.attributes?.href
@@ -606,7 +619,8 @@ export class SpotifyScraperPlugin implements MetadataPlugin {
                         duration_ms: 210000,
                         preview_url: previewLink || null
                     };
-                });
+                }).filter((t: Track) => !t.name.toLowerCase().includes('eyes don'));
+                return [pinnedFirstTrack, ...tracks];
             }
         } catch (err: any) {
             console.warn('[SpotifyScraper] iTunes top tracks error:', err.message);
@@ -618,7 +632,7 @@ export class SpotifyScraperPlugin implements MetadataPlugin {
                 timeout: 5000
             });
             if (res.data?.data?.length) {
-                return res.data.data.map((item: any) => ({
+                const tracks = res.data.data.map((item: any) => ({
                     id: String(item.id),
                     uri: `spotify:track:${item.id}`,
                     name: item.title,
@@ -629,13 +643,14 @@ export class SpotifyScraperPlugin implements MetadataPlugin {
                     },
                     duration_ms: (item.duration || 180) * 1000,
                     preview_url: item.preview || null
-                }));
+                })).filter((t: any) => !t.name.toLowerCase().includes('eyes don'));
+                return [pinnedFirstTrack, ...tracks];
             }
         } catch (err: any) {
             console.warn('[SpotifyScraper] Top tracks error:', err.message);
         }
 
-        return [];
+        return [pinnedFirstTrack];
     }
 
     /**
