@@ -39,12 +39,14 @@ const Sidebar: React.FC<SidebarProps> = ({ user, isAuthenticated, onOpenAuth, on
   const fetchPlaylists = async () => {
     try {
       const res = await axios.get('/api/me/playlists');
-      if (Array.isArray(res.data) && res.data.length > 0) {
+      if (Array.isArray(res.data)) {
         setSidebarPlaylists(res.data);
         setLibraryPlaylists(res.data);
+      } else {
+        setSidebarPlaylists([]);
       }
     } catch (e) {
-      // ignore
+      setSidebarPlaylists([]);
     }
   };
 

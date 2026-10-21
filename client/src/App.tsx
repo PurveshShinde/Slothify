@@ -280,6 +280,13 @@ const App: React.FC = () => {
     localStorage.setItem('slothify_auth_token', token);
     axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
     setIsAuthenticated(true);
+
+    // Clear stale cached playlists from previous session so newly authenticated user starts fresh
+    try {
+      localStorage.removeItem('slothify_browser_cache_v2');
+      localStorage.removeItem('slothify_browser_cache_v1');
+    } catch (e) { }
+
     const avatarUrl = localStorage.getItem('slothify_local_avatar') || '/avatars/ghost.png';
     const normalizedUser = {
       ...authUser,
@@ -303,6 +310,7 @@ const App: React.FC = () => {
     } catch (e) { }
 
     fetchLikedSongs();
+    window.dispatchEvent(new Event('slothify_playlists_updated'));
   };
 
   const handleLogout = () => {

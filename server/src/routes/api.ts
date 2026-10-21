@@ -64,7 +64,11 @@ router.get('/me', (req, res) => {
 // User's playlists (Zero-knowledge encrypted if DB connected, local store otherwise)
 router.get('/me/playlists', async (req, res) => {
     try {
-        if (req.user && isDbConnected()) {
+        if (!req.user) {
+            return res.json([]);
+        }
+
+        if (isDbConnected()) {
             const records = await EncryptedPlaylist.find({ userId: req.user.userId }).sort({ updatedAt: -1 });
             const playlists: Playlist[] = [];
             for (const rec of records) {
@@ -76,7 +80,9 @@ router.get('/me/playlists', async (req, res) => {
             return res.json(playlists);
         }
 
-        const playlists = localLibrary.getPlaylists();
+        // Offline mode: only return playlists created by this specific user
+        const userId = req.user?.userId;
+        const playlists = localLibrary.getPlaylists().filter(p => p.owner?.id === userId);
         res.json(playlists);
     } catch (err: any) {
         console.error('[/api/me/playlists] Error:', err);
