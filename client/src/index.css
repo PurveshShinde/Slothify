@@ -1,3 +1,63 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+@keyframes slothify-spin {
+  0% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes spin {
+  0% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
+}
+
+/* Vinyl disc animation rules:
+   - When playing (.spin-vinyl): spins continuously, never pauses on hover
+   - When paused (.spin-vinyl-paused): freezes in place at the exact current angle, resumes when played */
+.spin-vinyl {
+  animation-name: slothify-spin !important;
+  animation-duration: var(--spin-duration, 12s) !important;
+  animation-timing-function: linear !important;
+  animation-iteration-count: infinite !important;
+  animation-play-state: running !important;
+  will-change: transform;
+}
+
+.spin-vinyl:hover {
+  animation-play-state: running !important;
+}
+
+.spin-vinyl-paused {
+  animation-name: slothify-spin !important;
+  animation-duration: var(--spin-duration, 12s) !important;
+  animation-timing-function: linear !important;
+  animation-iteration-count: infinite !important;
+  animation-play-state: paused !important;
+  will-change: transform;
+}
+
+.spin-vinyl-paused:hover {
+  animation-play-state: paused !important;
+}
+
+@keyframes shimmer {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+.animate-shimmer {
+  animation: shimmer 1.8s ease-in-out infinite;
+}

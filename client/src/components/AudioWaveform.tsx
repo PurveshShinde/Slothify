@@ -5,12 +5,14 @@ interface AudioWaveformProps {
   isPlaying?: boolean;
   barCount?: number;
   className?: string;
+  color?: 'cyan' | 'amber' | 'theme';
 }
 
 export const AudioWaveform: React.FC<AudioWaveformProps> = ({
   isPlaying = false,
   barCount = 36,
-  className = ''
+  className = '',
+  color = 'theme'
 }) => {
   const { isOcean } = useTheme();
 
@@ -22,6 +24,27 @@ export const AudioWaveform: React.FC<AudioWaveformProps> = ({
     64, 45, 30, 22, 15, 10
   ];
 
+  const getBarColor = () => {
+    if (color === 'cyan') {
+      return isPlaying
+        ? 'bg-gradient-to-t from-teal-400 via-cyan-400 to-sky-300 shadow-[0_0_8px_rgba(34,211,238,0.7)]'
+        : 'bg-cyan-400/50';
+    }
+    if (color === 'amber') {
+      return isPlaying
+        ? 'bg-gradient-to-t from-[#b8682e] via-[#eab690] to-[#f9dfce] shadow-[0_0_8px_rgba(234,182,144,0.45)]'
+        : 'bg-[#eab690]/40';
+    }
+    // Default theme
+    return isPlaying
+      ? isOcean
+        ? 'bg-gradient-to-t from-blue-600 via-cyan-400 to-sky-300 shadow-[0_0_8px_rgba(56,189,248,0.4)]'
+        : 'bg-gradient-to-t from-[#c87d46] via-[#d97736] to-[#f5d0b5] shadow-[0_0_8px_rgba(245,208,181,0.3)]'
+      : isOcean
+        ? 'bg-cyan-400/50'
+        : 'bg-[#f5d0b5]/40';
+  };
+
   return (
     <div className={`flex items-end space-x-[2.5px] h-8 select-none ${className}`}>
       {Array.from({ length: barCount }).map((_, i) => {
@@ -32,15 +55,7 @@ export const AudioWaveform: React.FC<AudioWaveformProps> = ({
         return (
           <div
             key={i}
-            className={`w-[2px] rounded-full transition-all duration-300 ${
-              isPlaying
-                ? isOcean
-                  ? 'bg-gradient-to-t from-blue-600 via-cyan-400 to-sky-300 shadow-[0_0_8px_rgba(56,189,248,0.4)]'
-                  : 'bg-gradient-to-t from-[#c87d46] via-[#d97736] to-[#f5d0b5] shadow-[0_0_8px_rgba(245,208,181,0.3)]'
-                : isOcean
-                  ? 'bg-cyan-400/50'
-                  : 'bg-[#f5d0b5]/40'
-            }`}
+            className={`w-[2px] rounded-full transition-all duration-300 ${getBarColor()}`}
             style={{
               height: isPlaying ? `${Math.max(15, heightPercent)}%` : `${Math.max(12, heightPercent * 0.35)}%`,
               animation: isPlaying ? `waveformPulse ${animationDuration} ease-in-out infinite alternate` : 'none',

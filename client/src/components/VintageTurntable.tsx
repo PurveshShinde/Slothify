@@ -54,6 +54,29 @@ export const VintageTurntable: React.FC<VintageTurntableProps> = ({
   const [rpm, setRpm] = useState<'33' | '45'>('33');
   const [activeTab, setActiveTab] = useState<'info' | 'queue'>('info');
 
+  // Track if disc has ever started spinning for the current track
+  const [hasStarted, setHasStarted] = useState(false);
+
+  useEffect(() => {
+    // Reset to default upright state when track changes
+    setHasStarted(false);
+  }, [currentTrack?.id]);
+
+  useEffect(() => {
+    if (isPlaying && !hasStarted) {
+      setHasStarted(true);
+    }
+  }, [isPlaying, hasStarted]);
+
+  // When playing: 'spin-vinyl' (continuous spin)
+  // When paused after playing: 'spin-vinyl-paused' (freezes at exact current rotation angle)
+  // Default state before playing: '' (0deg upright default cover)
+  const animClass = isPlaying
+    ? 'spin-vinyl'
+    : hasStarted
+      ? 'spin-vinyl-paused'
+      : '';
+
   // Listen for Escape key to close
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -188,27 +211,29 @@ export const VintageTurntable: React.FC<VintageTurntableProps> = ({
 
       {/* 2. MAIN VIEWPORT - PERFECT CIRCULAR DISC & CLEAN CONTROLS */}
       <main className="flex-1 min-h-0 flex flex-col lg:flex-row items-center justify-center lg:justify-between gap-8 lg:gap-14 max-w-6xl mx-auto w-full py-4 relative z-10 overflow-y-auto lg:overflow-hidden">
-        {/* LEFT: THE PERFECT CIRCLE VINYL RECORD & MINIMALIST TONEARM */}
+        {/* LEFT: THE PERFECT CIRCLE VINYL RECORD */}
         <div className="w-full lg:w-1/2 flex flex-col items-center justify-center relative flex-shrink-0">
           {/* Guaranteed 1:1 Aspect-Square Circular Platter Container */}
           <div className="relative w-full max-w-[min(65vh,440px)] aspect-square flex items-center justify-center flex-shrink-0 select-none">
-            {/* The Vinyl Disc - Flawless Perfect Circle */}
+            {/* The Vinyl Disc - Flawless Perfect Circle (Continuous rotation with no hover stutter) */}
             <div
+              data-vinyl-disc
               onClick={() => onPlayPause(!isPlaying)}
-              className="w-full h-full rounded-full aspect-square bg-[#0a0a0d] border border-white/10 shadow-[0_20px_50px_rgba(0,0,0,0.9)] relative overflow-hidden flex items-center justify-center cursor-pointer select-none transition-transform duration-500 hover:scale-[1.01]"
+              className={`w-full h-full rounded-full aspect-square bg-[#0a0a0d] border border-white/10 shadow-[0_20px_50px_rgba(0,0,0,0.95)] relative overflow-hidden flex items-center justify-center cursor-pointer select-none ${animClass}`}
               style={{
-                animation: isPlaying ? `spin ${spinDuration} linear infinite` : 'none'
+                ['--spin-duration' as any]: spinDuration,
+                willChange: 'transform'
               }}
               title={isPlaying ? "Click to Pause" : "Click to Play"}
             >
               {/* Concentric Grooves */}
-              <div className="absolute inset-4 rounded-full border border-white/[0.04]" />
-              <div className="absolute inset-8 rounded-full border border-white/[0.03]" />
-              <div className="absolute inset-12 rounded-full border border-white/[0.04]" />
-              <div className="absolute inset-16 rounded-full border border-white/[0.03]" />
-              <div className="absolute inset-20 rounded-full border border-white/[0.04]" />
-              <div className="absolute inset-24 rounded-full border border-white/[0.03]" />
-              <div className="absolute inset-28 rounded-full border border-white/[0.04]" />
+              <div className="absolute inset-4 rounded-full border border-white/[0.04] pointer-events-none" />
+              <div className="absolute inset-8 rounded-full border border-white/[0.03] pointer-events-none" />
+              <div className="absolute inset-12 rounded-full border border-white/[0.04] pointer-events-none" />
+              <div className="absolute inset-16 rounded-full border border-white/[0.03] pointer-events-none" />
+              <div className="absolute inset-20 rounded-full border border-white/[0.04] pointer-events-none" />
+              <div className="absolute inset-24 rounded-full border border-white/[0.03] pointer-events-none" />
+              <div className="absolute inset-28 rounded-full border border-white/[0.04] pointer-events-none" />
 
               {/* Conic Sheen Reflection */}
               <div className="absolute inset-0 bg-[conic-gradient(from_0deg,transparent_0deg,rgba(255,255,255,0.06)_45deg,transparent_90deg,rgba(255,255,255,0.06)_225deg,transparent_270deg)] pointer-events-none" />
@@ -218,36 +243,13 @@ export const VintageTurntable: React.FC<VintageTurntableProps> = ({
                 <img
                   src={trackImage}
                   alt={trackTitle}
-                  className="w-full h-full object-cover"
+                  className="w-full h-full object-cover rounded-full pointer-events-none"
                 />
-                <div className="absolute inset-0 bg-black/20" />
+                <div className="absolute inset-0 bg-black/20 pointer-events-none" />
 
                 {/* Spindle hole */}
                 <div className="absolute w-5 h-5 rounded-full bg-[#121215] border border-white/20 shadow-md flex items-center justify-center">
                   <div className="w-2 h-2 rounded-full bg-black" />
-                </div>
-              </div>
-            </div>
-
-            {/* Minimalist Tonearm */}
-            <div className="absolute -top-3 -right-2 sm:-right-4 w-24 h-56 pointer-events-none z-30">
-              {/* Pivot */}
-              <div className="absolute top-1 right-3 w-10 h-10 rounded-full bg-[#1c1c20] border border-white/15 shadow-xl flex items-center justify-center">
-                <div className={`w-4 h-4 rounded-full ${isOcean ? 'bg-blue-600' : 'bg-[#c87d46]'}`} />
-              </div>
-
-              {/* Arm Tube */}
-              <div
-                className="absolute top-7 right-7 origin-top transition-transform duration-700 ease-in-out"
-                style={{
-                  transform: isPlaying ? 'rotate(25deg)' : 'rotate(0deg)'
-                }}
-              >
-                <div className="w-[3px] h-44 bg-gradient-to-r from-zinc-400 via-white to-zinc-400 rounded-full shadow-md" />
-
-                {/* Needle Headshell */}
-                <div className="absolute -bottom-3 -left-3 w-6 h-8 rounded-sm bg-[#18181c] border border-white/20 shadow-md transform rotate-[-12deg] flex flex-col items-center justify-end pb-1">
-                  <div className={`w-1.5 h-1.5 rounded-full ${isOcean ? 'bg-blue-500' : 'bg-[#f5d0b5]'}`} />
                 </div>
               </div>
             </div>

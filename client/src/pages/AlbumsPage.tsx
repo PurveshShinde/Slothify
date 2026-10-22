@@ -1,9 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Track } from '../types';
-import { Disc, Play, Heart, Search, Sparkles, Music } from 'lucide-react';
+import { Disc, Play, Heart, Search, Loader2, X } from 'lucide-react';
 import axios from 'axios';
 import { useTheme } from '../context/ThemeContext';
+import { useCache } from '../context/CacheContext';
 
 interface AlbumItem {
   id: string;
@@ -19,71 +20,50 @@ interface AlbumsPageProps {
   onPlayTrack?: (track: Track, queue?: Track[]) => void;
 }
 
-const DEFAULT_ALBUMS: AlbumItem[] = [
-  {
-    id: 'album-zach-bryan',
-    name: 'Young Manhood and Other Donatable Organs',
-    artists: [{ name: 'Zach Bryan & Lana Del Rey' }],
-    images: [{ url: 'https://images.unsplash.com/photo-1518199266791-5375a83190b7?w=600' }],
-    release_date: '2024',
-    total_tracks: 14,
-    isLiked: false
-  },
-  {
-    id: 'album-golden-hour',
-    name: 'Golden Hour Memories',
-    artists: [{ name: 'Hollow Coves' }],
-    images: [{ url: 'https://images.unsplash.com/photo-1500485035595-cbe6f645feb1?w=600' }],
-    release_date: '2023',
-    total_tracks: 11,
-    isLiked: false
-  },
-  {
-    id: 'album-midnight-sun',
-    name: 'Midnight Sun & City Echoes',
-    artists: [{ name: 'Aiden Vale' }],
-    images: [{ url: 'https://images.unsplash.com/photo-1492684223066-81342ee5ff30?w=600' }],
-    release_date: '2024',
-    total_tracks: 12,
-    isLiked: false
-  },
-  {
-    id: 'album-monsters-odell',
-    name: 'Monsters of Solitude',
-    artists: [{ name: 'Tom Odell' }],
-    images: [{ url: 'https://images.unsplash.com/photo-1518895949257-7621c3c786d7?w=600' }],
-    release_date: '2022',
-    total_tracks: 16,
-    isLiked: false
-  },
-  {
-    id: 'album-ocean-whispers',
-    name: 'Pacific Swells & Acoustic Tides',
-    artists: [{ name: 'Coastal Ambient Collective' }],
-    images: [{ url: 'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=600' }],
-    release_date: '2024',
-    total_tracks: 9,
-    isLiked: false
-  },
-  {
-    id: 'album-nostalgia-ultra',
-    name: 'Autumn Leaves & Vintage Tape',
-    artists: [{ name: 'Lofi Coffee Roasters' }],
-    images: [{ url: 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=600' }],
-    release_date: '2023',
-    total_tracks: 15,
-    isLiked: false
-  }
-];
+// Guaranteed flagship New Music Friday release featuring Tate McRae
+const NEW_MUSIC_FRIDAY: AlbumItem = {
+  id: '37i9dQZF1DX4JAvHpjipBk',
+  name: 'New Music Friday',
+  artists: [{ name: 'Tate McRae' }],
+  images: [{ url: 'https://i.scdn.co/image/ab67706f00000002b299b91ee0cfcac7d8c15f1c' }],
+  release_date: '2024',
+  total_tracks: 12
+};
 
-export const AlbumsPage: React.FC<AlbumsPageProps> = ({ onPlayTrack }) => {
+// Airtight deduplication: New Music Friday is strictly at index 0, no duplicates can ever occur
+const deduplicateAlbums = (items: AlbumItem[]): AlbumItem[] => {
+  const seenIds = new Set<string>();
+  const seenNames = new Set<string>();
+  const results: AlbumItem[] = [];
+
+  seenIds.add(NEW_MUSIC_FRIDAY.id);
+  seenNames.add(NEW_MUSIC_FRIDAY.name.toLowerCase().trim());
+  results.push(NEW_MUSIC_FRIDAY);
+
+  for (const item of items) {
+    if (!item) continue;
+    const cleanId = String(item.id || '').trim();
+    const cleanName = (item.name || '').trim();
+    const norm = cleanName.toLowerCase();
+
+    if (cleanId && cleanName && !seenIds.has(cleanId) && !seenNames.has(norm)) {
+      seenIds.add(cleanId);
+      seenNames.add(norm);
+      results.push(item);
+    }
+  }
+
+  return results;
+};
+
+export const AlbumsPage: React.FC<AlbumsPageProps> = () => {
   const navigate = useNavigate();
   const { isOcean } = useTheme();
+  const { cache, setAlbumsData } = useCache();
 
-  // Clean liked album IDs (strictly user-driven, 0 by default)
+  // User-driven liked albums
   const [likedAlbumIds, setLikedAlbumIds] = useState<Set<string>>(() => {
     try {
-      // Clear legacy polluted storage if present
       localStorage.removeItem('slothify_liked_albums');
       const saved = localStorage.getItem('slothify_user_liked_album_ids');
       if (saved) return new Set(JSON.parse(saved));
@@ -91,37 +71,127 @@ export const AlbumsPage: React.FC<AlbumsPageProps> = ({ onPlayTrack }) => {
     return new Set<string>();
   });
 
-  const [albums, setAlbums] = useState<AlbumItem[]>(() => DEFAULT_ALBUMS);
+  // Persisted liked album profiles
+  const [likedProfiles, setLikedProfiles] = useState<Record<string, AlbumItem>>(() => {
+    try {
+      const saved = localStorage.getItem('slothify_user_liked_album_profiles');
+      if (saved) return JSON.parse(saved);
+    } catch (e) {}
+    return {};
+  });
+
+  // Base albums catalog
+  const [albums, setAlbums] = useState<AlbumItem[]>(() => {
+    if (cache.albumsData && cache.albumsData.length > 0) {
+      return deduplicateAlbums(cache.albumsData);
+    }
+    return [NEW_MUSIC_FRIDAY];
+  });
+
+  const [isLoading, setIsLoading] = useState<boolean>(() => !cache.albumsData || cache.albumsData.length === 0);
   const [searchQuery, setSearchQuery] = useState('');
   const [filterType, setFilterType] = useState<'all' | 'liked'>('all');
 
+  // Real-time Spotify search state
+  const [searchResults, setSearchResults] = useState<AlbumItem[] | null>(null);
+  const [isSearching, setIsSearching] = useState(false);
+  const searchDebounceRef = useRef<NodeJS.Timeout | null>(null);
+
   useEffect(() => {
-    // Also fetch new releases from server API to enrich album selection
+    if (cache.albumsData && cache.albumsData.length > 0) {
+      setAlbums(deduplicateAlbums(cache.albumsData));
+      setIsLoading(false);
+      return;
+    }
+
+    setIsLoading(true);
     axios.get('/api/browse/new-releases')
       .then(res => {
         if (Array.isArray(res.data) && res.data.length > 0) {
-          const apiAlbums: AlbumItem[] = res.data.map((item: any) => ({
-            id: item.id || `album-${Math.random()}`,
-            name: item.name,
-            artists: item.artists || [{ name: 'Various Artists' }],
-            images: item.images || [{ url: 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=500' }],
-            release_date: item.release_date?.substring(0, 4) || '2024',
-            total_tracks: item.total_tracks || 10,
-            isLiked: false
-          }));
+          const apiAlbums: AlbumItem[] = [];
+          for (const item of res.data) {
+            const cleanId = String(item.id || `album-${Math.random()}`);
+            const cleanName = (item.name || '').trim();
+            if (cleanName) {
+              apiAlbums.push({
+                id: cleanId,
+                name: cleanName,
+                artists: item.artists && item.artists.length > 0 ? item.artists : [{ name: 'Various Artists' }],
+                images: item.images && item.images.length > 0 && item.images[0]?.url
+                  ? item.images
+                  : [{ url: `https://ui-avatars.com/api/?name=${encodeURIComponent(cleanName)}&background=181824&color=f5d0b5&size=500&bold=true` }],
+                release_date: item.release_date?.substring(0, 4) || '2024',
+                total_tracks: item.total_tracks || 10,
+                isLiked: false
+              });
+            }
+          }
 
-          setAlbums(prev => {
-            const existingIds = new Set(prev.map(a => a.id));
-            const fresh = apiAlbums.filter(a => !existingIds.has(a.id));
-            return [...prev, ...fresh];
-          });
+          const deduped = deduplicateAlbums(apiAlbums);
+          setAlbums(deduped);
+          setAlbumsData(deduped);
         }
       })
-      .catch(() => {});
-  }, []);
+      .catch(err => {
+        console.error('Failed to load new releases:', err);
+      })
+      .finally(() => {
+        setIsLoading(false);
+      });
+  }, [cache.albumsData, setAlbumsData]);
 
-  const toggleLikeAlbum = (id: string, e: React.MouseEvent) => {
+  // Real-time Spotify Album Search
+  useEffect(() => {
+    if (searchDebounceRef.current) {
+      clearTimeout(searchDebounceRef.current);
+    }
+
+    const q = searchQuery.trim();
+    if (q.length < 2) {
+      setSearchResults(null);
+      setIsSearching(false);
+      return;
+    }
+
+    setIsSearching(true);
+    searchDebounceRef.current = setTimeout(() => {
+      axios.get('/api/albums/search', { params: { q } })
+        .then(res => {
+          if (Array.isArray(res.data)) {
+            const cleanResults: AlbumItem[] = res.data.map(item => ({
+              id: String(item.id),
+              name: item.name,
+              artists: item.artists || [{ name: 'Artist' }],
+              images: item.images || [{ url: `https://ui-avatars.com/api/?name=${encodeURIComponent(item.name)}&background=181824&color=f5d0b5&size=500&bold=true` }],
+              release_date: item.release_date?.substring(0, 4) || '2024',
+              total_tracks: item.total_tracks || 10,
+              isLiked: false
+            }));
+            setSearchResults(cleanResults);
+          } else {
+            setSearchResults([]);
+          }
+        })
+        .catch(err => {
+          console.warn('Real-time album search error:', err.message);
+          setSearchResults([]);
+        })
+        .finally(() => {
+          setIsSearching(false);
+        });
+    }, 320);
+
+    return () => {
+      if (searchDebounceRef.current) {
+        clearTimeout(searchDebounceRef.current);
+      }
+    };
+  }, [searchQuery]);
+
+  const toggleLikeAlbum = (album: AlbumItem, e: React.MouseEvent) => {
     e.stopPropagation();
+    const id = album.id;
+
     setLikedAlbumIds(prev => {
       const next = new Set(prev);
       if (next.has(id)) {
@@ -134,38 +204,60 @@ export const AlbumsPage: React.FC<AlbumsPageProps> = ({ onPlayTrack }) => {
       } catch (e) {}
       return next;
     });
+
+    setLikedProfiles(prev => {
+      const next = { ...prev };
+      if (next[id]) {
+        delete next[id];
+      } else {
+        next[id] = album;
+      }
+      try {
+        localStorage.setItem('slothify_user_liked_album_profiles', JSON.stringify(next));
+      } catch (e) {}
+      return next;
+    });
   };
 
-  const handlePlayAlbum = (album: AlbumItem, e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (onPlayTrack) {
-      const albumTrack: Track = {
-        id: `track-${album.id}`,
-        name: album.name,
-        uri: `spotify:album:${album.id}`,
-        artists: album.artists,
-        album: {
-          name: album.name,
-          images: album.images
-        },
-        duration_ms: 210000
-      };
-      onPlayTrack(albumTrack);
-    }
+  const handleOpenAlbum = (album: AlbumItem) => {
+    navigate(`/album/${album.id}`, { state: { album } });
   };
 
-  const filteredAlbums = albums.map(a => ({
-    ...a,
-    isLiked: likedAlbumIds.has(a.id)
-  })).filter(a => {
-    const matchesSearch =
-      a.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      a.artists.some(art => art.name.toLowerCase().includes(searchQuery.toLowerCase()));
+  // Build current displayed list with strict like filtering & deduplication
+  const displayedAlbums = useMemo(() => {
+    let source: AlbumItem[];
+
     if (filterType === 'liked') {
-      return matchesSearch && a.isLiked;
+      const likedMap = new Map<string, AlbumItem>();
+      Object.values(likedProfiles).forEach(p => {
+        if (likedAlbumIds.has(p.id)) likedMap.set(p.id, p);
+      });
+      albums.forEach(a => {
+        if (likedAlbumIds.has(a.id)) likedMap.set(a.id, a);
+      });
+      if (likedAlbumIds.has(NEW_MUSIC_FRIDAY.id)) {
+        likedMap.set(NEW_MUSIC_FRIDAY.id, NEW_MUSIC_FRIDAY);
+      }
+      source = Array.from(likedMap.values());
+    } else if (searchQuery.trim().length >= 2 && searchResults !== null) {
+      source = searchResults;
+    } else {
+      source = deduplicateAlbums(albums);
     }
-    return matchesSearch;
-  });
+
+    return source
+      .map(a => ({
+        ...a,
+        isLiked: likedAlbumIds.has(a.id)
+      }))
+      .filter(a => {
+        if (!searchQuery.trim() || (searchQuery.trim().length >= 2 && searchResults !== null)) {
+          return true;
+        }
+        const q = searchQuery.toLowerCase();
+        return a.name.toLowerCase().includes(q) || a.artists.some(art => art.name.toLowerCase().includes(q));
+      });
+  }, [albums, filterType, likedAlbumIds, likedProfiles, searchQuery, searchResults]);
 
   return (
     <div className="space-y-6 animate-in fade-in duration-300 pb-20 select-none">
@@ -179,7 +271,7 @@ export const AlbumsPage: React.FC<AlbumsPageProps> = ({ onPlayTrack }) => {
             <h1 className="text-2xl sm:text-3xl font-black text-white tracking-tight">Albums</h1>
           </div>
           <p className="text-xs text-slate-400">
-            {likedAlbumIds.size} liked albums • {albums.length} in your catalog
+            {likedAlbumIds.size} liked albums • {isLoading ? 'Loading albums...' : isSearching ? 'Searching Spotify albums...' : searchQuery.trim() ? `${displayedAlbums.length} results` : `${displayedAlbums.length} available`}
           </p>
         </div>
 
@@ -187,7 +279,11 @@ export const AlbumsPage: React.FC<AlbumsPageProps> = ({ onPlayTrack }) => {
           {/* Filter Pills */}
           <div className="flex items-center bg-white/[0.05] p-1 rounded-full border border-white/[0.08]">
             <button
-              onClick={() => setFilterType('all')}
+              onClick={() => {
+                setFilterType('all');
+                setSearchQuery('');
+                setSearchResults(null);
+              }}
               className={`px-3 py-1 rounded-full text-xs font-semibold transition-all ${
                 filterType === 'all'
                   ? isOcean
@@ -208,43 +304,100 @@ export const AlbumsPage: React.FC<AlbumsPageProps> = ({ onPlayTrack }) => {
                   : 'text-slate-400 hover:text-white'
               }`}
             >
-              Liked ({albums.filter(a => a.isLiked).length})
+              Liked ({likedAlbumIds.size})
             </button>
           </div>
 
-          {/* Search */}
-          <div className="relative w-44 sm:w-56">
-            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+          {/* Search Box with Real-time Spotify indicator */}
+          <div className="relative flex items-center w-44 sm:w-64">
+            <div className="absolute left-3 inset-y-0 flex items-center pointer-events-none">
+              {isSearching ? (
+                <Loader2 size={14} className={`animate-spin ${isOcean ? 'text-blue-400' : 'text-[#f5d0b5]'}`} />
+              ) : (
+                <Search size={14} className="text-slate-400" />
+              )}
+            </div>
             <input
               type="text"
-              placeholder="Search albums..."
+              placeholder="Search Spotify albums..."
               value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className={`w-full bg-white/[0.04] text-xs text-white placeholder-slate-500 pl-8 pr-3 py-2 rounded-full border border-white/[0.08] outline-none transition-all ${
+              onChange={(e) => {
+                const val = e.target.value;
+                setSearchQuery(val);
+                if (val.trim().length >= 2) {
+                  setIsSearching(true);
+                } else {
+                  setIsSearching(false);
+                  setSearchResults(null);
+                }
+              }}
+              className={`w-full bg-white/[0.04] text-xs text-white placeholder-slate-500 pl-8 pr-8 py-2 rounded-full border border-white/[0.08] outline-none transition-all leading-normal ${
                 isOcean ? 'focus:border-blue-500/50' : 'focus:border-[#f5d0b5]/50'
               }`}
             />
+            {searchQuery && (
+              <div className="absolute right-2 inset-y-0 flex items-center">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSearchQuery('');
+                    setSearchResults(null);
+                    setIsSearching(false);
+                  }}
+                  className="text-slate-400 hover:text-white p-1 rounded-full transition-colors flex items-center justify-center"
+                  title="Clear search"
+                >
+                  <X size={13} />
+                </button>
+              </div>
+            )}
           </div>
         </div>
       </div>
 
       {/* Grid of Albums */}
-      {filteredAlbums.length > 0 ? (
+      {isLoading || isSearching ? (
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4 sm:gap-5 animate-in fade-in duration-200">
+          {Array.from({ length: 12 }).map((_, i) => (
+            <div
+              key={`album-skeleton-${i}`}
+              className={`p-3 rounded-2xl border relative overflow-hidden flex flex-col justify-between ${
+                isOcean ? 'bg-[#0a152d]/40 border-white/[0.04]' : 'bg-[#181312]/40 border-white/[0.04]'
+              }`}
+            >
+              <div>
+                <div className="aspect-square w-full rounded-xl bg-white/[0.06] mb-3 relative overflow-hidden">
+                  <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent animate-shimmer" />
+                </div>
+                <div className="h-4 bg-white/[0.08] rounded-full w-3/4 mb-2 relative overflow-hidden">
+                  <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent animate-shimmer" />
+                </div>
+                <div className="h-3 bg-white/[0.04] rounded-full w-1/2 mb-1.5 relative overflow-hidden">
+                  <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent animate-shimmer" />
+                </div>
+              </div>
+              <div className="h-2.5 bg-white/[0.03] rounded-full w-1/3 mt-2 relative overflow-hidden">
+                <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent animate-shimmer" />
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : displayedAlbums.length > 0 ? (
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4 sm:gap-5">
-          {filteredAlbums.map((album) => {
-            const coverImage = album.images?.[0]?.url || 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=500';
+          {displayedAlbums.map((album) => {
+            const coverImage = album.images?.[0]?.url || `https://ui-avatars.com/api/?name=${encodeURIComponent(album.name)}&background=181824&color=f5d0b5&size=500&bold=true`;
 
             return (
               <div
                 key={album.id}
-                onClick={(e) => handlePlayAlbum(album, e)}
+                onClick={() => handleOpenAlbum(album)}
                 className={`group p-3 rounded-2xl cursor-pointer transition-all duration-300 border relative flex flex-col justify-between ${
                   isOcean
                     ? 'bg-[#0a152d]/40 hover:bg-[#0f1d38]/70 border-white/[0.04] hover:border-blue-500/30 hover:shadow-xl hover:shadow-blue-950/40'
                     : 'bg-[#181312]/40 hover:bg-[#231a18]/70 border-white/[0.04] hover:border-[#f5d0b5]/25 hover:shadow-xl hover:shadow-black/60'
                 }`}
               >
-                {/* Artwork Container with Vinyl Record peeking effect */}
+                {/* Artwork Container */}
                 <div className="relative aspect-square w-full rounded-xl overflow-hidden mb-3 bg-black/40 shadow-md">
                   <img
                     src={coverImage}
@@ -253,9 +406,8 @@ export const AlbumsPage: React.FC<AlbumsPageProps> = ({ onPlayTrack }) => {
                   />
                   <div className="absolute inset-0 bg-black/25 group-hover:bg-black/40 transition-colors" />
 
-                  {/* Play Button */}
+                  {/* Open Album Hover Indicator */}
                   <div
-                    onClick={(e) => handlePlayAlbum(album, e)}
                     className={`absolute bottom-2.5 right-2.5 w-10 h-10 rounded-full flex items-center justify-center shadow-2xl opacity-0 translate-y-2 group-hover:opacity-100 group-hover:translate-y-0 transition-all duration-300 ${
                       isOcean
                         ? 'bg-blue-600 text-white shadow-blue-600/40'
@@ -267,9 +419,9 @@ export const AlbumsPage: React.FC<AlbumsPageProps> = ({ onPlayTrack }) => {
 
                   {/* Like Album Heart Button */}
                   <button
-                    onClick={(e) => toggleLikeAlbum(album.id, e)}
+                    onClick={(e) => toggleLikeAlbum(album, e)}
                     className="absolute top-2.5 right-2.5 p-1.5 rounded-full bg-black/50 backdrop-blur-md text-white hover:scale-110 transition-transform"
-                    title={album.isLiked ? "Unlike Album" : "Like Album"}
+                    title={album.isLiked ? 'Unlike Album' : 'Like Album'}
                   >
                     <Heart
                       size={15}
@@ -309,7 +461,7 @@ export const AlbumsPage: React.FC<AlbumsPageProps> = ({ onPlayTrack }) => {
           <p className="text-slate-400 text-xs max-w-sm">
             {filterType === 'liked'
               ? 'You have not liked any albums yet. Click the heart on any album to save it here.'
-              : `No albums matching "${searchQuery}".`}
+              : `No albums matching "${searchQuery}". Try searching for another album or artist.`}
           </p>
         </div>
       )}

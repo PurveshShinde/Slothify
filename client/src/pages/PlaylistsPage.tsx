@@ -5,6 +5,7 @@ import { ListMusic, Plus, Play, Search, Sparkles, X, Music2, Trash2 } from 'luci
 import axios from 'axios';
 import { useCache } from '../context/CacheContext';
 import { useTheme } from '../context/ThemeContext';
+import PlaylistCover from '../components/PlaylistCover';
 
 interface PlaylistsPageProps {
   isAuthenticated: boolean;
@@ -132,7 +133,7 @@ export const PlaylistsPage: React.FC<PlaylistsPageProps> = ({ isAuthenticated, u
         id: `local-${Date.now()}`,
         name,
         description: 'Created by you',
-        images: [{ url: 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=500' }],
+        images: [],
         tracks: { total: 0 }
       };
       const updated = [newP, ...playlists];
@@ -166,14 +167,16 @@ export const PlaylistsPage: React.FC<PlaylistsPageProps> = ({ isAuthenticated, u
 
         <div className="flex items-center space-x-3">
           {/* Search Bar */}
-          <div className="relative flex-1 sm:w-60">
-            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+          <div className="relative flex items-center flex-1 sm:w-60">
+            <div className="absolute left-3 inset-y-0 flex items-center pointer-events-none">
+              <Search size={14} className="text-slate-400" />
+            </div>
             <input
               type="text"
               placeholder="Filter playlists..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className={`w-full bg-white/[0.04] text-xs text-white placeholder-slate-500 pl-8 pr-3 py-2 rounded-full border border-white/[0.08] outline-none transition-all ${
+              className={`w-full bg-white/[0.04] text-xs text-white placeholder-slate-500 pl-8 pr-3 py-2 rounded-full border border-white/[0.08] outline-none transition-all leading-normal ${
                 isOcean ? 'focus:border-blue-500/50' : 'focus:border-[#f5d0b5]/50'
               }`}
             />
@@ -201,10 +204,6 @@ export const PlaylistsPage: React.FC<PlaylistsPageProps> = ({ isAuthenticated, u
       {filteredPlaylists.length > 0 ? (
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4 sm:gap-5">
           {filteredPlaylists.map((playlist) => {
-            const coverImage =
-              playlist.images?.[0]?.url ||
-              'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=500';
-
             return (
               <div
                 key={playlist.id}
@@ -217,12 +216,14 @@ export const PlaylistsPage: React.FC<PlaylistsPageProps> = ({ isAuthenticated, u
               >
                 {/* Artwork */}
                 <div className="relative aspect-square w-full rounded-xl overflow-hidden mb-3 bg-black/40 shadow-md">
-                  <img
-                    src={coverImage}
+                  <PlaylistCover
+                    images={playlist.images}
+                    tracks={playlist.tracks}
+                    iconSize={40}
                     alt={playlist.name}
-                    className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+                    className="transition-transform duration-500 group-hover:scale-105"
                   />
-                  <div className="absolute inset-0 bg-black/20 group-hover:bg-black/40 transition-colors" />
+                  <div className="absolute inset-0 bg-black/20 group-hover:bg-black/40 transition-colors pointer-events-none" />
 
                   {/* Hover Delete Button on top right */}
                   <button

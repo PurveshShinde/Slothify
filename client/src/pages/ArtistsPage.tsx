@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Users, Search, Sparkles, Check, Plus, Play, Loader2 } from 'lucide-react';
+import { Users, Search, Sparkles, Check, Plus, Play, Loader2, X } from 'lucide-react';
 import axios from 'axios';
 import { useTheme } from '../context/ThemeContext';
+import { useCache } from '../context/CacheContext';
 
 interface ArtistItem {
   id: string;
@@ -13,60 +14,10 @@ interface ArtistItem {
   isFollowing?: boolean;
 }
 
-const DEFAULT_ARTISTS: ArtistItem[] = [
-  {
-    id: 'artist-taylor-swift',
-    name: 'Taylor Swift',
-    images: [{ url: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=500' }],
-    genres: ['Pop', 'Country'],
-    followers: { total: 110000000 },
-    isFollowing: false
-  },
-  {
-    id: 'artist-the-weeknd',
-    name: 'The Weeknd',
-    images: [{ url: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=500' }],
-    genres: ['R&B', 'Pop'],
-    followers: { total: 95000000 },
-    isFollowing: false
-  },
-  {
-    id: 'artist-billie-eilish',
-    name: 'Billie Eilish',
-    images: [{ url: 'https://images.unsplash.com/photo-1534447677768-be436bb09401?w=500' }],
-    genres: ['Alt-Pop', 'Electropop'],
-    followers: { total: 92000000 },
-    isFollowing: false
-  },
-  {
-    id: 'artist-coldplay',
-    name: 'Coldplay',
-    images: [{ url: 'https://images.unsplash.com/photo-1465847899084-d164df4dedc6?w=500' }],
-    genres: ['Alternative Rock', 'Pop Rock'],
-    followers: { total: 53000000 },
-    isFollowing: false
-  },
-  {
-    id: 'artist-lana-del-rey',
-    name: 'Lana Del Rey',
-    images: [{ url: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=500' }],
-    genres: ['Dream Pop', 'Baroque Pop'],
-    followers: { total: 38000000 },
-    isFollowing: false
-  },
-  {
-    id: 'artist-drake',
-    name: 'Drake',
-    images: [{ url: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=500' }],
-    genres: ['Hip-Hop', 'Rap'],
-    followers: { total: 85000000 },
-    isFollowing: false
-  }
-];
-
 export const ArtistsPage: React.FC = () => {
   const navigate = useNavigate();
   const { isOcean } = useTheme();
+  const { cache, setArtistsData } = useCache();
 
   // Clean followed artist IDs (strictly user-driven, 0 by default)
   const [followedIds, setFollowedIds] = useState<Set<string>>(() => {
@@ -86,30 +37,47 @@ export const ArtistsPage: React.FC = () => {
     return {};
   });
 
-  const [topArtists, setTopArtists] = useState<ArtistItem[]>(() => DEFAULT_ARTISTS);
+  // Authentic artists from API or cache (instant, zero loading delay if visited before)
+  const [topArtists, setTopArtists] = useState<ArtistItem[]>(() => cache.artistsData || []);
+  const [isLoading, setIsLoading] = useState<boolean>(() => !cache.artistsData || cache.artistsData.length === 0);
   const [searchResults, setSearchResults] = useState<ArtistItem[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [filterType, setFilterType] = useState<'all' | 'following'>('all');
 
-  // Initial load: Fetch 50 top artists from backend
+  // Initial load: Fetch 50 real top artists from backend if not in cache
   useEffect(() => {
+    if (cache.artistsData && cache.artistsData.length > 0) {
+      setTopArtists(cache.artistsData);
+      setIsLoading(false);
+      return;
+    }
+
+    setIsLoading(true);
     axios.get('/api/me/top/artists?limit=50')
       .then(res => {
         if (Array.isArray(res.data) && res.data.length > 0) {
           const apiArtists: ArtistItem[] = res.data.map((item: any) => ({
-            id: item.id || `artist-${Math.random()}`,
+            id: item.id || `artist-${item.name}`,
             name: item.name,
-            images: item.images || [{ url: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=500' }],
-            genres: item.genres || ['Artist', 'Popular'],
-            followers: item.followers || { total: 1200000 },
+            images: item.images && item.images.length > 0
+              ? item.images
+              : [{ url: `https://ui-avatars.com/api/?name=${encodeURIComponent(item.name)}&background=181824&color=f5d0b5&size=300&bold=true` }],
+            genres: item.genres || ['Artist'],
+            followers: item.followers || { total: 0 },
             isFollowing: false
           }));
           setTopArtists(apiArtists);
+          setArtistsData(apiArtists);
         }
       })
-      .catch(() => {});
-  }, []);
+      .catch(err => {
+        console.error('Failed to load top artists', err);
+      })
+      .finally(() => {
+        setIsLoading(false);
+      });
+  }, [cache.artistsData, setArtistsData]);
 
   // Real-time live search with debouncing
   useEffect(() => {
@@ -126,17 +94,21 @@ export const ArtistsPage: React.FC = () => {
         .then(res => {
           if (Array.isArray(res.data)) {
             const items: ArtistItem[] = res.data.map((item: any) => ({
-              id: item.id || `artist-${Math.random()}`,
+              id: item.id || `artist-${item.name}`,
               name: item.name,
-              images: item.images || [{ url: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=500' }],
-              genres: item.genres || ['Music', 'Artist'],
-              followers: item.followers || { total: 1000000 },
+              images: item.images && item.images.length > 0
+                ? item.images
+                : [{ url: `https://ui-avatars.com/api/?name=${encodeURIComponent(item.name)}&background=181824&color=f5d0b5&size=300&bold=true` }],
+              genres: item.genres || ['Artist'],
+              followers: item.followers || { total: 0 },
               isFollowing: false
             }));
             setSearchResults(items);
           }
         })
-        .catch(() => {})
+        .catch(err => {
+          console.error('Failed to search artists', err);
+        })
         .finally(() => setIsSearching(false));
     }, 280);
 
@@ -217,7 +189,7 @@ export const ArtistsPage: React.FC = () => {
             <h1 className="text-2xl sm:text-3xl font-black text-white tracking-tight">Artists</h1>
           </div>
           <p className="text-xs text-slate-400">
-            {followedIds.size} followed • {searchQuery.trim().length >= 2 ? `${searchResults.length} search results` : `${topArtists.length} trending artists`}
+            {followedIds.size} followed • {isLoading ? 'Loading trending artists...' : searchQuery.trim().length >= 2 ? `${searchResults.length} search results` : `${topArtists.length} trending artists`}
           </p>
         </div>
 
@@ -251,30 +223,81 @@ export const ArtistsPage: React.FC = () => {
           </div>
 
           {/* Real-time Search Input */}
-          <div className="relative w-48 sm:w-64">
-            {isSearching ? (
-              <Loader2 size={14} className={`absolute left-3 top-1/2 -translate-y-1/2 animate-spin ${isOcean ? 'text-blue-400' : 'text-[#f5d0b5]'}`} />
-            ) : (
-              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-            )}
+          <div className="relative flex items-center w-48 sm:w-64">
+            <div className="absolute left-3 inset-y-0 flex items-center pointer-events-none">
+              {isSearching ? (
+                <Loader2 size={14} className={`animate-spin ${isOcean ? 'text-blue-400' : 'text-[#f5d0b5]'}`} />
+              ) : (
+                <Search size={14} className="text-slate-400" />
+              )}
+            </div>
             <input
               type="text"
               placeholder="Search worldwide artists..."
               value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className={`w-full bg-white/[0.04] text-xs text-white placeholder-slate-500 pl-8 pr-3 py-2 rounded-full border border-white/[0.08] outline-none transition-all ${
+              onChange={(e) => {
+                const val = e.target.value;
+                setSearchQuery(val);
+                if (val.trim().length >= 2) {
+                  setIsSearching(true);
+                } else {
+                  setIsSearching(false);
+                  setSearchResults([]);
+                }
+              }}
+              className={`w-full bg-white/[0.04] text-xs text-white placeholder-slate-500 pl-8 pr-8 py-2 rounded-full border border-white/[0.08] outline-none transition-all leading-normal ${
                 isOcean ? 'focus:border-blue-500/50' : 'focus:border-[#f5d0b5]/50'
               }`}
             />
+            {searchQuery && (
+              <div className="absolute right-2 inset-y-0 flex items-center">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSearchQuery('');
+                    setSearchResults([]);
+                    setIsSearching(false);
+                  }}
+                  className="text-slate-400 hover:text-white p-1 rounded-full transition-colors flex items-center justify-center"
+                  title="Clear search"
+                >
+                  <X size={13} />
+                </button>
+              </div>
+            )}
           </div>
         </div>
       </div>
 
       {/* Grid of Artists */}
-      {filteredArtists.length > 0 ? (
+      {isLoading || isSearching ? (
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4 sm:gap-6 animate-in fade-in duration-200">
+          {Array.from({ length: 12 }).map((_, i) => (
+            <div
+              key={`artist-skeleton-${i}`}
+              className={`p-4 rounded-3xl border flex flex-col items-center text-center relative overflow-hidden ${
+                isOcean ? 'bg-[#0a152d]/40 border-white/[0.04]' : 'bg-[#181312]/40 border-white/[0.04]'
+              }`}
+            >
+              <div className="w-28 h-28 sm:w-32 sm:h-32 rounded-full bg-white/[0.06] mb-3 relative overflow-hidden flex-shrink-0">
+                <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent animate-shimmer" />
+              </div>
+              <div className="h-4 bg-white/[0.08] rounded-full w-24 mb-2 relative overflow-hidden">
+                <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent animate-shimmer" />
+              </div>
+              <div className="h-3 bg-white/[0.04] rounded-full w-16 mb-3 relative overflow-hidden">
+                <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent animate-shimmer" />
+              </div>
+              <div className="h-7 bg-white/[0.05] rounded-full w-20 relative overflow-hidden">
+                <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent animate-shimmer" />
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : filteredArtists.length > 0 ? (
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4 sm:gap-6">
           {filteredArtists.map((artist) => {
-            const avatar = artist.images?.[0]?.url || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=500';
+            const avatar = artist.images?.[0]?.url || `https://ui-avatars.com/api/?name=${encodeURIComponent(artist.name)}&background=181824&color=f5d0b5&size=500&bold=true`;
 
             return (
               <div

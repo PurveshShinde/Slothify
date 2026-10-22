@@ -180,7 +180,7 @@ class LocalLibraryStore {
                 id: 'local_favorites',
                 name: 'My Favorites',
                 description: 'Personal favorite songs collection',
-                images: [{ url: 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=300' }],
+                images: [],
                 owner: { id: 'me', display_name: 'Slothify Listener' },
                 tracks: { total: 0, items: [] }
             }
@@ -226,7 +226,7 @@ class LocalLibraryStore {
             id: `local_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
             name,
             description,
-            images: [{ url: 'https://images.unsplash.com/photo-1470225620780-dba8ba36b745?w=300' }],
+            images: [], // No initial poster!
             owner: { id: 'me', display_name: 'Slothify Listener' },
             tracks: { total: 0, items: [] }
         };
@@ -245,7 +245,7 @@ class LocalLibraryStore {
             description: playlist.description || 'Imported from Spotify',
             images: playlist.images && playlist.images.length > 0
                 ? playlist.images
-                : [{ url: 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=300' }],
+                : [],
             owner: playlist.owner || { id: 'spotify', display_name: 'Spotify' },
             tracks: {
                 total: playlist.tracks?.items?.length || playlist.tracks?.total || 0,
@@ -265,7 +265,7 @@ class LocalLibraryStore {
         return imported;
     }
 
-    addTracksToPlaylist(playlistId: string, tracksOrUris: string[]): Playlist | null {
+    addTracksToPlaylist(playlistId: string, tracksOrUris: string[], passedTrack?: Track): Playlist | null {
         const playlist = this.getPlaylist(playlistId);
         if (!playlist) return null;
 
@@ -273,27 +273,47 @@ class LocalLibraryStore {
             playlist.tracks.items = [];
         }
 
-        for (const uri of tracksOrUris) {
+        const rawUris = (tracksOrUris || []).filter(Boolean);
+        if (passedTrack && passedTrack.id && !rawUris.some(u => u.includes(passedTrack.id))) {
+            rawUris.unshift(passedTrack.uri || `spotify:track:${passedTrack.id}`);
+        }
+
+        for (const uri of rawUris) {
+            if (!uri || typeof uri !== 'string') continue;
             const trackId = uri.replace('spotify:track:', '');
             // Check if track already in playlist
             const exists = playlist.tracks.items.some(i => i.track.id === trackId);
             if (!exists) {
-                const track: Track = {
+                const trackItem: Track = (passedTrack && passedTrack.id === trackId) ? passedTrack : {
                     id: trackId,
                     uri: `spotify:track:${trackId}`,
                     name: 'Track ' + trackId,
                     artists: [{ name: 'Artist' }],
                     album: {
                         name: 'Album',
-                        images: [{ url: 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=300' }]
+                        images: []
                     },
                     duration_ms: 180000
                 };
-                playlist.tracks.items.push({ track, added_at: new Date().toISOString() });
+                playlist.tracks.items.push({ track: trackItem, added_at: new Date().toISOString() });
             }
         }
 
         playlist.tracks.total = playlist.tracks.items.length;
+
+        // Spotify style poster: 4-song collage when >= 4 tracks, 1st song art when 1-3, empty when 0
+        const albumArtList = playlist.tracks.items
+            .map(i => i.track?.album?.images?.[0]?.url)
+            .filter(Boolean) as string[];
+
+        if (albumArtList.length >= 4) {
+            playlist.images = albumArtList.slice(0, 4).map(url => ({ url }));
+        } else if (albumArtList.length > 0) {
+            playlist.images = [{ url: albumArtList[0] }];
+        } else {
+            playlist.images = [];
+        }
+
         this.save();
         return playlist;
     }
@@ -302,9 +322,24 @@ class LocalLibraryStore {
         const playlist = this.getPlaylist(playlistId);
         if (!playlist || !playlist.tracks.items) return null;
 
-        const idsToRemove = new Set(uris.map(u => u.replace('spotify:track:', '')));
+        const rawUris = (uris || []).filter(Boolean);
+        const idsToRemove = new Set(rawUris.map(u => typeof u === 'string' ? u.replace('spotify:track:', '') : ''));
         playlist.tracks.items = playlist.tracks.items.filter(item => !idsToRemove.has(item.track.id));
         playlist.tracks.total = playlist.tracks.items.length;
+
+        // Update poster: 4-cover collage if >= 4, 1st song if 1-3, empty if 0
+        const albumArtList = playlist.tracks.items
+            .map(i => i.track?.album?.images?.[0]?.url)
+            .filter(Boolean) as string[];
+
+        if (albumArtList.length >= 4) {
+            playlist.images = albumArtList.slice(0, 4).map(url => ({ url }));
+        } else if (albumArtList.length > 0) {
+            playlist.images = [{ url: albumArtList[0] }];
+        } else {
+            playlist.images = [];
+        }
+
         this.save();
         return playlist;
     }

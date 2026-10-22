@@ -66,6 +66,8 @@ export interface MetadataPlugin {
     getSmartMoodSuggestions?(trackName: string, artistName: string): Promise<Track[]>;
     searchArtists?(query: string, limit?: number): Promise<Artist[]>;
     getArtistTracks?(artistId: string, artistName?: string): Promise<Track[]>;
+    searchAlbums?(query: string, limit?: number): Promise<any[]>;
+    getAlbum?(albumId: string): Promise<any>;
 }
 
 export interface AudioPlugin {

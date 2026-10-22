@@ -4,6 +4,7 @@ import { Track, Playlist } from '../types';
 import axios from 'axios';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useTheme } from '../context/ThemeContext';
+import PlaylistCover from '../components/PlaylistCover';
 
 interface CategoryItem {
   name: string;
@@ -137,6 +138,12 @@ const Search: React.FC<SearchProps> = ({ isAuthenticated, onPlayTrack }) => {
   const [isAddingToPlaylist, setIsAddingToPlaylist] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
+  // Quick Create Playlist States
+  const [showInlineCreate, setShowInlineCreate] = useState(false);
+  const [showSearchBarCreateModal, setShowSearchBarCreateModal] = useState(false);
+  const [newPlaylistName, setNewPlaylistName] = useState('');
+  const [isCreatingPlaylist, setIsCreatingPlaylist] = useState(false);
+
   useEffect(() => {
     setQuery(initialQuery);
   }, [initialQuery]);
@@ -191,6 +198,7 @@ const Search: React.FC<SearchProps> = ({ isAuthenticated, onPlayTrack }) => {
     }
 
     setShowPlaylistModal(true);
+    setShowInlineCreate(false);
     try {
       const res = await axios.get('/api/me/playlists');
       setMyPlaylists(res.data);
@@ -205,16 +213,55 @@ const Search: React.FC<SearchProps> = ({ isAuthenticated, onPlayTrack }) => {
 
     try {
       await axios.post(`/api/playlists/${playlistId}/tracks`, {
-        track: selectedTrack
+        track: selectedTrack,
+        uris: [selectedTrack.uri || `spotify:track:${selectedTrack.id}`]
       });
       setShowPlaylistModal(false);
       setToastMessage(`Added "${selectedTrack.name}" to playlist!`);
       setTimeout(() => setToastMessage(null), 3000);
+      window.dispatchEvent(new Event('slothify_playlists_updated'));
     } catch (err) {
       console.error(err);
       alert('Failed to add track to playlist');
     } finally {
       setIsAddingToPlaylist(false);
+    }
+  };
+
+  const handleCreatePlaylist = async (trackToAdd?: Track | null) => {
+    const targetTrack = trackToAdd !== undefined ? trackToAdd : selectedTrack;
+    const name = newPlaylistName.trim() || `My Playlist #${myPlaylists.length + 1}`;
+    setIsCreatingPlaylist(true);
+
+    try {
+      const res = await axios.post('/api/me/playlists', {
+        name,
+        description: 'Created in Slothify'
+      });
+      const created: Playlist = res.data;
+      setMyPlaylists(prev => [created, ...prev]);
+
+      if (targetTrack) {
+        await axios.post(`/api/playlists/${created.id}/tracks`, {
+          track: targetTrack,
+          uris: [targetTrack.uri || `spotify:track:${targetTrack.id}`]
+        });
+        setToastMessage(`Created "${created.name}" and added "${targetTrack.name}"!`);
+      } else {
+        setToastMessage(`Created playlist "${created.name}"!`);
+      }
+
+      setShowPlaylistModal(false);
+      setShowSearchBarCreateModal(false);
+      setShowInlineCreate(false);
+      setNewPlaylistName('');
+      setTimeout(() => setToastMessage(null), 3000);
+      window.dispatchEvent(new Event('slothify_playlists_updated'));
+    } catch (err) {
+      console.error(err);
+      alert('Failed to create playlist');
+    } finally {
+      setIsCreatingPlaylist(false);
     }
   };
 
@@ -246,26 +293,46 @@ const Search: React.FC<SearchProps> = ({ isAuthenticated, onPlayTrack }) => {
         </div>
       </div>
 
-      {/* Search Input */}
-      <div className="relative group">
-        <div className="absolute inset-y-0 left-4 flex items-center pointer-events-none">
-          {isLoading ? (
-            <Loader2 className={`${isOcean ? 'text-blue-400' : 'text-[#f5d0b5]'} animate-spin`} size={18} />
-          ) : (
-            <SearchIcon className={`text-[#8a8489] group-focus-within:${isOcean ? 'text-blue-400' : 'text-[#f5d0b5]'} transition-colors`} size={18} />
-          )}
+      {/* Search Input & Action */}
+      <div className="flex items-center space-x-2.5 sm:space-x-3">
+        <div className="relative group flex-1">
+          <div className="absolute inset-y-0 left-4 flex items-center pointer-events-none">
+            {isLoading ? (
+              <Loader2 className={`${isOcean ? 'text-blue-400' : 'text-[#f5d0b5]'} animate-spin`} size={18} />
+            ) : (
+              <SearchIcon className={`text-[#8a8489] group-focus-within:${isOcean ? 'text-blue-400' : 'text-[#f5d0b5]'} transition-colors`} size={18} />
+            )}
+          </div>
+          <input
+            type="text"
+            value={query}
+            onChange={(e) => updateQuery(e.target.value)}
+            placeholder="What do you want to listen to?"
+            className={`w-full bg-[#16141a] border border-white/[0.06] rounded-full py-3.5 pl-12 pr-6 text-sm text-white placeholder-[#6e686e] outline-none transition-all shadow-inner ${
+              isOcean
+                ? 'focus:border-blue-500/50 focus:ring-2 focus:ring-blue-500/20'
+                : 'focus:border-[#f5d0b5]/40 focus:ring-2 focus:ring-[#f5d0b5]/20'
+            }`}
+          />
         </div>
-        <input
-          type="text"
-          value={query}
-          onChange={(e) => updateQuery(e.target.value)}
-          placeholder="What do you want to listen to?"
-          className={`w-full bg-[#16141a] border border-white/[0.06] rounded-full py-3.5 pl-12 pr-6 text-sm text-white placeholder-[#6e686e] outline-none transition-all shadow-inner ${
-            isOcean
-              ? 'focus:border-blue-500/50 focus:ring-2 focus:ring-blue-500/20'
-              : 'focus:border-[#f5d0b5]/40 focus:ring-2 focus:ring-[#f5d0b5]/20'
-          }`}
-        />
+
+        {isAuthenticated && (
+          <button
+            onClick={() => {
+              setNewPlaylistName(`My Playlist #${myPlaylists.length + 1}`);
+              setShowSearchBarCreateModal(true);
+            }}
+            className={`flex items-center space-x-1.5 px-4 py-3.5 rounded-full font-semibold text-xs transition-all shadow-md active:scale-95 flex-shrink-0 cursor-pointer ${
+              isOcean
+                ? 'bg-blue-600/25 hover:bg-blue-600/40 text-cyan-300 border border-blue-500/35 hover:border-blue-400'
+                : 'bg-[#3d271c] hover:bg-[#523425] text-[#f5d0b5] border border-[#f5d0b5]/30 hover:border-[#f5d0b5]/50'
+            }`}
+            title="Create a new playlist"
+          >
+            <Plus size={16} />
+            <span className="hidden sm:inline">New Playlist</span>
+          </button>
+        )}
       </div>
 
       {/* Modal for Playlist Selection */}
@@ -275,7 +342,10 @@ const Search: React.FC<SearchProps> = ({ isAuthenticated, onPlayTrack }) => {
             <div className="flex justify-between items-center">
               <h3 className="text-lg font-bold text-white">Add to Playlist</h3>
               <button
-                onClick={() => setShowPlaylistModal(false)}
+                onClick={() => {
+                  setShowPlaylistModal(false);
+                  setShowInlineCreate(false);
+                }}
                 className="text-[#8a8489] hover:text-white transition-colors"
               >
                 Close
@@ -286,23 +356,73 @@ const Search: React.FC<SearchProps> = ({ isAuthenticated, onPlayTrack }) => {
               Select a playlist to add <span className="text-white font-medium">{selectedTrack?.name}</span>
             </p>
 
+            {/* Quick inline create row inside modal */}
+            <div className="pt-0.5 pb-1">
+              {showInlineCreate ? (
+                <div className="space-y-2 p-2.5 rounded-xl bg-white/[0.04] border border-white/10 animate-in fade-in duration-150">
+                  <input
+                    type="text"
+                    value={newPlaylistName}
+                    onChange={(e) => setNewPlaylistName(e.target.value)}
+                    placeholder="Playlist name..."
+                    autoFocus
+                    className="w-full bg-black/50 border border-white/15 rounded-lg px-3 py-1.5 text-xs text-white placeholder-slate-500 outline-none focus:border-blue-400"
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') handleCreatePlaylist(selectedTrack);
+                    }}
+                  />
+                  <div className="flex items-center justify-end space-x-2">
+                    <button
+                      type="button"
+                      onClick={() => setShowInlineCreate(false)}
+                      className="px-2.5 py-1 text-[11px] text-slate-400 hover:text-white"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      disabled={isCreatingPlaylist}
+                      onClick={() => handleCreatePlaylist(selectedTrack)}
+                      className={`px-3 py-1 rounded-lg text-[11px] font-semibold text-white transition-all flex items-center space-x-1 ${
+                        isOcean ? 'bg-blue-600 hover:bg-blue-500' : 'bg-[#c87d46] hover:bg-[#d97736]'
+                      }`}
+                    >
+                      {isCreatingPlaylist ? <Loader2 size={12} className="animate-spin" /> : <Plus size={12} />}
+                      <span>Create & Add</span>
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setNewPlaylistName(`My Playlist #${myPlaylists.length + 1}`);
+                    setShowInlineCreate(true);
+                  }}
+                  className="w-full flex items-center justify-center space-x-1.5 py-2 px-3 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] border border-white/[0.06] text-xs font-semibold text-white/90 hover:text-white transition-all cursor-pointer"
+                >
+                  <Plus size={14} className={isOcean ? 'text-blue-400' : 'text-[#f5d0b5]'} />
+                  <span>Create New Playlist</span>
+                </button>
+              )}
+            </div>
+
             <div className="max-h-64 overflow-y-auto space-y-2 pr-2 scrollbar-hide">
               {myPlaylists.length === 0 ? (
-                <p className="text-center text-[#8a8489] py-4 text-xs">No playlists found</p>
+                <div className="text-center py-4 space-y-2">
+                  <p className="text-[#8a8489] text-xs">No playlists available yet</p>
+                  <p className="text-[11px] text-slate-500">Create your first playlist above to save this track!</p>
+                </div>
               ) : (
                 myPlaylists.map(pl => (
                   <button
                     key={pl.id}
                     disabled={isAddingToPlaylist}
                     onClick={() => addToPlaylist(pl.id)}
-                    className="w-full flex items-center space-x-3 p-2.5 hover:bg-white/5 rounded-xl transition-colors text-left group"
+                    className="w-full flex items-center space-x-3 p-2.5 hover:bg-white/5 rounded-xl transition-colors text-left group cursor-pointer"
                   >
-                    <div className="w-9 h-9 bg-white/5 rounded-lg flex items-center justify-center overflow-hidden flex-shrink-0">
-                      {pl.images?.[0]?.url ? (
-                        <img src={pl.images[0].url} className="w-full h-full object-cover" alt="" />
-                      ) : (
-                        <Music2 size={16} className="text-white/40" />
-                      )}
+                    <div className="w-9 h-9 rounded-lg overflow-hidden flex-shrink-0">
+                      <PlaylistCover images={pl.images} tracks={pl.tracks} iconSize={16} />
                     </div>
                     <span className="text-xs font-medium text-white truncate flex-1 group-hover:text-blue-400">
                       {pl.name}
@@ -311,6 +431,64 @@ const Search: React.FC<SearchProps> = ({ isAuthenticated, onPlayTrack }) => {
                 ))
               )}
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Standalone Quick Create Playlist Modal (Triggered from Search Bar) */}
+      {showSearchBarCreateModal && (
+        <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+          <div className="bg-[#18151c] border border-white/10 w-full max-w-sm rounded-2xl p-6 shadow-2xl space-y-4">
+            <div className="flex justify-between items-center">
+              <h3 className="text-lg font-bold text-white">Create New Playlist</h3>
+              <button
+                onClick={() => setShowSearchBarCreateModal(false)}
+                className="text-[#8a8489] hover:text-white transition-colors"
+              >
+                Close
+              </button>
+            </div>
+
+            <p className="text-xs text-[#8a8489]">
+              Give your new playlist a name. Posters will automatically generate once you add 4 songs!
+            </p>
+
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                handleCreatePlaylist(null);
+              }}
+              className="space-y-4"
+            >
+              <input
+                type="text"
+                value={newPlaylistName}
+                onChange={(e) => setNewPlaylistName(e.target.value)}
+                placeholder="Playlist name..."
+                autoFocus
+                className="w-full bg-black/50 border border-white/15 rounded-xl px-3.5 py-2.5 text-sm text-white placeholder-slate-500 outline-none focus:border-blue-400 transition-all"
+              />
+
+              <div className="flex items-center justify-end space-x-2 pt-1">
+                <button
+                  type="button"
+                  onClick={() => setShowSearchBarCreateModal(false)}
+                  className="px-3.5 py-2 text-xs text-slate-400 hover:text-white"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isCreatingPlaylist}
+                  className={`px-4 py-2 rounded-xl text-xs font-semibold text-white transition-all flex items-center space-x-1.5 shadow-md ${
+                    isOcean ? 'bg-blue-600 hover:bg-blue-500' : 'bg-[#c87d46] hover:bg-[#d97736]'
+                  }`}
+                >
+                  {isCreatingPlaylist ? <Loader2 size={13} className="animate-spin" /> : <Plus size={13} />}
+                  <span>Create Playlist</span>
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

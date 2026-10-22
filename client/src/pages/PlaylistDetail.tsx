@@ -8,6 +8,7 @@ import axios from 'axios';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useCache } from '../context/CacheContext';
 import { useTheme } from '../context/ThemeContext';
+import PlaylistCover from '../components/PlaylistCover';
 
 const KNOWN_PLAYLIST_META: Record<string, { name: string; description: string; image: string }> = {
   'late-night-drive': {
@@ -496,7 +497,12 @@ const PlaylistDetail: React.FC<PlaylistDetailProps> = ({
                 <Heart size={80} className="text-white fill-white" />
               </div>
             ) : (
-              <img src={displayImage || `https://picsum.photos/seed/${id}/400`} alt="" className="w-full h-full object-cover rounded-2xl shadow-2xl" />
+              <PlaylistCover
+                images={playlist?.images}
+                tracks={playlist?.tracks || { items: tracks.map(t => ({ track: t })) }}
+                iconSize={64}
+                alt={displayName}
+              />
             )}
           </div>
 

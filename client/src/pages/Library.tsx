@@ -5,6 +5,7 @@ import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
 import { useCache } from '../context/CacheContext';
 import { useTheme } from '../context/ThemeContext';
+import PlaylistCover from '../components/PlaylistCover';
 
 interface LibraryProps {
   isAuthenticated: boolean;
@@ -387,11 +388,14 @@ const Library: React.FC<LibraryProps> = ({ isAuthenticated, user, likedTrackIds,
               className="group flex items-center justify-between p-2 rounded-md hover:bg-white/[0.04] active:bg-white/[0.06] transition-colors cursor-pointer"
             >
               <div className="flex items-center space-x-3 min-w-0 flex-1">
-                <img
-                  src={playlist.images[0]?.url || `https://picsum.photos/seed/${playlist.id}/200`}
-                  className="w-14 h-14 rounded-md object-cover flex-shrink-0"
-                  alt={playlist.name}
-                />
+                <div className="w-14 h-14 rounded-md overflow-hidden flex-shrink-0">
+                  <PlaylistCover
+                    images={playlist.images}
+                    tracks={playlist.tracks}
+                    iconSize={24}
+                    alt={playlist.name}
+                  />
+                </div>
                 <div className="flex-1 min-w-0 flex flex-col justify-center">
                   <h3 className="font-semibold text-white text-sm truncate group-hover:text-blue-400 transition-colors">{playlist.name}</h3>
                   <p className="text-xs text-[#8a8489] truncate mt-0.5">

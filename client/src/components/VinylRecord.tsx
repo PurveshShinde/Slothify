@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { useTheme } from '../context/ThemeContext';
 
 interface VinylRecordProps {
@@ -15,16 +15,42 @@ export const VinylRecord: React.FC<VinylRecordProps> = ({
   onClick
 }) => {
   const { isOcean } = useTheme();
+  // Track if disc has ever started spinning for the current image
+  const [hasStarted, setHasStarted] = useState(false);
+
+  useEffect(() => {
+    // Reset to default upright state when image/track changes
+    setHasStarted(false);
+  }, [image]);
+
+  useEffect(() => {
+    if (isPlaying && !hasStarted) {
+      setHasStarted(true);
+    }
+  }, [isPlaying, hasStarted]);
+
+  // When playing: 'spin-vinyl' (continuous spin)
+  // When paused after playing: 'spin-vinyl-paused' (freezes at exact current rotation angle)
+  // Default state before playing: '' (0deg upright default cover)
+  const animClass = isPlaying
+    ? 'spin-vinyl'
+    : hasStarted
+      ? 'spin-vinyl-paused'
+      : '';
+
   return (
     <div
       onClick={onClick}
-      className={`relative w-48 h-48 md:w-56 md:h-56 flex-shrink-0 select-none ${className}`}
+      className={`relative aspect-square flex-shrink-0 select-none ${className || 'w-40 h-40 md:w-44 md:h-44 lg:w-48 lg:h-48'}`}
+      style={{ aspectRatio: '1 / 1' }}
     >
       {/* Vinyl Outer Disc */}
       <div
-        className={`w-full h-full rounded-full bg-[#0a0a0d] shadow-[0_15px_35px_rgba(0,0,0,0.8)] border border-white/[0.08] relative overflow-hidden flex items-center justify-center ${
-          isPlaying ? 'animate-[spin_12s_linear_infinite]' : ''
-        }`}
+        className={`w-full h-full rounded-full bg-[#0a0a0d] shadow-[0_15px_35px_rgba(0,0,0,0.8)] border border-white/[0.08] relative overflow-hidden flex items-center justify-center ${animClass}`}
+        style={{
+          ['--spin-duration' as any]: '12s',
+          willChange: 'transform'
+        }}
       >
         {/* Vinyl Concentric Grooves */}
         <div className="absolute inset-2 rounded-full border border-white/[0.04]" />
@@ -41,8 +67,8 @@ export const VinylRecord: React.FC<VinylRecordProps> = ({
         <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_bottom_right,rgba(255,255,255,0.05)_0%,transparent_60%)]" />
         <div className="absolute inset-0 bg-[conic-gradient(from_0deg,transparent_0deg,rgba(255,255,255,0.06)_45deg,transparent_90deg,rgba(255,255,255,0.06)_225deg,transparent_270deg)]" />
 
-        {/* Center Label Area */}
-        <div className="relative w-16 h-16 md:w-20 md:h-20 rounded-full overflow-hidden border-2 border-[#1a171d] shadow-inner flex items-center justify-center">
+        {/* Center Label Area (Song Poster in the middle) */}
+        <div className="relative w-14 h-14 md:w-16 md:h-16 rounded-full overflow-hidden border-2 border-[#1a171d] shadow-inner flex items-center justify-center">
           {image ? (
             <img src={image} alt="Vinyl Label" className="w-full h-full object-cover" />
           ) : (
@@ -52,7 +78,7 @@ export const VinylRecord: React.FC<VinylRecordProps> = ({
           )}
 
           {/* Spindle Hole */}
-          <div className="absolute w-3.5 h-3.5 rounded-full bg-[#0a0a0d] border border-white/20 shadow-inner" />
+          <div className="absolute w-3 h-3 rounded-full bg-[#0a0a0d] border border-white/20 shadow-inner" />
         </div>
       </div>
     </div>

@@ -8,6 +8,7 @@ import { NavLink, useNavigate } from 'react-router-dom';
 import { useTheme } from '../context/ThemeContext';
 import { useCache } from '../context/CacheContext';
 import axios from 'axios';
+import PlaylistCover from './PlaylistCover';
 
 interface SidebarProps {
   user: User | null;
@@ -106,15 +107,25 @@ const Sidebar: React.FC<SidebarProps> = ({ user, isAuthenticated, onOpenAuth, on
     ? currentList.map(p => ({
         id: p.id,
         name: p.name,
-        image: p.images?.[0]?.url || 'https://images.unsplash.com/photo-1518609878373-06d740f60d8b?w=100'
+        images: p.images,
+        tracks: p.tracks
       }))
     : [];
 
   return (
     <aside className={`hidden md:flex w-60 flex-shrink-0 flex-col p-4 space-y-5 border-r select-none transition-colors duration-300 z-20 bg-black/35 backdrop-blur-2xl border-white/10`}>
-      {/* Brand Header: Clean Wordmark */}
-      <div className="pt-3 pb-3 px-2 flex flex-col items-center justify-center">
-        <h1 className="text-xs font-bold tracking-[0.35em] text-[#e8ded6] uppercase text-center pl-1">
+      {/* Brand Header: Sloth Mascot + Wordmark */}
+      <div
+        onClick={() => navigate('/')}
+        className="pt-2 pb-2 px-2 flex items-center justify-center space-x-2.5 cursor-pointer group"
+        title="Slothify Home"
+      >
+        <img
+          src="/favicon_sloth.png"
+          alt="Slothify"
+          className="w-8 h-8 object-contain transition-transform duration-300 group-hover:scale-110 group-active:scale-95 drop-shadow-md"
+        />
+        <h1 className="text-xs font-bold tracking-[0.35em] text-[#e8ded6] uppercase group-hover:text-white transition-colors">
           Slothify
         </h1>
       </div>
@@ -179,11 +190,9 @@ const Sidebar: React.FC<SidebarProps> = ({ user, isAuthenticated, onOpenAuth, on
                 onClick={() => navigate(`/playlist/${item.id}`)}
                 className="flex items-center space-x-2.5 px-2 py-1.5 rounded-lg hover:bg-white/[0.03] transition-colors cursor-pointer group"
               >
-                <img
-                  src={item.image}
-                  alt={item.name}
-                  className="w-5 h-5 rounded-md object-cover flex-shrink-0"
-                />
+                <div className="w-5 h-5 rounded-md overflow-hidden flex-shrink-0">
+                  <PlaylistCover images={item.images} tracks={item.tracks} iconSize={11} />
+                </div>
                 <span className="text-xs text-[#c4beb6] group-hover:text-white truncate">
                   {item.name}
                 </span>

@@ -3611,6 +3611,27 @@
   ],
   "likedTracks": [
     {
+      "id": "isabel-larosa-eyes-dont-lie",
+      "uri": "spotify:track:isabel-larosa-eyes-dont-lie",
+      "name": "Eyes Don't Lie",
+      "artists": [
+        {
+          "name": "Isabel LaRosa"
+        }
+      ],
+      "album": {
+        "name": "Eyes Don't Lie",
+        "images": [
+          {
+            "url": "https://c.saavncdn.com/998/eyes-don-t-lie-English-2023-20230628022336-500x500.jpg"
+          }
+        ]
+      },
+      "duration_ms": 150000,
+      "quote": "Every moment with you feels like the perfect song.",
+      "stats": "5.4M • Dark Pop • 2023"
+    },
+    {
       "id": "1405546220",
       "uri": "spotify:track:1405546220",
       "name": "Main Badhiya Tu Bhi Badhiya",

@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256">
+  <defs>
+    <filter id="shadow" x="-10%" y="-10%" width="130%" height="130%">
+      <feDropShadow dx="0" dy="4" stdDeviation="4" flood-color="#000" flood-opacity="0.3"/>
+    </filter>
+  </defs>
+  <!-- Small z (bottom left) -->
+  <path d="M 32 172 L 80 172 L 38 226 L 86 226" 
+        fill="none" stroke="#000000" stroke-width="26" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M 32 172 L 80 172 L 38 226 L 86 226" 
+        fill="none" stroke="#FFFFFF" stroke-width="14" stroke-linecap="round" stroke-linejoin="round"/>
+
+  <!-- Medium Z (center) -->
+  <path d="M 98 102 L 158 102 L 106 170 L 166 170" 
+        fill="none" stroke="#000000" stroke-width="30" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M 98 102 L 158 102 L 106 170 L 166 170" 
+        fill="none" stroke="#FFFFFF" stroke-width="18" stroke-linecap="round" stroke-linejoin="round"/>
+
+  <!-- Big Z (top right) -->
+  <path d="M 166 28 L 232 28 L 176 104 L 242 104" 
+        fill="none" stroke="#000000" stroke-width="34" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M 166 28 L 232 28 L 176 104 L 242 104" 
+        fill="none" stroke="#FFFFFF" stroke-width="22" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

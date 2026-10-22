@@ -8,6 +8,7 @@ import Search from './pages/Search';
 import Library from './pages/Library';
 import PlaylistsPage from './pages/PlaylistsPage';
 import AlbumsPage from './pages/AlbumsPage';
+import AlbumDetail from './pages/AlbumDetail';
 import ArtistsPage from './pages/ArtistsPage';
 import PlaylistDetail from './pages/PlaylistDetail';
 import Downloads from './pages/Downloads';
@@ -25,7 +26,16 @@ import { AuthModal } from './components/AuthModal';
 
 const App: React.FC = () => {
   const { isOcean } = useTheme();
-  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
+    try {
+      const token = localStorage.getItem('slothify_auth_token');
+      if (token) {
+        axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+        return true;
+      }
+    } catch (e) {}
+    return false;
+  });
   const [isCheckingAuth, setIsCheckingAuth] = useState<boolean>(true);
   const [isAuthModalOpen, setIsAuthModalOpen] = useState<boolean>(false);
   const [authModalMode, setAuthModalMode] = useState<'login' | 'register'>('login');
@@ -35,6 +45,10 @@ const App: React.FC = () => {
   });
 
   const [user, setUser] = useState<User | null>(() => {
+    try {
+      const savedUser = localStorage.getItem('slothify_user_profile');
+      if (savedUser) return JSON.parse(savedUser);
+    } catch (e) {}
     const avatar = localStorage.getItem('slothify_local_avatar') || '/avatars/ghost.png';
     return {
       id: 'guest',
@@ -256,15 +270,21 @@ const App: React.FC = () => {
           if (res.data.authenticated) {
             setIsAuthenticated(true);
             const avatarUrl = localStorage.getItem('slothify_local_avatar') || '/avatars/ghost.png';
-            setUser({
+            const profile = {
               ...res.data.user,
               images: [{ url: avatarUrl }]
-            });
+            };
+            setUser(profile);
+            try {
+              localStorage.setItem('slothify_user_profile', JSON.stringify(profile));
+            } catch (e) {}
           }
         })
         .catch(() => {
           localStorage.removeItem('slothify_auth_token');
+          localStorage.removeItem('slothify_user_profile');
           delete axios.defaults.headers.common['Authorization'];
+          setIsAuthenticated(false);
         })
         .finally(() => {
           setIsCheckingAuth(false);
@@ -306,6 +326,9 @@ const App: React.FC = () => {
       images: [{ url: avatarUrl }]
     };
     setUser(normalizedUser);
+    try {
+      localStorage.setItem('slothify_user_profile', JSON.stringify(normalizedUser));
+    } catch (e) { }
 
     // Sync guest likes to newly authenticated account in background
     try {
@@ -326,6 +349,7 @@ const App: React.FC = () => {
 
   const handleLogout = () => {
     localStorage.removeItem('slothify_auth_token');
+    localStorage.removeItem('slothify_user_profile');
     delete axios.defaults.headers.common['Authorization'];
     setIsAuthenticated(false);
     setUser({
@@ -498,6 +522,18 @@ const App: React.FC = () => {
                 <Route path="/albums" element={
                   <AlbumsPage
                     onPlayTrack={handlePlayTrack}
+                  />
+                } />
+                <Route path="/album/:id" element={
+                  <AlbumDetail
+                    onPlayTrack={handlePlayTrack}
+                    isPlaying={isPlaying}
+                    onPlayPause={handlePlayPause}
+                    currentTrackId={currentTrack?.id}
+                    likedTrackIds={likedTrackIds}
+                    onToggleLike={handleToggleLike}
+                    isShuffle={isShuffle}
+                    onToggleShuffle={() => setIsShuffle(!isShuffle)}
                   />
                 } />
                 <Route path="/artists" element={

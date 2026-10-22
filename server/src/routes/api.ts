@@ -74,6 +74,18 @@ router.get('/me/playlists', async (req, res) => {
             for (const rec of records) {
                 const decrypted = decryptPayload<Playlist>(rec.ciphertext, rec.iv, rec.tag, req.user.userId);
                 if (decrypted) {
+                    if (decrypted.tracks?.items) {
+                        const albumArtList = decrypted.tracks.items
+                            .map(i => i.track?.album?.images?.[0]?.url)
+                            .filter(Boolean) as string[];
+                        if (albumArtList.length >= 4) {
+                            decrypted.images = albumArtList.slice(0, 4).map(url => ({ url }));
+                        } else if (albumArtList.length > 0) {
+                            decrypted.images = [{ url: albumArtList[0] }];
+                        } else {
+                            decrypted.images = [];
+                        }
+                    }
                     playlists.push(decrypted);
                 }
             }
@@ -103,7 +115,7 @@ router.post('/me/playlists', async (req, res) => {
                 id: playlistId,
                 name: playlistName,
                 description: playlistDesc,
-                images: [{ url: 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=300' }],
+                images: [],
                 owner: {
                     id: req.user.userId,
                     display_name: req.user.username
@@ -167,7 +179,21 @@ router.get('/playlists/:id', async (req, res) => {
             const rec = await EncryptedPlaylist.findOne({ playlistId: id });
             if (rec) {
                 const decrypted = decryptPayload<Playlist>(rec.ciphertext, rec.iv, rec.tag, rec.userId);
-                if (decrypted) return res.json(decrypted);
+                if (decrypted) {
+                    if (decrypted.tracks?.items) {
+                        const albumArtList = decrypted.tracks.items
+                            .map(i => i.track?.album?.images?.[0]?.url)
+                            .filter(Boolean) as string[];
+                        if (albumArtList.length >= 4) {
+                            decrypted.images = albumArtList.slice(0, 4).map(url => ({ url }));
+                        } else if (albumArtList.length > 0) {
+                            decrypted.images = [{ url: albumArtList[0] }];
+                        } else {
+                            decrypted.images = [];
+                        }
+                    }
+                    return res.json(decrypted);
+                }
             }
         }
 
@@ -224,25 +250,51 @@ router.post('/playlists/:id/tracks', async (req, res) => {
                 const decrypted = decryptPayload<Playlist>(rec.ciphertext, rec.iv, rec.tag, req.user.userId);
                 if (decrypted) {
                     if (!decrypted.tracks.items) decrypted.tracks.items = [];
-                    const trackUris: string[] = Array.isArray(uris) ? uris : [uris];
 
-                    for (const uri of trackUris) {
-                        const trackId = uri.replace('spotify:track:', '');
-                        const exists = decrypted.tracks.items.some(i => i.track.id === trackId);
+                    const tracksToAdd: Track[] = [];
+                    if (track && track.id) {
+                        tracksToAdd.push(track);
+                    }
+                    if (uris) {
+                        const rawUris = (Array.isArray(uris) ? uris : [uris]).filter(Boolean);
+                        for (const uri of rawUris) {
+                            if (!uri || typeof uri !== 'string') continue;
+                            const trackId = uri.replace('spotify:track:', '');
+                            if (!tracksToAdd.some(t => t.id === trackId)) {
+                                tracksToAdd.push({
+                                    id: trackId,
+                                    uri: `spotify:track:${trackId}`,
+                                    name: 'Track ' + trackId,
+                                    artists: [{ name: 'Artist' }],
+                                    album: { name: 'Album', images: [] },
+                                    duration_ms: 180000
+                                });
+                            }
+                        }
+                    }
+
+                    for (const t of tracksToAdd) {
+                        const exists = decrypted.tracks.items.some(i => i.track.id === t.id);
                         if (!exists) {
-                            const trackItem: Track = track || {
-                                id: trackId,
-                                uri: `spotify:track:${trackId}`,
-                                name: 'Track ' + trackId,
-                                artists: [{ name: 'Artist' }],
-                                album: { name: 'Album', images: [{ url: 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=300' }] },
-                                duration_ms: 180000
-                            };
-                            decrypted.tracks.items.push({ track: trackItem, added_at: new Date().toISOString() });
+                            decrypted.tracks.items.push({ track: t, added_at: new Date().toISOString() });
                         }
                     }
 
                     decrypted.tracks.total = decrypted.tracks.items.length;
+
+                    // Spotify style poster: only add when 4 or more tracks, showing the 4 album arts!
+                    const albumArtList = decrypted.tracks.items
+                        .map(i => i.track?.album?.images?.[0]?.url)
+                        .filter(Boolean) as string[];
+
+                    if (albumArtList.length >= 4) {
+                        decrypted.images = albumArtList.slice(0, 4).map(url => ({ url }));
+                    } else if (albumArtList.length > 0) {
+                        decrypted.images = [{ url: albumArtList[0] }];
+                    } else {
+                        decrypted.images = [];
+                    }
+
                     const reencrypted = encryptPayload(decrypted, req.user.userId);
                     rec.ciphertext = reencrypted.ciphertext;
                     rec.iv = reencrypted.iv;
@@ -255,12 +307,14 @@ router.post('/playlists/:id/tracks', async (req, res) => {
             }
         }
 
-        const updated = localLibrary.addTracksToPlaylist(id, Array.isArray(uris) ? uris : [uris]);
+        const fallbackUris = track ? [track.uri || `spotify:track:${track.id}`] : (Array.isArray(uris) ? uris : [uris]).filter(Boolean);
+        const updated = localLibrary.addTracksToPlaylist(id, fallbackUris, track);
         if (!updated) {
             return res.status(404).json({ error: 'Playlist not found in library' });
         }
         res.json(updated);
     } catch (err: any) {
+        console.error('[/playlists/:id/tracks POST] Error:', err);
         res.status(500).json({ error: 'Failed to add tracks', details: err.message });
     }
 });
@@ -275,9 +329,23 @@ router.delete('/playlists/:id/tracks', async (req, res) => {
             if (rec) {
                 const decrypted = decryptPayload<Playlist>(rec.ciphertext, rec.iv, rec.tag, req.user.userId);
                 if (decrypted && decrypted.tracks.items) {
-                    const idsToRemove = new Set((Array.isArray(uris) ? uris : [uris]).map((u: string) => u.replace('spotify:track:', '')));
+                    const rawUris = (Array.isArray(uris) ? uris : [uris]).filter(Boolean);
+                    const idsToRemove = new Set(rawUris.map((u: string) => typeof u === 'string' ? u.replace('spotify:track:', '') : ''));
                     decrypted.tracks.items = decrypted.tracks.items.filter(item => !idsToRemove.has(item.track.id));
                     decrypted.tracks.total = decrypted.tracks.items.length;
+
+                    // Update 4-cover poster if below 4 tracks
+                    const albumArtList = decrypted.tracks.items
+                        .map(i => i.track?.album?.images?.[0]?.url)
+                        .filter(Boolean) as string[];
+
+                    if (albumArtList.length >= 4) {
+                        decrypted.images = albumArtList.slice(0, 4).map(url => ({ url }));
+                    } else if (albumArtList.length > 0) {
+                        decrypted.images = [{ url: albumArtList[0] }];
+                    } else {
+                        decrypted.images = [];
+                    }
 
                     const reencrypted = encryptPayload(decrypted, req.user.userId);
                     rec.ciphertext = reencrypted.ciphertext;
@@ -291,12 +359,13 @@ router.delete('/playlists/:id/tracks', async (req, res) => {
             }
         }
 
-        const updated = localLibrary.removeTracksFromPlaylist(id, Array.isArray(uris) ? uris : [uris]);
+        const updated = localLibrary.removeTracksFromPlaylist(id, (Array.isArray(uris) ? uris : [uris]).filter(Boolean));
         if (!updated) {
             return res.status(404).json({ error: 'Playlist not found in library' });
         }
         res.json(updated);
     } catch (err: any) {
+        console.error('[/playlists/:id/tracks DELETE] Error:', err);
         res.status(500).json({ error: 'Failed to remove tracks', details: err.message });
     }
 });
@@ -525,6 +594,129 @@ router.get('/browse/new-releases', async (req, res) => {
     }
 });
 
+// Real-time Albums Search (Spotify + Apple Music)
+router.get(['/albums/search', '/browse/albums/search'], async (req, res) => {
+    const q = req.query.q;
+    if (!q || typeof q !== 'string' || !q.trim()) {
+        return res.json([]);
+    }
+    try {
+        const metadataPlugin = pluginRegistry.getMetadataPlugin();
+        if (metadataPlugin.searchAlbums) {
+            const albums = await metadataPlugin.searchAlbums(q, 25);
+            return res.json(albums);
+        }
+        res.json([]);
+    } catch (err: any) {
+        console.error('[/api/albums/search] Error:', err.message);
+        res.status(500).json({ error: 'Album search failed', details: err.message });
+    }
+});
+
+// Album Details & Songs View (Spotify + YouTube metadata)
+router.get(['/albums/:id', '/browse/albums/:id'], async (req, res) => {
+    try {
+        const { id } = req.params;
+        const albumNameHint = (req.query.name as string) || '';
+        const artistHint = (req.query.artist as string) || '';
+        const metadataPlugin = pluginRegistry.getMetadataPlugin();
+
+        // 0. If Spotify Playlist or Album ID (e.g. '37i9dQZF1DX4JAvHpjipBk' for New Music Friday, or 22-char Spotify album ID)
+        if (id.startsWith('37i9dQZF') || (id.length === 22 && !/^\d+$/.test(id))) {
+            try {
+                // Try Spotify Album Embed first if not a playlist ID
+                if (metadataPlugin.getAlbum && !id.startsWith('37i9dQZF')) {
+                    const albumData = await metadataPlugin.getAlbum(id);
+                    if (albumData && albumData.tracks?.length) {
+                        return res.json(albumData);
+                    }
+                }
+
+                // Try Spotify Playlist Embed
+                const playlist = await metadataPlugin.getPlaylist(id);
+                if (playlist && playlist.tracks?.items?.length) {
+                    const tracks = playlist.tracks.items.map((i: any) => i.track).filter(Boolean);
+                    const coverUrl = playlist.images?.[0]?.url || 'https://i.scdn.co/image/ab67706f00000002b299b91ee0cfcac7d8c15f1c';
+                    return res.json({
+                        id,
+                        name: playlist.name || albumNameHint || 'New Music Friday',
+                        artists: [{ name: artistHint || 'Tate McRae' }],
+                        images: [{ url: coverUrl }],
+                        release_date: '2024',
+                        total_tracks: playlist.tracks.total || tracks.length,
+                        genres: ['Pop', 'New Releases'],
+                        tracks
+                    });
+                }
+            } catch (pErr: any) {
+                console.warn('[Albums API] Spotify album/playlist fetch notice:', pErr.message);
+            }
+        }
+
+        // 1. If numeric iTunes album ID
+        if (/^\d+$/.test(id)) {
+            try {
+                const itunesRes = await axios.get(`https://itunes.apple.com/lookup?id=${id}&entity=song`, { timeout: 6000 });
+                const results = itunesRes.data?.results;
+                if (Array.isArray(results) && results.length > 0) {
+                    const collection = results.find((r: any) => r.wrapperType === 'collection') || results[0];
+                    const rawImg = collection.artworkUrl100 || '';
+                    const hdImg = rawImg ? rawImg.replace(/\d+x\d+bb/, '600x600bb') : '';
+                    const tracks = results
+                        .filter((r: any) => r.wrapperType === 'track')
+                        .map((t: any) => ({
+                            id: `it_${t.trackId}`,
+                            uri: `spotify:track:it_${t.trackId}`,
+                            name: t.trackName,
+                            artists: [{ name: t.artistName }],
+                            album: {
+                                name: t.collectionName || collection.collectionName,
+                                images: hdImg ? [{ url: hdImg }] : []
+                            },
+                            duration_ms: t.trackTimeMillis || 180000,
+                            preview_url: t.previewUrl || null
+                        }));
+
+                    return res.json({
+                        id,
+                        name: collection.collectionName || albumNameHint || 'Album',
+                        artists: [{ name: collection.artistName || artistHint || 'Artist' }],
+                        images: hdImg ? [{ url: hdImg }] : [{ url: `https://ui-avatars.com/api/?name=${encodeURIComponent(albumNameHint || 'Album')}&background=181824&color=f5d0b5&size=500&bold=true` }],
+                        release_date: collection.releaseDate ? collection.releaseDate.substring(0, 10) : '2024',
+                        total_tracks: collection.trackCount || tracks.length,
+                        genres: collection.primaryGenreName ? [collection.primaryGenreName] : ['Music'],
+                        tracks
+                    });
+                }
+            } catch (err: any) {
+                console.warn('[Albums API] iTunes lookup notice:', err.message);
+            }
+        }
+
+        // 2. Search Spotify & YouTube for album tracks
+        const queryTerm = (albumNameHint && artistHint)
+            ? `${albumNameHint} ${artistHint}`
+            : (albumNameHint || artistHint || id.replace(/^(sp_|album-|it_)/, '').replace(/-/g, ' '));
+
+        const tracks = await metadataPlugin.searchTracks(queryTerm, 20);
+        const coverImg = tracks[0]?.album?.images?.[0]?.url || `https://ui-avatars.com/api/?name=${encodeURIComponent(albumNameHint || 'Album')}&background=181824&color=f5d0b5&size=500&bold=true`;
+
+        return res.json({
+            id,
+            name: albumNameHint || (tracks[0]?.album?.name || 'Album'),
+            artists: artistHint ? [{ name: artistHint }] : (tracks[0]?.artists || [{ name: 'Various Artists' }]),
+            images: [{ url: coverImg }],
+            release_date: '2024',
+            total_tracks: tracks.length,
+            genres: ['Pop', 'Music'],
+            tracks
+        });
+    } catch (err: any) {
+        console.error('[/api/albums/:id] Error:', err);
+        res.status(500).json({ error: 'Failed to get album details', details: err.message });
+    }
+});
+
 // Top artists (supports ?limit=50)
 router.get(['/me/top/artists', '/artists/top'], async (req, res) => {
     try {
@@ -537,7 +729,7 @@ router.get(['/me/top/artists', '/artists/top'], async (req, res) => {
     }
 });
 
-// Live Worldwide Artist Search (iTunes + Deezer real-time catalog)
+// Live Worldwide Artist Search (Spotify + YouTube real-time catalog)
 router.get('/artists/search', async (req, res) => {
     try {
         const query = (req.query.q as string) || '';
@@ -921,12 +1113,22 @@ router.delete('/me/tracks', async (req, res) => {
 });
 
 // Recommendations - Personalized per account based on liked songs and listening history!
+// Only active when account is logged in!
 router.get('/recommendations', async (req, res) => {
     try {
+        // Recommendation system only starts working when account is logged in
+        if (!req.user) {
+            return res.json({
+                authenticated: false,
+                message: 'Recommendation system starts working when logged in',
+                tracks: []
+            });
+        }
+
         const metadataPlugin = pluginRegistry.getMetadataPlugin();
 
         // If authenticated user, personalize based on their likes and history!
-        if (req.user && isDbConnected()) {
+        if (isDbConnected()) {
             const userId = req.user.userId;
             const likedRecords = await EncryptedLikedTrack.find({ userId }).sort({ addedAt: -1 }).limit(10);
             const historyRecords = await ListeningHistory.find({ userId }).sort({ playedAt: -1 }).limit(10);
@@ -958,6 +1160,7 @@ router.get('/recommendations', async (req, res) => {
                 const personalized = await metadataPlugin.searchTracks(targetArtist, 25);
                 if (personalized && personalized.length > 0) {
                     return res.json({
+                        authenticated: true,
                         tracks: personalized,
                         personalizedFor: targetArtist,
                         source: historyArtists.includes(targetArtist) ? 'history' : 'likes'
@@ -966,12 +1169,13 @@ router.get('/recommendations', async (req, res) => {
             }
         }
 
+        // Fallback for new authenticated account with no history yet
         const tracks = await metadataPlugin.searchTracks('Global Pop Hits', 25);
         if (tracks && tracks.length > 0) {
-            return res.json({ tracks });
+            return res.json({ authenticated: true, tracks, personalizedFor: 'New Member Mix' });
         }
         const fallback = await metadataPlugin.getTopTracks();
-        res.json({ tracks: fallback });
+        res.json({ authenticated: true, tracks: fallback, personalizedFor: 'Top Charts' });
     } catch (err: any) {
         res.status(500).json({ error: 'Failed to get recommendations', details: err.message });
     }
