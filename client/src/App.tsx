@@ -276,6 +276,17 @@ const App: React.FC = () => {
     }
   }, [fetchLikedSongs]);
 
+  // Ping backend every 8 minutes while browser tab is open to prevent Render free-tier spin-down
+  useEffect(() => {
+    const pingBackend = () => {
+      axios.get('/health').catch(() => {});
+    };
+    pingBackend();
+    const interval = setInterval(pingBackend, 8 * 60 * 1000);
+    return () => clearInterval(interval);
+  }, []);
+
+
   const handleAuthSuccess = (token: string, authUser: any) => {
     localStorage.setItem('slothify_auth_token', token);
     axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;

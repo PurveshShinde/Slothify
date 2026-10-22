@@ -67,11 +67,34 @@ app.use('/api/youtube', youtubeRoutes);
 app.use('/api/audio', audioRoutes);
 app.use('/api/saavn', saavnRoutes);
 
-// Health check endpoint for Render
-app.get('/health', (req, res) => {
-  res.json({ status: 'ok', service: 'slothify-backend' });
+// Health check endpoints for Render and keep-alive monitoring
+app.get(['/health', '/api/health'], (req, res) => {
+  res.json({
+    status: 'ok',
+    service: 'slothify-backend',
+    uptime: Math.floor(process.uptime()),
+    timestamp: new Date().toISOString()
+  });
 });
 
 app.listen(Number(PORT), '0.0.0.0', () => {
   console.log(`Slothify Server running on port ${PORT}`);
+
+  // Self-ping Keep-Alive service to prevent Render Free Tier from idling/sleeping
+  const PING_INTERVAL_MS = 12 * 60 * 1000; // Ping every 12 minutes (under Render's 15-min sleep threshold)
+  const pingTargetUrl = (process.env.RENDER_EXTERNAL_URL || process.env.BACKEND_URL || 'https://slothify-server.onrender.com').replace(/\/$/, '');
+
+  console.log(`[KeepAlive] Service active. Keeping backend alive at ${pingTargetUrl}/health`);
+  setInterval(async () => {
+    try {
+      const res = await fetch(`${pingTargetUrl}/health`, {
+        signal: AbortSignal.timeout(15000),
+        headers: { 'User-Agent': 'SlothifyKeepAlive/1.0' }
+      });
+      console.log(`[KeepAlive] Pinged ${pingTargetUrl}/health - Status: ${res.status}`);
+    } catch (err: any) {
+      console.warn(`[KeepAlive] Ping warning: ${err.message}`);
+    }
+  }, PING_INTERVAL_MS);
 });
+

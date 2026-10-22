@@ -1,4 +1,5 @@
 import axios from 'axios';
+import crypto from 'crypto';
 import type { MetadataPlugin, Track, Playlist, Artist, Category } from '../interfaces.js';
 
 const USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
@@ -75,39 +76,161 @@ function cleanSearchQuery(q: string): string {
         .trim();
 }
 
-let cachedSpotifyToken: { token: string; expiresAt: number } | null = null;
+function base32Decode(str: string): Buffer {
+    const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
+    const cleaned = str.toUpperCase().replace(/=+$/, '');
+    let bits = '';
+    for (let i = 0; i < cleaned.length; i++) {
+        const val = alphabet.indexOf(cleaned[i]);
+        if (val === -1) continue;
+        bits += val.toString(2).padStart(5, '0');
+    }
+    const bytes: number[] = [];
+    for (let i = 0; i + 8 <= bits.length; i += 8) {
+        bytes.push(parseInt(bits.slice(i, i + 8), 2));
+    }
+    return Buffer.from(bytes);
+}
 
-export async function getSpotifyAccessToken(): Promise<string | null> {
-    const clientId = process.env.SPOTIFY_CLIENT_ID;
-    const clientSecret = process.env.SPOTIFY_CLIENT_SECRET;
-    if (!clientId || !clientSecret) return null;
+function generateSpotubeTOTP(secretBase32: string, timestampSeconds: number): string {
+    const period = 30;
+    const counter = Math.floor(timestampSeconds / period);
+    const key = base32Decode(secretBase32);
 
-    if (cachedSpotifyToken && cachedSpotifyToken.expiresAt > Date.now()) {
-        return cachedSpotifyToken.token;
+    const buf = Buffer.alloc(8);
+    buf.writeBigUInt64BE(BigInt(counter));
+
+    const hmac = crypto.createHmac('sha1', key);
+    hmac.update(buf);
+    const signature = hmac.digest();
+
+    const offset = signature[signature.length - 1] & 0xf;
+    const binary =
+        ((signature[offset] & 0x7f) << 24) |
+        ((signature[offset + 1] & 0xff) << 16) |
+        ((signature[offset + 2] & 0xff) << 8) |
+        (signature[offset + 3] & 0xff);
+
+    return (binary % 1000000).toString().padStart(6, '0');
+}
+
+let cachedSpotubeToken: { token: string; expiresAt: number } | null = null;
+
+export async function getSpotubeSpotifyToken(): Promise<string | null> {
+    if (cachedSpotubeToken && cachedSpotubeToken.expiresAt > Date.now()) {
+        return cachedSpotubeToken.token;
     }
 
     try {
-        const auth = Buffer.from(`${clientId.trim()}:${clientSecret.trim()}`).toString('base64');
-        const res = await axios.post('https://accounts.spotify.com/api/token', 'grant_type=client_credentials', {
+        let nuance = { s: 'GM3TMMJTGYZTQNZVGM4DINJZHA4TGOBYGMZTCMRTGEYDSMJRHE4TEOBUG4YTCMRUGQ4DQOJUGQYTAMRRGA2TCMJSHE3TCMBY', v: 61 };
+        try {
+            const nuancesRes = await fetch('https://gist.githubusercontent.com/raw/22ed9c6ba463899e933427f7de1f0eef/nuances.json', { signal: AbortSignal.timeout(3000) });
+            if (nuancesRes.ok) {
+                const nuances = await nuancesRes.json() as any[];
+                const latest = nuances.sort((a, b) => b.v - a.v)[0];
+                if (latest && latest.s) nuance = latest;
+            }
+        } catch {}
+
+        let serverTime = Math.floor(Date.now() / 1000);
+        try {
+            const timeRes = await fetch('https://open.spotify.com/api/server-time', { signal: AbortSignal.timeout(3000) });
+            if (timeRes.ok) {
+                const timeData = await timeRes.json() as any;
+                if (timeData.serverTime) serverTime = timeData.serverTime;
+            }
+        } catch {}
+
+        const totp = generateSpotubeTOTP(nuance.s, serverTime);
+        const tokenUrl = `https://open.spotify.com/api/token?reason=transport&productType=web-player&totp=${totp}&totpServer=${totp}&totpVer=${nuance.v}`;
+
+        const tokenRes = await fetch(tokenUrl, {
             headers: {
-                'Authorization': `Basic ${auth}`,
-                'Content-Type': 'application/x-www-form-urlencoded'
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+                'Accept': 'application/json'
             },
-            timeout: 5000
+            signal: AbortSignal.timeout(5000)
         });
 
-        if (res.data?.access_token) {
-            cachedSpotifyToken = {
-                token: res.data.access_token,
-                expiresAt: Date.now() + ((res.data.expires_in || 3600) - 60) * 1000
-            };
-            return cachedSpotifyToken.token;
+        if (tokenRes.ok) {
+            const tokenData = await tokenRes.json() as any;
+            if (tokenData.accessToken) {
+                cachedSpotubeToken = {
+                    token: tokenData.accessToken,
+                    expiresAt: Number(tokenData.accessTokenExpirationTimestampMs) || (Date.now() + 3500 * 1000)
+                };
+                return cachedSpotubeToken.token;
+            }
         }
-    } catch (err: any) {
-        console.warn('[SpotifyScraperPlugin] Failed to obtain Spotify access token:', err.message);
+    } catch (e: any) {
+        console.warn('[SpotifyScraperPlugin] Spotube token fetch warning:', e.message);
     }
     return null;
 }
+
+export async function searchSpotubeSpotifyTracks(cleanQuery: string, limit: number = 20): Promise<Track[]> {
+    const token = await getSpotubeSpotifyToken();
+    if (!token) return [];
+
+    try {
+        const gqlVariables = {
+            searchTerm: cleanQuery,
+            offset: 0,
+            limit: Math.min(limit, 30),
+            numberOfTopResults: 5,
+            includeAudiobooks: false,
+            includePreReleases: true
+        };
+        const gqlExtensions = {
+            persistedQuery: {
+                version: 1,
+                sha256Hash: 'bc1ca2fcd0ba1013a0fc88e6cc4f190af501851e3dafd3e1ef85840297694428'
+            }
+        };
+
+        const gqlUrl = `https://api-partner.spotify.com/pathfinder/v1/query?operationName=searchTracks&variables=${encodeURIComponent(JSON.stringify(gqlVariables))}&extensions=${encodeURIComponent(JSON.stringify(gqlExtensions))}`;
+
+        const gqlRes = await fetch(gqlUrl, {
+            headers: {
+                'Authorization': `Bearer ${token}`,
+                'Accept': 'application/json',
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36'
+            },
+            signal: AbortSignal.timeout(5000)
+        });
+
+        if (!gqlRes.ok) return [];
+
+        const gqlData = await gqlRes.json() as any;
+        const items = gqlData.data?.searchV2?.tracksV2?.items || [];
+        const tracks: Track[] = [];
+
+        for (const wrapper of items) {
+            const t = wrapper.item?.data;
+            if (!t || !t.id) continue;
+
+            const coverArt = t.albumOfTrack?.coverArt?.sources || [];
+
+            tracks.push({
+                id: t.id,
+                uri: t.uri || `spotify:track:${t.id}`,
+                name: t.name,
+                artists: (t.artists?.items || []).map((a: any) => ({ name: a.profile?.name || 'Unknown Artist' })),
+                album: {
+                    name: t.albumOfTrack?.name || t.name,
+                    images: coverArt.map((img: any) => ({ url: img.url }))
+                },
+                duration_ms: t.duration?.totalMilliseconds || 180000,
+                preview_url: null
+            });
+        }
+        return tracks;
+    } catch (e: any) {
+        console.warn('[SpotifyScraperPlugin] Spotube GQL search error:', e.message);
+        return [];
+    }
+}
+
 
 export async function searchYouTubeInnertubeTracks(cleanQuery: string, limit: number = 20): Promise<Track[]> {
     try {
@@ -419,37 +542,14 @@ export class SpotifyScraperPlugin implements MetadataPlugin {
         const cleanQuery = cleanSearchQuery(raw);
         const fetchLimit = Math.max(limit * 2, 30);
 
-        // 0. Official Spotify Web API Search (When credentials configured)
-        const spotifyToken = await getSpotifyAccessToken();
-        if (spotifyToken) {
-            try {
-                const sRes = await axios.get('https://api.spotify.com/v1/search', {
-                    headers: { 'Authorization': `Bearer ${spotifyToken}` },
-                    params: {
-                        q: cleanQuery,
-                        type: 'track',
-                        limit: Math.min(limit, 50)
-                    },
-                    timeout: 5000
-                });
-
-                if (Array.isArray(sRes.data?.tracks?.items) && sRes.data.tracks.items.length > 0) {
-                    return sRes.data.tracks.items.map((t: any) => ({
-                        id: t.id,
-                        uri: t.uri || `spotify:track:${t.id}`,
-                        name: t.name,
-                        artists: t.artists.map((a: any) => ({ name: a.name })),
-                        album: {
-                            name: t.album.name,
-                            images: (t.album.images || []).map((img: any) => ({ url: img.url }))
-                        },
-                        duration_ms: t.duration_ms,
-                        preview_url: t.preview_url || null
-                    }));
-                }
-            } catch (err: any) {
-                console.warn('[SpotifyScraper] Official Spotify API search failed, falling back:', err.message);
+        // 0. Spotube Unofficial Spotify GQL Search (No API keys or Developer credentials needed)
+        try {
+            const spotubeTracks = await searchSpotubeSpotifyTracks(cleanQuery, limit);
+            if (spotubeTracks.length > 0) {
+                return spotubeTracks;
             }
+        } catch (spotubeErr: any) {
+            console.warn('[SpotifyScraper] Spotube search warning, falling back to multi-engine:', spotubeErr.message);
         }
 
         // 3. Fallback Multi-Engine Parallel Search: YouTube Innertube + JioSaavn + iTunes
