@@ -219,11 +219,71 @@ export async function getStreamUrl(videoId: string): Promise<string> {
     }
 }
 
+export async function searchYouTubeInnertube(query: string): Promise<AudioSearchResult | null> {
+    try {
+        const response = await fetch('https://www.youtube.com/youtubei/v1/search?prettyPrint=false', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36'
+            },
+            body: JSON.stringify({
+                context: {
+                    client: {
+                        clientName: 'WEB',
+                        clientVersion: '2.20240101.00.00'
+                    }
+                },
+                query
+            }),
+            signal: AbortSignal.timeout(5000)
+        });
+
+        if (!response.ok) return null;
+
+        const data = (await response.json()) as any;
+        const contents = data.contents?.twoColumnSearchResultsRenderer?.primaryContents?.sectionListRenderer?.contents;
+        if (!Array.isArray(contents)) return null;
+
+        for (const section of contents) {
+            const items = section.itemSectionRenderer?.contents;
+            if (!Array.isArray(items)) continue;
+
+            for (const item of items) {
+                const vr = item.videoRenderer;
+                if (!vr || !vr.videoId) continue;
+
+                const durationStr = vr.lengthText?.simpleText || '3:00';
+                const parts = durationStr.split(':').map(Number);
+                let duration = 180;
+                if (parts.length === 2) duration = parts[0] * 60 + parts[1];
+                else if (parts.length === 3) duration = parts[0] * 3600 + parts[1] * 60 + parts[2];
+
+                const thumbs = vr.thumbnail?.thumbnails;
+                const thumbnail = thumbs && thumbs.length > 0 ? thumbs[thumbs.length - 1].url : '';
+
+                return {
+                    videoId: vr.videoId,
+                    title: vr.title?.runs?.[0]?.text || '',
+                    duration,
+                    thumbnail,
+                    streamToken: 'direct-stream'
+                };
+            }
+        }
+    } catch (err: any) {
+        console.warn('[YouTubeAudioPlugin] Innertube search warning:', err.message);
+    }
+    return null;
+}
+
 export class YouTubeAudioPlugin implements AudioPlugin {
     readonly name = 'YouTubeAudio';
 
     /**
      * Search YouTube with in-memory caching for instant repeated queries
+     * Uses resilient YouTube Innertube API first (works on cloud servers & Render without 429),
+     * followed by yts fallback.
      */
     async search(query: string): Promise<AudioSearchResult> {
         const cleanQuery = query.trim().toLowerCase();
@@ -233,29 +293,45 @@ export class YouTubeAudioPlugin implements AudioPlugin {
             return cached;
         }
 
-        const r = await yts(query.trim());
-        const videos = r.videos;
-
-        if (!videos || videos.length === 0) {
-            throw new Error(`No YouTube video found for query: ${query}`);
+        // 1. Try Innertube API (Resilient against cloud datacenter blocks)
+        const innertubeResult = await searchYouTubeInnertube(query.trim());
+        if (innertubeResult) {
+            if (searchCache.size > 500) {
+                const firstKey = searchCache.keys().next().value;
+                if (firstKey) searchCache.delete(firstKey);
+            }
+            searchCache.set(cleanQuery, innertubeResult);
+            return innertubeResult;
         }
 
-        const video = videos[0];
-        const result: AudioSearchResult = {
-            videoId: video.videoId,
-            title: video.title,
-            duration: video.seconds,
-            thumbnail: video.thumbnail || '',
-            streamToken: 'direct-stream'
-        };
+        // 2. Fallback to yts
+        try {
+            const r = await yts(query.trim());
+            const videos = r.videos;
 
-        if (searchCache.size > 500) {
-            const firstKey = searchCache.keys().next().value;
-            if (firstKey) searchCache.delete(firstKey);
+            if (videos && videos.length > 0) {
+                const video = videos[0];
+                const result: AudioSearchResult = {
+                    videoId: video.videoId,
+                    title: video.title,
+                    duration: video.seconds,
+                    thumbnail: video.thumbnail || '',
+                    streamToken: 'direct-stream'
+                };
+
+                if (searchCache.size > 500) {
+                    const firstKey = searchCache.keys().next().value;
+                    if (firstKey) searchCache.delete(firstKey);
+                }
+                searchCache.set(cleanQuery, result);
+
+                return result;
+            }
+        } catch (ytsErr: any) {
+            console.warn('[YouTubeAudioPlugin] yts fallback error:', ytsErr.message);
         }
-        searchCache.set(cleanQuery, result);
 
-        return result;
+        throw new Error(`No YouTube video found for query: ${query}`);
     }
 
     /**

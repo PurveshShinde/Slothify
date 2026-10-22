@@ -75,6 +75,199 @@ function cleanSearchQuery(q: string): string {
         .trim();
 }
 
+let cachedSpotifyToken: { token: string; expiresAt: number } | null = null;
+
+export async function getSpotifyAccessToken(): Promise<string | null> {
+    const clientId = process.env.SPOTIFY_CLIENT_ID;
+    const clientSecret = process.env.SPOTIFY_CLIENT_SECRET;
+    if (!clientId || !clientSecret) return null;
+
+    if (cachedSpotifyToken && cachedSpotifyToken.expiresAt > Date.now()) {
+        return cachedSpotifyToken.token;
+    }
+
+    try {
+        const auth = Buffer.from(`${clientId.trim()}:${clientSecret.trim()}`).toString('base64');
+        const res = await axios.post('https://accounts.spotify.com/api/token', 'grant_type=client_credentials', {
+            headers: {
+                'Authorization': `Basic ${auth}`,
+                'Content-Type': 'application/x-www-form-urlencoded'
+            },
+            timeout: 5000
+        });
+
+        if (res.data?.access_token) {
+            cachedSpotifyToken = {
+                token: res.data.access_token,
+                expiresAt: Date.now() + ((res.data.expires_in || 3600) - 60) * 1000
+            };
+            return cachedSpotifyToken.token;
+        }
+    } catch (err: any) {
+        console.warn('[SpotifyScraperPlugin] Failed to obtain Spotify access token:', err.message);
+    }
+    return null;
+}
+
+export async function searchYouTubeInnertubeTracks(cleanQuery: string, limit: number = 20): Promise<Track[]> {
+    try {
+        const response = await fetch('https://www.youtube.com/youtubei/v1/search?prettyPrint=false', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36'
+            },
+            body: JSON.stringify({
+                context: { client: { clientName: 'WEB', clientVersion: '2.20240101.00.00' } },
+                query: cleanQuery
+            }),
+            signal: AbortSignal.timeout(4500)
+        });
+
+        if (!response.ok) return [];
+
+        const data = (await response.json()) as any;
+        const contents = data.contents?.twoColumnSearchResultsRenderer?.primaryContents?.sectionListRenderer?.contents;
+        if (!Array.isArray(contents)) return [];
+
+        const tracks: Track[] = [];
+        for (const section of contents) {
+            const items = section.itemSectionRenderer?.contents;
+            if (!Array.isArray(items)) continue;
+
+            for (const item of items) {
+                const vr = item.videoRenderer;
+                if (!vr || !vr.videoId) continue;
+
+                const rawTitle = vr.title?.runs?.[0]?.text || '';
+                let title = rawTitle;
+                let artist = vr.ownerText?.runs?.[0]?.text || 'Unknown Artist';
+
+                if (rawTitle.includes(' - ')) {
+                    const parts = rawTitle.split(' - ');
+                    artist = parts[0].trim();
+                    title = parts.slice(1).join(' - ').trim();
+                }
+
+                title = title
+                    .replace(/\s*\((Official\s*)?(Music\s*)?Video\)/gi, '')
+                    .replace(/\s*\[(Official\s*)?(Music\s*)?Video\]/gi, '')
+                    .replace(/\s*\((Audio|Official Audio|Lyrics?)\)/gi, '')
+                    .replace(/\s*\[(Audio|Official Audio|Lyrics?)\]/gi, '')
+                    .replace(/\s*\(HD\)/gi, '')
+                    .trim();
+
+                const thumbs = vr.thumbnail?.thumbnails;
+                const imgUrl = thumbs && thumbs.length > 0 ? thumbs[thumbs.length - 1].url : '';
+
+                tracks.push({
+                    id: vr.videoId,
+                    uri: `spotify:track:${vr.videoId}`,
+                    name: title,
+                    artists: [{ name: artist }],
+                    album: {
+                        name: title,
+                        images: [{ url: imgUrl }]
+                    },
+                    duration_ms: 180000,
+                    preview_url: null
+                });
+
+                if (tracks.length >= limit) break;
+            }
+            if (tracks.length >= limit) break;
+        }
+        return tracks;
+    } catch {
+        return [];
+    }
+}
+
+function getLevenshteinDistance(a: string, b: string): number {
+    if (a === b) return 0;
+    if (!a.length) return b.length;
+    if (!b.length) return a.length;
+    const matrix: number[][] = [];
+    for (let i = 0; i <= b.length; i++) matrix[i] = [i];
+    for (let j = 0; j <= a.length; j++) matrix[0][j] = j;
+    for (let i = 1; i <= b.length; i++) {
+        for (let j = 1; j <= a.length; j++) {
+            if (b.charAt(i - 1) === a.charAt(j - 1)) {
+                matrix[i][j] = matrix[i - 1][j - 1];
+            } else {
+                matrix[i][j] = Math.min(
+                    matrix[i - 1][j - 1] + 1,
+                    matrix[i][j - 1] + 1,
+                    matrix[i - 1][j] + 1
+                );
+            }
+        }
+    }
+    return matrix[b.length][a.length];
+}
+
+function normalizeSearchString(s: string): string {
+    return (s || '')
+        .toLowerCase()
+        .replace(/["'’`]/g, '')
+        .replace(/[^a-z0-9\s]/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+}
+
+function scoreTrackRelevance(track: Track, rawQuery: string, originalIndex: number): number {
+    const normQ = normalizeSearchString(rawQuery);
+    const qWords = normQ.split(/\s+/).filter(w => w.length > 0);
+    const normTitle = normalizeSearchString(track.name);
+    const normArtist = normalizeSearchString(track.artists[0]?.name || '');
+    const normCombined = `${normTitle} ${normArtist}`.trim();
+
+    let score = 0;
+
+    // Exact or near-exact title/combined string match
+    const dist = getLevenshteinDistance(normTitle, normQ);
+    if (normTitle === normQ || (dist <= 1 && originalIndex <= 2 && normTitle.length >= 4)) {
+        score += 150;
+    } else if (normCombined === normQ) {
+        score += 150;
+    } else if (dist <= 1 && normTitle.length >= 4) {
+        score += 135;
+    } else if (normTitle.startsWith(normQ) || normCombined.startsWith(normQ)) {
+        score += 90;
+    } else if (normTitle.includes(normQ) || normCombined.includes(normQ)) {
+        score += 60;
+    }
+
+    let titleWordsMatched = 0;
+    let artistWordsMatched = 0;
+
+    for (const w of qWords) {
+        const titleWords = normTitle.split(/\s+/);
+        const matchesTitle = titleWords.some(tw => tw === w || (tw.length >= 4 && getLevenshteinDistance(tw, w) <= 1));
+        if (matchesTitle) {
+            titleWordsMatched++;
+            score += 25;
+        }
+
+        const artistWords = normArtist.split(/\s+/);
+        const matchesArtist = artistWords.some(aw => aw === w || (aw.length >= 4 && getLevenshteinDistance(aw, w) <= 1));
+        if (matchesArtist) {
+            artistWordsMatched++;
+            score += 35;
+        }
+    }
+
+    // High confidence boost if both title and artist words match query
+    if (titleWordsMatched > 0 && artistWordsMatched > 0) {
+        score += 60;
+    }
+
+    // Provider rank / popularity signal: top-ranked tracks on streaming engines get popularity boost
+    score += Math.max(0, 30 - originalIndex * 1.5);
+
+    return score;
+}
+
 export class SpotifyScraperPlugin implements MetadataPlugin {
     readonly name = 'SpotifyScraper';
 
@@ -221,97 +414,47 @@ export class SpotifyScraperPlugin implements MetadataPlugin {
             }
         }
 
-function getLevenshteinDistance(a: string, b: string): number {
-    if (a === b) return 0;
-    if (!a.length) return b.length;
-    if (!b.length) return a.length;
-    const matrix: number[][] = [];
-    for (let i = 0; i <= b.length; i++) matrix[i] = [i];
-    for (let j = 0; j <= a.length; j++) matrix[0][j] = j;
-    for (let i = 1; i <= b.length; i++) {
-        for (let j = 1; j <= a.length; j++) {
-            if (b.charAt(i - 1) === a.charAt(j - 1)) {
-                matrix[i][j] = matrix[i - 1][j - 1];
-            } else {
-                matrix[i][j] = Math.min(
-                    matrix[i - 1][j - 1] + 1,
-                    matrix[i][j - 1] + 1,
-                    matrix[i - 1][j] + 1
-                );
-            }
-        }
-    }
-    return matrix[b.length][a.length];
-}
-
-function normalizeSearchString(s: string): string {
-    return (s || '')
-        .toLowerCase()
-        .replace(/["'’`]/g, '')
-        .replace(/[^a-z0-9\s]/g, ' ')
-        .replace(/\s+/g, ' ')
-        .trim();
-}
-
-function scoreTrackRelevance(track: Track, rawQuery: string, originalIndex: number): number {
-    const normQ = normalizeSearchString(rawQuery);
-    const qWords = normQ.split(/\s+/).filter(w => w.length > 0);
-    const normTitle = normalizeSearchString(track.name);
-    const normArtist = normalizeSearchString(track.artists[0]?.name || '');
-    const normCombined = `${normTitle} ${normArtist}`.trim();
-
-    let score = 0;
-
-    // Exact or near-exact title/combined string match
-    const dist = getLevenshteinDistance(normTitle, normQ);
-    if (normTitle === normQ || (dist <= 1 && originalIndex <= 2 && normTitle.length >= 4)) {
-        score += 150;
-    } else if (normCombined === normQ) {
-        score += 150;
-    } else if (dist <= 1 && normTitle.length >= 4) {
-        score += 135;
-    } else if (normTitle.startsWith(normQ) || normCombined.startsWith(normQ)) {
-        score += 90;
-    } else if (normTitle.includes(normQ) || normCombined.includes(normQ)) {
-        score += 60;
-    }
-
-    let titleWordsMatched = 0;
-    let artistWordsMatched = 0;
-
-    for (const w of qWords) {
-        const titleWords = normTitle.split(/\s+/);
-        const matchesTitle = titleWords.some(tw => tw === w || (tw.length >= 4 && getLevenshteinDistance(tw, w) <= 1));
-        if (matchesTitle) {
-            titleWordsMatched++;
-            score += 25;
-        }
-
-        const artistWords = normArtist.split(/\s+/);
-        const matchesArtist = artistWords.some(aw => aw === w || (aw.length >= 4 && getLevenshteinDistance(aw, w) <= 1));
-        if (matchesArtist) {
-            artistWordsMatched++;
-            score += 35;
-        }
-    }
-
-    // High confidence boost if both title and artist words match query
-    if (titleWordsMatched > 0 && artistWordsMatched > 0) {
-        score += 60;
-    }
-
-    // Provider rank / popularity signal: top-ranked tracks on streaming engines get popularity boost
-    score += Math.max(0, 30 - originalIndex * 1.5);
-
-    return score;
-}
 
         // Clean query: strip "by" keyword (e.g. "eyes dont lie by isabel larose" -> "eyes dont lie isabel larose")
         const cleanQuery = cleanSearchQuery(raw);
         const fetchLimit = Math.max(limit * 2, 30);
 
-        // 3. Parallel Search: JioSaavn + iTunes
-        const [saavnRes, itunesRes] = await Promise.allSettled([
+        // 0. Official Spotify Web API Search (When credentials configured)
+        const spotifyToken = await getSpotifyAccessToken();
+        if (spotifyToken) {
+            try {
+                const sRes = await axios.get('https://api.spotify.com/v1/search', {
+                    headers: { 'Authorization': `Bearer ${spotifyToken}` },
+                    params: {
+                        q: cleanQuery,
+                        type: 'track',
+                        limit: Math.min(limit, 50)
+                    },
+                    timeout: 5000
+                });
+
+                if (Array.isArray(sRes.data?.tracks?.items) && sRes.data.tracks.items.length > 0) {
+                    return sRes.data.tracks.items.map((t: any) => ({
+                        id: t.id,
+                        uri: t.uri || `spotify:track:${t.id}`,
+                        name: t.name,
+                        artists: t.artists.map((a: any) => ({ name: a.name })),
+                        album: {
+                            name: t.album.name,
+                            images: (t.album.images || []).map((img: any) => ({ url: img.url }))
+                        },
+                        duration_ms: t.duration_ms,
+                        preview_url: t.preview_url || null
+                    }));
+                }
+            } catch (err: any) {
+                console.warn('[SpotifyScraper] Official Spotify API search failed, falling back:', err.message);
+            }
+        }
+
+        // 3. Fallback Multi-Engine Parallel Search: YouTube Innertube + JioSaavn + iTunes
+        const [ytRes, saavnRes, itunesRes] = await Promise.allSettled([
+            searchYouTubeInnertubeTracks(cleanQuery, fetchLimit),
             axios.get('https://www.jiosaavn.com/api.php', {
                 params: {
                     __call: 'search.getResults',
@@ -321,6 +464,10 @@ function scoreTrackRelevance(track: Track, rawQuery: string, originalIndex: numb
                     p: 1,
                     n: fetchLimit,
                     q: cleanQuery
+                },
+                headers: {
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+                    'Accept': 'application/json, text/plain, */*'
                 },
                 timeout: 5000
             }),
@@ -335,6 +482,13 @@ function scoreTrackRelevance(track: Track, rawQuery: string, originalIndex: numb
         ]);
 
         const rawCandidates: { track: Track; originalIndex: number }[] = [];
+
+        // Collect YouTube Innertube candidates (High accuracy global catalog)
+        if (ytRes.status === 'fulfilled' && Array.isArray(ytRes.value)) {
+            ytRes.value.forEach((track, idx) => {
+                rawCandidates.push({ track, originalIndex: idx });
+            });
+        }
 
         // Collect JioSaavn candidates
         if (saavnRes.status === 'fulfilled' && Array.isArray(saavnRes.value.data?.results)) {
@@ -384,7 +538,7 @@ function scoreTrackRelevance(track: Track, rawQuery: string, originalIndex: numb
             });
         }
 
-        // Deezer fallback if both returned 0 results
+        // Deezer fallback if all returned 0 results
         if (rawCandidates.length === 0) {
             try {
                 const deezerRes = await axios.get('https://api.deezer.com/search', {

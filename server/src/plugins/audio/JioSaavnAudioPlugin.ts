@@ -303,7 +303,12 @@ export class JioSaavnAudioPlugin implements AudioPlugin {
             try {
                 const searchUrl = `https://www.jiosaavn.com/api.php?__call=search.getResults&_format=json&_marker=0&cc=in&p=1&n=15&q=${encodeURIComponent(candidate)}`;
                 const response = await fetch(searchUrl, {
-                    headers: { 'User-Agent': 'Mozilla/5.0' },
+                    headers: {
+                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+                        'Accept': 'application/json, text/plain, */*',
+                        'Accept-Language': 'en-US,en;q=0.9',
+                        'Referer': 'https://www.jiosaavn.com/'
+                    },
                     signal: AbortSignal.timeout(6000)
                 });
 
