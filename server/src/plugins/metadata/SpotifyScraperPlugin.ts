@@ -221,11 +221,94 @@ export class SpotifyScraperPlugin implements MetadataPlugin {
             }
         }
 
+function getLevenshteinDistance(a: string, b: string): number {
+    if (a === b) return 0;
+    if (!a.length) return b.length;
+    if (!b.length) return a.length;
+    const matrix: number[][] = [];
+    for (let i = 0; i <= b.length; i++) matrix[i] = [i];
+    for (let j = 0; j <= a.length; j++) matrix[0][j] = j;
+    for (let i = 1; i <= b.length; i++) {
+        for (let j = 1; j <= a.length; j++) {
+            if (b.charAt(i - 1) === a.charAt(j - 1)) {
+                matrix[i][j] = matrix[i - 1][j - 1];
+            } else {
+                matrix[i][j] = Math.min(
+                    matrix[i - 1][j - 1] + 1,
+                    matrix[i][j - 1] + 1,
+                    matrix[i - 1][j] + 1
+                );
+            }
+        }
+    }
+    return matrix[b.length][a.length];
+}
+
+function normalizeSearchString(s: string): string {
+    return (s || '')
+        .toLowerCase()
+        .replace(/["'’`]/g, '')
+        .replace(/[^a-z0-9\s]/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+}
+
+function scoreTrackRelevance(track: Track, rawQuery: string, originalIndex: number): number {
+    const normQ = normalizeSearchString(rawQuery);
+    const qWords = normQ.split(/\s+/).filter(w => w.length > 0);
+    const normTitle = normalizeSearchString(track.name);
+    const normArtist = normalizeSearchString(track.artists[0]?.name || '');
+    const normCombined = `${normTitle} ${normArtist}`.trim();
+
+    let score = 0;
+
+    // Exact or near-exact title/combined string match
+    const dist = getLevenshteinDistance(normTitle, normQ);
+    if (normTitle === normQ || (dist <= 1 && originalIndex <= 2 && normTitle.length >= 4)) {
+        score += 150;
+    } else if (normCombined === normQ) {
+        score += 150;
+    } else if (dist <= 1 && normTitle.length >= 4) {
+        score += 135;
+    } else if (normTitle.startsWith(normQ) || normCombined.startsWith(normQ)) {
+        score += 90;
+    } else if (normTitle.includes(normQ) || normCombined.includes(normQ)) {
+        score += 60;
+    }
+
+    let titleWordsMatched = 0;
+    let artistWordsMatched = 0;
+
+    for (const w of qWords) {
+        const titleWords = normTitle.split(/\s+/);
+        const matchesTitle = titleWords.some(tw => tw === w || (tw.length >= 4 && getLevenshteinDistance(tw, w) <= 1));
+        if (matchesTitle) {
+            titleWordsMatched++;
+            score += 25;
+        }
+
+        const artistWords = normArtist.split(/\s+/);
+        const matchesArtist = artistWords.some(aw => aw === w || (aw.length >= 4 && getLevenshteinDistance(aw, w) <= 1));
+        if (matchesArtist) {
+            artistWordsMatched++;
+            score += 35;
+        }
+    }
+
+    // High confidence boost if both title and artist words match query
+    if (titleWordsMatched > 0 && artistWordsMatched > 0) {
+        score += 60;
+    }
+
+    // Provider rank / popularity signal: top-ranked tracks on streaming engines get popularity boost
+    score += Math.max(0, 30 - originalIndex * 1.5);
+
+    return score;
+}
+
         // Clean query: strip "by" keyword (e.g. "eyes dont lie by isabel larose" -> "eyes dont lie isabel larose")
         const cleanQuery = cleanSearchQuery(raw);
-
-        const results: Track[] = [];
-        const seenKeys = new Set<string>();
+        const fetchLimit = Math.max(limit * 2, 30);
 
         // 3. Parallel Search: JioSaavn + iTunes
         const [saavnRes, itunesRes] = await Promise.allSettled([
@@ -236,7 +319,7 @@ export class SpotifyScraperPlugin implements MetadataPlugin {
                     _marker: '0',
                     cc: 'in',
                     p: 1,
-                    n: limit,
+                    n: fetchLimit,
                     q: cleanQuery
                 },
                 timeout: 5000
@@ -245,21 +328,21 @@ export class SpotifyScraperPlugin implements MetadataPlugin {
                 params: {
                     term: cleanQuery,
                     entity: 'song',
-                    limit
+                    limit: fetchLimit
                 },
                 timeout: 5000
             })
         ]);
 
-        // A. Process JioSaavn results first (highest relevance for original studio tracks)
+        const rawCandidates: { track: Track; originalIndex: number }[] = [];
+
+        // Collect JioSaavn candidates
         if (saavnRes.status === 'fulfilled' && Array.isArray(saavnRes.value.data?.results)) {
-            for (const item of saavnRes.value.data.results) {
+            saavnRes.value.data.results.forEach((item: any, idx: number) => {
                 const name = decodeHtmlEntities(item.song || item.title);
                 const artist = decodeHtmlEntities(item.primary_artists || item.singers || 'Unknown Artist');
-                const normKey = `${name.toLowerCase()} - ${artist.toLowerCase()}`;
-                if (!seenKeys.has(normKey)) {
-                    seenKeys.add(normKey);
-                    results.push({
+                rawCandidates.push({
+                    track: {
                         id: `saavn_${item.id}`,
                         uri: `spotify:track:saavn_${item.id}`,
                         name,
@@ -270,20 +353,19 @@ export class SpotifyScraperPlugin implements MetadataPlugin {
                         },
                         duration_ms: (Number(item.duration) || 180) * 1000,
                         preview_url: item.media_preview_url || null
-                    });
-                }
-            }
+                    },
+                    originalIndex: idx
+                });
+            });
         }
 
-        // B. Merge distinct iTunes results for comprehensive library coverage
+        // Collect iTunes candidates
         if (itunesRes.status === 'fulfilled' && Array.isArray(itunesRes.value.data?.results)) {
-            for (const item of itunesRes.value.data.results) {
+            itunesRes.value.data.results.forEach((item: any, idx: number) => {
                 const name = item.trackName;
                 const artist = item.artistName || 'Unknown Artist';
-                const normKey = `${name.toLowerCase()} - ${artist.toLowerCase()}`;
-                if (!seenKeys.has(normKey)) {
-                    seenKeys.add(normKey);
-                    results.push({
+                rawCandidates.push({
+                    track: {
                         id: String(item.trackId),
                         uri: `spotify:track:${item.trackId}`,
                         name,
@@ -296,34 +378,59 @@ export class SpotifyScraperPlugin implements MetadataPlugin {
                         },
                         duration_ms: item.trackTimeMillis || 180000,
                         preview_url: item.previewUrl || null
-                    });
-                }
-            }
+                    },
+                    originalIndex: idx
+                });
+            });
         }
 
-        // C. Deezer fallback if both returned 0 results
-        if (results.length === 0) {
+        // Deezer fallback if both returned 0 results
+        if (rawCandidates.length === 0) {
             try {
                 const deezerRes = await axios.get('https://api.deezer.com/search', {
-                    params: { q: cleanQuery, limit },
+                    params: { q: cleanQuery, limit: fetchLimit },
                     timeout: 5000
                 });
                 if (deezerRes.data?.data?.length) {
-                    return deezerRes.data.data.map((item: any) => ({
-                        id: String(item.id),
-                        uri: `spotify:track:${item.id}`,
-                        name: item.title,
-                        artists: [{ name: item.artist?.name || 'Unknown Artist' }],
-                        album: {
-                            name: item.album?.title || item.title,
-                            images: [{ url: item.album?.cover_medium || item.album?.cover || '' }]
-                        },
-                        duration_ms: (item.duration || 180) * 1000,
-                        preview_url: item.preview || null
-                    }));
+                    deezerRes.data.data.forEach((item: any, idx: number) => {
+                        rawCandidates.push({
+                            track: {
+                                id: String(item.id),
+                                uri: `spotify:track:${item.id}`,
+                                name: item.title,
+                                artists: [{ name: item.artist?.name || 'Unknown Artist' }],
+                                album: {
+                                    name: item.album?.title || item.title,
+                                    images: [{ url: item.album?.cover_medium || item.album?.cover || '' }]
+                                },
+                                duration_ms: (item.duration || 180) * 1000,
+                                preview_url: item.preview || null
+                            },
+                            originalIndex: idx
+                        });
+                    });
                 }
             } catch (err: any) {
                 console.warn('[SpotifyScraper] Deezer search fallback error:', err.message);
+            }
+        }
+
+        // Score, rank by relevance to query, and deduplicate
+        const scored = rawCandidates.map(({ track, originalIndex }) => ({
+            track,
+            score: scoreTrackRelevance(track, raw, originalIndex)
+        }));
+
+        scored.sort((a, b) => b.score - a.score);
+
+        const results: Track[] = [];
+        const seenKeys = new Set<string>();
+
+        for (const item of scored) {
+            const normKey = `${normalizeSearchString(item.track.name)} - ${normalizeSearchString(item.track.artists[0]?.name)}`;
+            if (!seenKeys.has(normKey)) {
+                seenKeys.add(normKey);
+                results.push(item.track);
             }
         }
 

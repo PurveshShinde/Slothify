@@ -74,7 +74,8 @@ router.get('/resolve', async (req, res) => {
     const tryYouTube = async () => {
         const yt = pluginRegistry.getAudioPluginByName('YouTubeAudio');
         if (!yt) throw new Error('YouTube plugin not loaded');
-        const searchRes = await yt.search(q);
+        const ytQuery = (title && artist) ? `${title} ${artist} audio`.trim() : q;
+        const searchRes = await yt.search(ytQuery);
         const url = await getStreamUrl(searchRes.videoId);
         return {
             success: true,

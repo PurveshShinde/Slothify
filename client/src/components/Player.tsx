@@ -67,9 +67,15 @@ const Player: React.FC<PlayerProps> = ({
     const shuffledIndicesRef = useRef<number[]>([]);
     const isSeekingRef = useRef(false);
     const hasPreloadedRef = useRef<string | null>(null);
+    // Clean legacy/poisoned cache keys from previous versions
+    try {
+        localStorage.removeItem('slothify_video_cache');
+        localStorage.removeItem('slothify_saavn_cache');
+    } catch (e) {}
+
     const resolvedVideoMap = useRef<Map<string, string>>((() => {
         try {
-            const saved = localStorage.getItem('slothify_video_cache');
+            const saved = localStorage.getItem('slothify_video_cache_v3');
             if (saved) {
                 return new Map(JSON.parse(saved));
             }
@@ -80,13 +86,13 @@ const Player: React.FC<PlayerProps> = ({
     const persistVideoCache = useCallback(() => {
         try {
             const entries = Array.from(resolvedVideoMap.current.entries()).slice(-500);
-            localStorage.setItem('slothify_video_cache', JSON.stringify(entries));
+            localStorage.setItem('slothify_video_cache_v3', JSON.stringify(entries));
         } catch (e) {}
     }, []);
 
     const resolvedSaavnMap = useRef<Map<string, string>>((() => {
         try {
-            const saved = localStorage.getItem('slothify_saavn_cache');
+            const saved = localStorage.getItem('slothify_saavn_cache_v3');
             if (saved) {
                 return new Map(JSON.parse(saved));
             }
@@ -97,7 +103,7 @@ const Player: React.FC<PlayerProps> = ({
     const persistSaavnCache = useCallback(() => {
         try {
             const entries = Array.from(resolvedSaavnMap.current.entries()).slice(-500);
-            localStorage.setItem('slothify_saavn_cache', JSON.stringify(entries));
+            localStorage.setItem('slothify_saavn_cache_v3', JSON.stringify(entries));
         } catch (e) {}
     }, []);
 

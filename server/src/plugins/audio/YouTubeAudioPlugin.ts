@@ -74,19 +74,19 @@ export async function getStreamUrl(videoId: string): Promise<string> {
 
         // 2. Piped API Fallback (Multiple redundant instances)
         const pipedInstances = [
+            'https://pipedapi.leptons.xyz',
+            'https://pipedapi.drgns.space',
+            'https://api.piped.privacydev.net',
+            'https://piped-api.lunar.icu',
             'https://pipedapi.kavin.rocks',
-            'https://api.piped.private.coffee',
-            'https://pipedapi.adminforge.de',
-            'https://pipedapi.ducks.party',
-            'https://pipedapi.reallyaweso.me'
+            'https://pipedapi.adminforge.de'
         ];
 
         for (const instance of pipedInstances) {
             try {
-                console.log(`[YouTubeAudioPlugin] Trying Piped fallback instance: ${instance}`);
                 const response = await fetch(`${instance}/streams/${videoId}`, {
                     headers: { 'User-Agent': 'Mozilla/5.0' },
-                    signal: AbortSignal.timeout(4000)
+                    signal: AbortSignal.timeout(3500)
                 });
 
                 if (response.ok) {
@@ -95,15 +95,63 @@ export async function getStreamUrl(videoId: string): Promise<string> {
                     if (audioStreams && audioStreams.length > 0) {
                         audioStreams.sort((a: any, b: any) => (b.bitrate || 0) - (a.bitrate || 0));
                         const directUrl = audioStreams[0].url;
-                        console.log(`[YouTubeAudioPlugin] ✅ Piped extraction succeeded via ${instance}`);
-                        streamUrlCache.set(videoId, {
-                            url: directUrl,
-                            expiresAt: Date.now() + 3.5 * 60 * 60 * 1000
-                        });
-                        return directUrl;
+                        if (directUrl && directUrl.startsWith('http')) {
+                            console.log(`[YouTubeAudioPlugin] ✅ Piped extraction succeeded via ${instance}`);
+                            streamUrlCache.set(videoId, {
+                                url: directUrl,
+                                expiresAt: Date.now() + 3.5 * 60 * 60 * 1000
+                            });
+                            return directUrl;
+                        }
                     }
                 }
-            } catch (pipedErr) {
+            } catch {
+                // Continue to next instance
+            }
+        }
+
+        // 3. Invidious API Fallback (Proxied audio via local=true)
+        const invidiousInstances = [
+            'https://inv.nadeko.net',
+            'https://invidious.nerdvpn.de',
+            'https://invidious.private.coffee',
+            'https://yt.artemislena.eu',
+            'https://invidious.protokolla.fi'
+        ];
+
+        for (const instance of invidiousInstances) {
+            try {
+                const response = await fetch(`${instance}/api/v1/videos/${videoId}?local=true`, {
+                    headers: { 'User-Agent': 'Mozilla/5.0' },
+                    signal: AbortSignal.timeout(3500)
+                });
+
+                if (response.ok) {
+                    const data = (await response.json()) as any;
+                    const formats = [...(data.adaptiveFormats || []), ...(data.formatStreams || [])];
+                    const audioStreams = formats.filter((f: any) =>
+                        (f.type && f.type.startsWith('audio')) ||
+                        (f.mimeType && f.mimeType.startsWith('audio')) ||
+                        f.itag === '140' || f.itag === 140
+                    );
+
+                    if (audioStreams.length > 0) {
+                        audioStreams.sort((a: any, b: any) => (Number(b.bitrate) || 0) - (Number(a.bitrate) || 0));
+                        let directUrl = audioStreams[0].url;
+                        if (directUrl && directUrl.startsWith('/')) {
+                            directUrl = `${instance}${directUrl}`;
+                        }
+                        if (directUrl && directUrl.startsWith('http')) {
+                            console.log(`[YouTubeAudioPlugin] ✅ Invidious extraction succeeded via ${instance}`);
+                            streamUrlCache.set(videoId, {
+                                url: directUrl,
+                                expiresAt: Date.now() + 3.5 * 60 * 60 * 1000
+                            });
+                            return directUrl;
+                        }
+                    }
+                }
+            } catch {
                 // Continue to next instance
             }
         }

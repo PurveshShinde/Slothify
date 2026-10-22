@@ -114,6 +114,76 @@ export function cleanSaavnQuery(raw: string): string {
         .trim();
 }
 
+export function normalizeSaavnText(text: string): string {
+    return text
+        .toLowerCase()
+        .replace(/[^a-z0-9\s]/g, '')
+        .replace(/\s+/g, ' ')
+        .trim();
+}
+
+export function levenshteinDistance(a: string, b: string): number {
+    if (a === b) return 0;
+    if (!a.length) return b.length;
+    if (!b.length) return a.length;
+    const matrix: number[][] = [];
+    for (let i = 0; i <= b.length; i++) matrix[i] = [i];
+    for (let j = 0; j <= a.length; j++) matrix[0][j] = j;
+    for (let i = 1; i <= b.length; i++) {
+        for (let j = 1; j <= a.length; j++) {
+            if (b.charAt(i - 1) === a.charAt(j - 1)) {
+                matrix[i][j] = matrix[i - 1][j - 1];
+            } else {
+                matrix[i][j] = Math.min(
+                    matrix[i - 1][j - 1] + 1,
+                    matrix[i][j - 1] + 1,
+                    matrix[i - 1][j] + 1
+                );
+            }
+        }
+    }
+    return matrix[b.length][a.length];
+}
+
+export function isArtistFuzzyMatch(resultArtistStr: string, targetArtist: string): boolean {
+    if (!targetArtist) return true;
+    const normResult = normalizeSaavnText(resultArtistStr);
+    const normTarget = normalizeSaavnText(targetArtist);
+    if (!normResult || !normTarget) return false;
+
+    // Direct substring match
+    if (normResult.includes(normTarget) || normTarget.includes(normResult)) return true;
+
+    // Check individual significant words (e.g. "isabel", "larosa" vs "larose")
+    const targetWords = normTarget.split(' ').filter(w => w.length > 2);
+    const resultWords = normResult.split(' ').filter(w => w.length > 2);
+    if (targetWords.length === 0) return true;
+
+    let matchedWords = 0;
+    for (const tw of targetWords) {
+        const found = resultWords.some(rw => rw === tw || (rw.length >= 4 && levenshteinDistance(rw, tw) <= 1));
+        if (found) matchedWords++;
+    }
+
+    return matchedWords > 0 && (matchedWords >= Math.ceil(targetWords.length / 2) || matchedWords >= 2);
+}
+
+export function isTitleFuzzyMatch(resultTitleStr: string, targetTitle: string): boolean {
+    if (!targetTitle) return true;
+    const normResult = normalizeSaavnText(cleanSaavnQuery(resultTitleStr));
+    const normTarget = normalizeSaavnText(cleanSaavnQuery(targetTitle));
+    if (!normResult || !normTarget) return false;
+
+    if (normResult.includes(normTarget) || normTarget.includes(normResult)) return true;
+
+    const targetWords = normTarget.split(' ').filter(w => w.length > 2);
+    const resultWords = normResult.split(' ').filter(w => w.length > 2);
+    if (targetWords.length === 0) return true;
+
+    const matchedWords = targetWords.filter(tw => resultWords.some(rw => rw === tw || (rw.length >= 4 && levenshteinDistance(rw, tw) <= 1))).length;
+    return matchedWords >= Math.ceil(targetWords.length / 2);
+}
+
 export class JioSaavnAudioPlugin implements AudioPlugin {
     readonly name = 'JioSaavnAudio';
 
@@ -123,6 +193,12 @@ export class JioSaavnAudioPlugin implements AudioPlugin {
     async search(query: string, titleHint?: string, artistHint?: string): Promise<AudioSearchResult> {
         const trimmed = query.trim();
         const cleanQuery = cleanSaavnQuery(trimmed).toLowerCase();
+        const cleanTitle = titleHint ? cleanSaavnQuery(titleHint).toLowerCase() : '';
+        const rawArtist = artistHint ? artistHint.split(/[,/&]| feat\.? | ft\.? /i)[0].trim() : '';
+        const cleanArtist = rawArtist ? cleanSaavnQuery(rawArtist).toLowerCase() : '';
+
+        // Composite cache key prevents cross-artist cache contamination
+        const cacheKey = `${cleanQuery}___${cleanTitle}___${cleanArtist}`;
 
         // 0. Direct JioSaavn URL support (e.g. https://www.jiosaavn.com/song/love-me-like-you-do/NgUBWTdKB3A)
         const urlMatch = trimmed.match(/jiosaavn\.com\/song\/[^/]+\/([a-zA-Z0-9_-]+)/);
@@ -152,7 +228,7 @@ export class JioSaavnAudioPlugin implements AudioPlugin {
             }
         }
 
-        const cached = saavnSearchCache.get(cleanQuery);
+        const cached = saavnSearchCache.get(cacheKey);
         if (cached) {
             return cached;
         }
@@ -161,24 +237,29 @@ export class JioSaavnAudioPlugin implements AudioPlugin {
         if (process.env.JIOSAAVN_API_URL) {
             try {
                 const base = process.env.JIOSAAVN_API_URL.replace(/\/$/, '');
-                const res = await fetch(`${base}/api/search/songs?query=${encodeURIComponent(cleanQuery || query.trim())}`, {
+                const targetSearchTerm = (cleanTitle && cleanArtist) ? `${cleanTitle} ${cleanArtist}` : (cleanQuery || query.trim());
+                const res = await fetch(`${base}/api/search/songs?query=${encodeURIComponent(targetSearchTerm)}`, {
                     signal: AbortSignal.timeout(5000),
                     headers: { 'User-Agent': 'Slothify/1.0' }
                 });
                 if (res.ok) {
                     const data = (await res.json()) as any;
                     const results = data.data?.results || data.results;
-                    if (results && results.length > 0) {
-                        const song = results[0];
-                        const result: AudioSearchResult = {
-                            videoId: song.id,
-                            title: song.name || song.title,
-                            duration: Number(song.duration) || 0,
-                            thumbnail: Array.isArray(song.image) ? song.image[song.image.length - 1]?.url : (song.image || ''),
-                            streamToken: 'jiosaavn'
-                        };
-                        saavnSearchCache.set(cleanQuery, result);
-                        return result;
+                    if (Array.isArray(results) && results.length > 0) {
+                        const matched = cleanArtist 
+                            ? results.find(s => isArtistFuzzyMatch(s.primaryArtists || s.singers || '', cleanArtist))
+                            : results[0];
+                        if (matched) {
+                            const result: AudioSearchResult = {
+                                videoId: matched.id,
+                                title: matched.name || matched.title,
+                                duration: Number(matched.duration) || 0,
+                                thumbnail: Array.isArray(matched.image) ? matched.image[matched.image.length - 1]?.url : (matched.image || ''),
+                                streamToken: 'jiosaavn'
+                            };
+                            saavnSearchCache.set(cacheKey, result);
+                            return result;
+                        }
                     }
                 }
             } catch (err: any) {
@@ -186,37 +267,36 @@ export class JioSaavnAudioPlugin implements AudioPlugin {
             }
         }
 
-        // 2. Direct JioSaavn Search API with multi-tier candidate cascade
+        // 2. Direct JioSaavn Search API with strict precision cascading
         const candidates: string[] = [];
 
-        // Candidate A: Cleaned title if provided
-        if (titleHint) {
-            const cleanTitle = cleanSaavnQuery(titleHint);
-            if (cleanTitle) candidates.push(cleanTitle);
+        // Candidate 1: Clean Title + Primary Artist (The absolute most accurate query)
+        if (cleanTitle && cleanArtist) {
+            candidates.push(`${cleanTitle} ${cleanArtist}`.trim());
         }
+
+        // Candidate 2: Primary Artist + Clean Title (Solr indexes artist-first well)
+        if (cleanTitle && cleanArtist) {
+            candidates.push(`${cleanArtist} ${cleanTitle}`.trim());
+        }
+
+        // Candidate 3: Full clean query
         if (cleanQuery && !candidates.includes(cleanQuery)) {
             candidates.push(cleanQuery);
         }
 
-        // Candidate B: Clean title + primary artist
-        if (titleHint && artistHint) {
-            const combo = cleanSaavnQuery(`${titleHint} ${artistHint}`);
-            if (combo && !candidates.includes(combo)) candidates.push(combo);
-        }
-
-        // Candidate C: First 3 words of cleanQuery (captures clean title when raw query is long)
-        const words = cleanQuery.split(' ');
-        if (words.length > 3) {
-            const prefix = words.slice(0, 3).join(' ');
-            if (!candidates.includes(prefix)) candidates.push(prefix);
-        }
-
-        // Candidate D: Raw query fallback
-        if (!candidates.includes(trimmed)) {
+        // Candidate 4: Raw trimmed query
+        if (trimmed && !candidates.includes(trimmed)) {
             candidates.push(trimmed);
         }
 
+        // Candidate 5: Clean title only (ONLY checked if no artist specified or as last candidate with validation)
+        if (cleanTitle && !candidates.includes(cleanTitle)) {
+            candidates.push(cleanTitle);
+        }
+
         let bestSong: any = null;
+        const targetArtist = (cleanArtist || rawArtist || '').toLowerCase().trim();
 
         for (const candidate of candidates) {
             if (!candidate || candidate.length < 2) continue;
@@ -233,29 +313,45 @@ export class JioSaavnAudioPlugin implements AudioPlugin {
                 const results: any[] = data.results;
                 if (!results || results.length === 0) continue;
 
-                // Rank results: if artistHint or query contains an artist name, prioritize matching artist
-                const targetArtist = (artistHint || '').toLowerCase().trim();
+                // When artist is specified, find a match where the artist actually matches!
                 if (targetArtist) {
                     const matched = results.find(r => {
                         const artistStr = (r.primary_artists || r.singers || '').toLowerCase();
-                        return artistStr.includes(targetArtist) || targetArtist.split(' ').some(w => w.length > 2 && artistStr.includes(w));
+                        const titleStr = (r.song || r.title || '').toLowerCase();
+                        const artistOk = isArtistFuzzyMatch(artistStr, targetArtist);
+                        const titleOk = cleanTitle ? isTitleFuzzyMatch(titleStr, cleanTitle) : true;
+                        return artistOk && titleOk;
+                    }) || results.find(r => {
+                        const artistStr = (r.primary_artists || r.singers || '').toLowerCase();
+                        return isArtistFuzzyMatch(artistStr, targetArtist);
                     });
+
                     if (matched) {
                         bestSong = matched;
-                        break;
+                        break; // Successfully found track matching requested artist!
                     }
-                }
 
-                // If no specific artist match or no artist provided, take the top result
-                bestSong = results[0];
-                break;
+                    // DO NOT break if artist didn't match! Continue to next candidate!
+                    continue;
+                } else {
+                    // No artist specified: verify title match if title was provided
+                    if (cleanTitle) {
+                        const matched = results.find(r => isTitleFuzzyMatch(r.song || r.title || '', cleanTitle));
+                        if (matched) {
+                            bestSong = matched;
+                            break;
+                        }
+                    }
+                    bestSong = results[0];
+                    break;
+                }
             } catch (err: any) {
                 console.warn(`[JioSaavnAudioPlugin] Candidate "${candidate}" failed:`, err.message);
             }
         }
 
         if (!bestSong) {
-            throw new Error(`No JioSaavn track found for query: ${query}`);
+            throw new Error(`No matching JioSaavn track found for query: "${query}" (artist: "${artistHint || 'none'}")`);
         }
 
         // Cache metadata for fast stream resolution
@@ -273,7 +369,7 @@ export class JioSaavnAudioPlugin implements AudioPlugin {
             const firstKey = saavnSearchCache.keys().next().value;
             if (firstKey) saavnSearchCache.delete(firstKey);
         }
-        saavnSearchCache.set(cleanQuery, result);
+        saavnSearchCache.set(cacheKey, result);
 
         return result;
     }

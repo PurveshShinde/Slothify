@@ -68,6 +68,8 @@ export const CacheProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     const clearCache = () => {
         try {
             localStorage.removeItem(STORAGE_KEY);
+            localStorage.removeItem('slothify_video_cache_v3');
+            localStorage.removeItem('slothify_saavn_cache_v3');
             localStorage.removeItem('slothify_video_cache');
             localStorage.removeItem('slothify_saavn_cache');
         } catch (e) { }

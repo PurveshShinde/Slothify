@@ -26,8 +26,8 @@ router.get('/search', async (req, res) => {
         const result = await saavn.search(q, title, artist);
         res.json({ success: true, ...result });
     } catch (err: any) {
-        console.error('[/api/saavn/search] Error:', err.message);
-        res.status(500).json({ success: false, error: 'JioSaavn search failed', details: err.message });
+        console.warn('[/api/saavn/search] No track found:', err.message);
+        res.status(404).json({ success: false, error: 'JioSaavn search failed', details: err.message });
     }
 });
 
