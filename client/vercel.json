@@ -1,7 +1,20 @@
 {
+  "regions": ["bom1"],
   "rewrites": [
     {
-      "source": "/(.*)",
+      "source": "/api/saavn/stream/:id",
+      "destination": "/api/saavn/stream?id=:id"
+    },
+    {
+      "source": "/api/saavn/:match*",
+      "destination": "/api/saavn/:match*"
+    },
+    {
+      "source": "/api/:match*",
+      "destination": "https://slothify-server.onrender.com/api/:match*"
+    },
+    {
+      "source": "/((?!api/).*)",
       "destination": "/index.html"
     }
   ]

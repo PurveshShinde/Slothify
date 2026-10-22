@@ -11,6 +11,66 @@ import { useTheme } from '../context/ThemeContext';
 const rawApiBase = ((import.meta as any).env?.VITE_API_BASE || (import.meta as any).env?.VITE_API_URL || '').trim();
 const API_BASE = rawApiBase.replace(/\/api\/?$/, '').replace(/\/+$/, '');
 
+// JioSaavn route executor: prefers same-origin Vercel Mumbai Serverless Function (bom1)
+// to bypass cloud/datacenter IP geoblocks, with fallback to API_BASE
+const fetchSaavnApi = async (endpoint: string, options?: RequestInit): Promise<Response> => {
+    // 1. Try local/same-origin route first (hits Vercel Mumbai function or Vite proxy)
+    try {
+        const cleanPath = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
+        const localRes = await fetch(cleanPath, options);
+        if (localRes.ok) return localRes;
+    } catch { }
+
+    // 2. Fallback to API_BASE if defined and on a different origin
+    if (API_BASE) {
+        const cleanPath = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
+        return fetch(`${API_BASE}${cleanPath}`, options);
+    }
+
+    throw new Error(`JioSaavn request to ${endpoint} failed`);
+};
+
+// Client-Side Piped instances racing for YouTube fallback (runs on user's own network/residential IP)
+const PIPED_INSTANCES = [
+    'https://pipedapi.kavin.rocks',
+    'https://piped-api.lunar.icu',
+    'https://pipedapi.leptons.xyz',
+    'https://pipedapi.tokhmi.xyz'
+];
+
+async function racePipedStreams(videoId: string, signal?: AbortSignal): Promise<string | null> {
+    const promises = PIPED_INSTANCES.map(async (base) => {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 4000);
+        if (signal) {
+            signal.addEventListener('abort', () => controller.abort(), { once: true });
+        }
+        try {
+            const res = await fetch(`${base}/streams/${encodeURIComponent(videoId)}`, {
+                signal: controller.signal
+            });
+            clearTimeout(timeoutId);
+            if (!res.ok) throw new Error(`Piped error: ${res.status}`);
+            const data = await res.json();
+            const audioStreams = data.audioStreams || [];
+            if (!audioStreams.length) throw new Error('No audio streams');
+            const best = audioStreams.find((s: any) => s.itag === 140 || s.quality === '128 kbps') || audioStreams[0];
+            if (!best?.url) throw new Error('No url');
+            return best.url as string;
+        } catch (e) {
+            clearTimeout(timeoutId);
+            throw e;
+        }
+    });
+
+    try {
+        return await Promise.any(promises);
+    } catch {
+        return null;
+    }
+}
+
+
 interface PlayerProps {
     currentTrack: Track | null;
     queue: Track[];
@@ -161,7 +221,7 @@ const Player: React.FC<PlayerProps> = ({
             try {
                 let songId = track.id.startsWith('saavn_') ? track.id.replace('saavn_', '') : resolvedSaavnMap.current.get(track.id);
                 if (!songId) {
-                    const sRes = await fetch(`${API_BASE}/api/saavn/search?q=${encodeURIComponent(songQuery)}&title=${encodeURIComponent(trackTitle)}&artist=${encodeURIComponent(trackArtist)}`);
+                    const sRes = await fetchSaavnApi(`/api/saavn/search?q=${encodeURIComponent(songQuery)}&title=${encodeURIComponent(trackTitle)}&artist=${encodeURIComponent(trackArtist)}`);
                     if (sRes.ok) {
                         const sData = await sRes.json();
                         if (sData.videoId) {
@@ -172,8 +232,8 @@ const Player: React.FC<PlayerProps> = ({
                     }
                 }
                 if (songId) {
-                    // Pre-warm JioSaavn in server cache — SKIP YouTube / yt-dlp completely!
-                    fetch(`${API_BASE}/api/saavn/stream/${songId}`).catch(() => {});
+                    // Pre-warm JioSaavn in cache — SKIP YouTube / yt-dlp completely!
+                    fetchSaavnApi(`/api/saavn/stream/${songId}`).catch(() => {});
                     return;
                 }
             } catch { }
@@ -268,9 +328,17 @@ const Player: React.FC<PlayerProps> = ({
                     try {
                         let songId = trackId.startsWith('saavn_') ? trackId.replace('saavn_', '') : resolvedSaavnMap.current.get(trackId);
                         if (!songId) {
-                            const sRes = await fetch(`${API_BASE}/api/saavn/search?q=${encodeURIComponent(songQuery)}&title=${encodeURIComponent(trackTitle)}&artist=${encodeURIComponent(trackArtist)}`, { signal });
+                            const sRes = await fetchSaavnApi(`/api/saavn/search?q=${encodeURIComponent(songQuery)}&title=${encodeURIComponent(trackTitle)}&artist=${encodeURIComponent(trackArtist)}`, { signal });
                             if (!sRes.ok) return null;
                             const sData = await sRes.json();
+                            // If search endpoint already decrypted the direct 320kbps streamUrl, play immediately!
+                            if (sData.streamUrl) {
+                                if (sData.videoId) {
+                                    resolvedSaavnMap.current.set(trackId, sData.videoId);
+                                    persistSaavnCache();
+                                }
+                                return sData.streamUrl;
+                            }
                             songId = sData.videoId;
                             if (songId) {
                                 resolvedSaavnMap.current.set(trackId, songId);
@@ -278,7 +346,7 @@ const Player: React.FC<PlayerProps> = ({
                             }
                         }
                         if (!songId) return null;
-                        const stRes = await fetch(`${API_BASE}/api/saavn/stream/${songId}`, { signal });
+                        const stRes = await fetchSaavnApi(`/api/saavn/stream/${songId}`, { signal });
                         if (!stRes.ok) return null;
                         const stData = await stRes.json();
                         return stData.success && stData.url ? stData.url : null;
@@ -287,7 +355,7 @@ const Player: React.FC<PlayerProps> = ({
                     }
                 };
 
-                // Helper: resolve via YouTube (Cobalt & Piped)
+                // Helper: resolve via YouTube (Client-Side Piped Racing + Backend Fallback)
                 const resolveYouTube = async (): Promise<string | null> => {
                     try {
                         let videoId = resolvedVideoMap.current.get(trackId);
@@ -303,6 +371,14 @@ const Player: React.FC<PlayerProps> = ({
                             }
                         }
                         if (!videoId) return null;
+
+                        // 1. Race public Piped CORS instances from the client's network to bypass datacenter IP bans
+                        try {
+                            const pipedStream = await racePipedStreams(videoId, signal);
+                            if (pipedStream) return pipedStream;
+                        } catch { }
+
+                        // 2. Fallback to server-side YouTube stream resolution
                         const streamRes = await fetch(`${API_BASE}/api/youtube/stream/${videoId}`, { signal });
                         if (!streamRes.ok) return null;
                         const streamData = await streamRes.json();
