@@ -10,6 +10,7 @@ import {
 import axios from 'axios';
 import { useCache } from '../context/CacheContext';
 import { useTheme, AppTheme } from '../context/ThemeContext';
+import { APP_VERSION } from '../version';
 
 export interface DefaultAvatarItem {
     id: string;
@@ -60,7 +61,7 @@ const Settings: React.FC<SettingsProps> = ({ user, isAuthenticated, onOpenAuth, 
     const handleSelectAudioProvider = (provider: 'auto' | 'jiosaavn' | 'youtube') => {
         setAudioProvider(provider);
         localStorage.setItem('slothify_audio_provider', provider);
-        axios.post('/api/audio/provider', { provider }).catch(() => {});
+        axios.post('/api/audio/provider', { provider }).catch(() => { });
     };
 
     // Spotify Account & Playlist Import State
@@ -244,17 +245,15 @@ const Settings: React.FC<SettingsProps> = ({ user, isAuthenticated, onOpenAuth, 
             <h1 className="text-3xl md:text-4xl font-black text-white px-2 mb-8 tracking-tight">Settings</h1>
 
             {/* 1. Account & Status */}
-            <div className={`border rounded-3xl p-6 md:p-8 backdrop-blur-sm mb-6 ${
-                isOcean ? 'bg-[#0f172a]/70 border-blue-500/15' : 'bg-[#111827]/60 border-white/5'
-            }`}>
+            <div className={`border rounded-3xl p-6 md:p-8 backdrop-blur-sm mb-6 ${isOcean ? 'bg-[#0f172a]/70 border-blue-500/15' : 'bg-[#111827]/60 border-white/5'
+                }`}>
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-6">
                     <div className="flex items-center space-x-5">
                         {/* Circular Avatar with click target and camera edit badge */}
                         <div
                             onClick={() => setIsAvatarModalOpen(true)}
-                            className={`relative w-16 h-16 md:w-20 md:h-20 rounded-full border-2 overflow-hidden shadow-2xl flex-shrink-0 bg-slate-800 cursor-pointer group transition-all duration-200 hover:scale-105 ${
-                                isOcean ? 'border-blue-500/40 hover:border-blue-400' : 'border-[#f5d0b5]/30 hover:border-[#f5d0b5]'
-                            }`}
+                            className={`relative w-16 h-16 md:w-20 md:h-20 rounded-full border-2 overflow-hidden shadow-2xl flex-shrink-0 bg-slate-800 cursor-pointer group transition-all duration-200 hover:scale-105 ${isOcean ? 'border-blue-500/40 hover:border-blue-400' : 'border-[#f5d0b5]/30 hover:border-[#f5d0b5]'
+                                }`}
                             title="Click to change profile picture"
                         >
                             <img
@@ -280,19 +279,17 @@ const Settings: React.FC<SettingsProps> = ({ user, isAuthenticated, onOpenAuth, 
                                         Cloud Sync Active
                                     </span>
                                 ) : (
-                                    <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold ${
-                                        isOcean
+                                    <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold ${isOcean
                                             ? 'bg-blue-500/10 text-blue-400 border border-blue-500/20'
                                             : 'bg-[#f5d0b5]/10 text-[#f5d0b5] border border-[#f5d0b5]/20'
-                                    }`}>
+                                        }`}>
                                         Local Storage Only
                                     </span>
                                 )}
                                 <button
                                     onClick={() => setIsAvatarModalOpen(true)}
-                                    className={`text-xs font-semibold inline-flex items-center space-x-1 transition-colors hover:underline ${
-                                        isOcean ? 'text-blue-400 hover:text-blue-300' : 'text-[#f5d0b5] hover:text-white'
-                                    }`}
+                                    className={`text-xs font-semibold inline-flex items-center space-x-1 transition-colors hover:underline ${isOcean ? 'text-blue-400 hover:text-blue-300' : 'text-[#f5d0b5] hover:text-white'
+                                        }`}
                                 >
                                     <Camera size={12} />
                                     <span>Change Avatar</span>
@@ -313,11 +310,10 @@ const Settings: React.FC<SettingsProps> = ({ user, isAuthenticated, onOpenAuth, 
                         ) : (
                             <button
                                 onClick={onOpenAuth}
-                                className={`flex items-center space-x-2 px-5 py-2.5 rounded-xl text-sm font-bold transition-all shadow-md ${
-                                    isOcean
+                                className={`flex items-center space-x-2 px-5 py-2.5 rounded-xl text-sm font-bold transition-all shadow-md ${isOcean
                                         ? 'bg-[#1e293b] hover:bg-[#334155] text-blue-400 border border-blue-500/30'
                                         : 'bg-[#241c19] hover:bg-[#2e2320] text-[#f5d0b5] border border-[#f5d0b5]/25'
-                                }`}
+                                    }`}
                             >
                                 <LogIn size={16} />
                                 <span>Log In / Sign Up</span>
@@ -340,19 +336,17 @@ const Settings: React.FC<SettingsProps> = ({ user, isAuthenticated, onOpenAuth, 
                 {/* Auto / Smart Fallback */}
                 <div
                     onClick={() => handleSelectAudioProvider('auto')}
-                    className={`relative p-5 rounded-2xl border cursor-pointer transition-all duration-300 group ${
-                        audioProvider === 'auto'
+                    className={`relative p-5 rounded-2xl border cursor-pointer transition-all duration-300 group ${audioProvider === 'auto'
                             ? isOcean
                                 ? 'bg-gradient-to-br from-[#0c1836] via-[#09132b] to-[#060d1e] border-blue-500 shadow-xl shadow-blue-500/20 ring-1 ring-blue-500/50'
                                 : 'bg-gradient-to-br from-[#241a16] via-[#1a120e] to-[#120c09] border-[#c87d46] shadow-xl shadow-[#c87d46]/20 ring-1 ring-[#c87d46]/50'
                             : 'bg-[#111827]/40 border-white/5 hover:border-white/20'
-                    }`}
+                        }`}
                 >
                     <div className="flex items-start justify-between">
                         <div className="flex items-center space-x-3.5">
-                            <div className={`w-10 h-10 rounded-xl flex items-center justify-center shadow-lg ${
-                                isOcean ? 'bg-blue-600 shadow-blue-600/30' : 'bg-[#c87d46] shadow-[#c87d46]/30'
-                            }`}>
+                            <div className={`w-10 h-10 rounded-xl flex items-center justify-center shadow-lg ${isOcean ? 'bg-blue-600 shadow-blue-600/30' : 'bg-[#c87d46] shadow-[#c87d46]/30'
+                                }`}>
                                 <Sparkles size={20} className="text-white" />
                             </div>
                             <div>
@@ -365,9 +359,8 @@ const Settings: React.FC<SettingsProps> = ({ user, isAuthenticated, onOpenAuth, 
                                 <p className="text-xs text-slate-400 mt-0.5">Tries JioSaavn 320k first, seamlessly falls back to Piped</p>
                             </div>
                         </div>
-                        <div className={`w-6 h-6 rounded-full flex items-center justify-center transition-all ${
-                            audioProvider === 'auto' ? (isOcean ? 'bg-blue-600 text-white' : 'bg-[#c87d46] text-white') : 'border border-white/20'
-                        }`}>
+                        <div className={`w-6 h-6 rounded-full flex items-center justify-center transition-all ${audioProvider === 'auto' ? (isOcean ? 'bg-blue-600 text-white' : 'bg-[#c87d46] text-white') : 'border border-white/20'
+                            }`}>
                             {audioProvider === 'auto' && <Check size={14} strokeWidth={3} />}
                         </div>
                     </div>
@@ -376,11 +369,10 @@ const Settings: React.FC<SettingsProps> = ({ user, isAuthenticated, onOpenAuth, 
                 {/* JioSaavn Engine */}
                 <div
                     onClick={() => handleSelectAudioProvider('jiosaavn')}
-                    className={`relative p-5 rounded-2xl border cursor-pointer transition-all duration-300 group ${
-                        audioProvider === 'jiosaavn'
+                    className={`relative p-5 rounded-2xl border cursor-pointer transition-all duration-300 group ${audioProvider === 'jiosaavn'
                             ? 'bg-gradient-to-br from-[#062c1e] via-[#041d14] to-[#02100b] border-emerald-500 shadow-xl shadow-emerald-500/20 ring-1 ring-emerald-500/50'
                             : 'bg-[#111827]/40 border-white/5 hover:border-white/20'
-                    }`}
+                        }`}
                 >
                     <div className="flex items-start justify-between">
                         <div className="flex items-center space-x-3.5">
@@ -397,9 +389,8 @@ const Settings: React.FC<SettingsProps> = ({ user, isAuthenticated, onOpenAuth, 
                                 <p className="text-xs text-slate-400 mt-0.5">Direct 320kbps master audio streams via Saavn CDN</p>
                             </div>
                         </div>
-                        <div className={`w-6 h-6 rounded-full flex items-center justify-center transition-all ${
-                            audioProvider === 'jiosaavn' ? 'bg-emerald-600 text-white' : 'border border-white/20'
-                        }`}>
+                        <div className={`w-6 h-6 rounded-full flex items-center justify-center transition-all ${audioProvider === 'jiosaavn' ? 'bg-emerald-600 text-white' : 'border border-white/20'
+                            }`}>
                             {audioProvider === 'jiosaavn' && <Check size={14} strokeWidth={3} />}
                         </div>
                     </div>
@@ -408,11 +399,10 @@ const Settings: React.FC<SettingsProps> = ({ user, isAuthenticated, onOpenAuth, 
                 {/* Piped (YouTube Engine) */}
                 <div
                     onClick={() => handleSelectAudioProvider('youtube')}
-                    className={`relative p-5 rounded-2xl border cursor-pointer transition-all duration-300 group ${
-                        audioProvider === 'youtube'
+                    className={`relative p-5 rounded-2xl border cursor-pointer transition-all duration-300 group ${audioProvider === 'youtube'
                             ? 'bg-gradient-to-br from-[#2c0b0e] via-[#1d0709] to-[#120405] border-rose-500 shadow-xl shadow-rose-500/20 ring-1 ring-rose-500/50'
                             : 'bg-[#111827]/40 border-white/5 hover:border-white/20'
-                    }`}
+                        }`}
                 >
                     <div className="flex items-start justify-between">
                         <div className="flex items-center space-x-3.5">
@@ -429,9 +419,8 @@ const Settings: React.FC<SettingsProps> = ({ user, isAuthenticated, onOpenAuth, 
                                 <p className="text-xs text-slate-400 mt-0.5">Direct GoogleVideo audio streams via Piped API instances</p>
                             </div>
                         </div>
-                        <div className={`w-6 h-6 rounded-full flex items-center justify-center transition-all ${
-                            audioProvider === 'youtube' ? 'bg-rose-600 text-white' : 'border border-white/20'
-                        }`}>
+                        <div className={`w-6 h-6 rounded-full flex items-center justify-center transition-all ${audioProvider === 'youtube' ? 'bg-rose-600 text-white' : 'border border-white/20'
+                            }`}>
                             {audioProvider === 'youtube' && <Check size={14} strokeWidth={3} />}
                         </div>
                     </div>
@@ -444,11 +433,10 @@ const Settings: React.FC<SettingsProps> = ({ user, isAuthenticated, onOpenAuth, 
                 {/* Ocean Theme (Default) Card */}
                 <div
                     onClick={() => setTheme('ocean')}
-                    className={`relative p-5 rounded-2xl border cursor-pointer transition-all duration-300 group ${
-                        theme === 'ocean'
+                    className={`relative p-5 rounded-2xl border cursor-pointer transition-all duration-300 group ${theme === 'ocean'
                             ? 'bg-gradient-to-br from-[#0c1836] via-[#09132b] to-[#060d1e] border-blue-500 shadow-xl shadow-blue-500/20 ring-1 ring-blue-500/50'
                             : 'bg-[#111827]/40 border-white/5 hover:border-white/20'
-                    }`}
+                        }`}
                 >
                     <div className="flex items-start justify-between">
                         <div className="flex items-center space-x-3.5">
@@ -465,9 +453,8 @@ const Settings: React.FC<SettingsProps> = ({ user, isAuthenticated, onOpenAuth, 
                                 <p className="text-xs text-slate-400 mt-0.5">Deep ocean blue & sea azure glow, sleek and modern</p>
                             </div>
                         </div>
-                        <div className={`w-6 h-6 rounded-full flex items-center justify-center transition-all ${
-                            theme === 'ocean' ? 'bg-blue-600 text-white scale-100' : 'border border-white/20 scale-90'
-                        }`}>
+                        <div className={`w-6 h-6 rounded-full flex items-center justify-center transition-all ${theme === 'ocean' ? 'bg-blue-600 text-white scale-100' : 'border border-white/20 scale-90'
+                            }`}>
                             {theme === 'ocean' && <Check size={14} strokeWidth={3} />}
                         </div>
                     </div>
@@ -487,11 +474,10 @@ const Settings: React.FC<SettingsProps> = ({ user, isAuthenticated, onOpenAuth, 
                 {/* Autumn Theme Card */}
                 <div
                     onClick={() => setTheme('autumn')}
-                    className={`relative p-5 rounded-2xl border cursor-pointer transition-all duration-300 group ${
-                        theme === 'autumn'
+                    className={`relative p-5 rounded-2xl border cursor-pointer transition-all duration-300 group ${theme === 'autumn'
                             ? 'bg-gradient-to-br from-[#241a16] via-[#1a120e] to-[#120c09] border-[#c87d46] shadow-xl shadow-[#c87d46]/20 ring-1 ring-[#c87d46]/50'
                             : 'bg-[#111827]/40 border-white/5 hover:border-white/20'
-                    }`}
+                        }`}
                 >
                     <div className="flex items-start justify-between">
                         <div className="flex items-center space-x-3.5">
@@ -503,9 +489,8 @@ const Settings: React.FC<SettingsProps> = ({ user, isAuthenticated, onOpenAuth, 
                                 <p className="text-xs text-slate-400 mt-0.5">Warm terracotta, amber & peach, cozy vintage warmth</p>
                             </div>
                         </div>
-                        <div className={`w-6 h-6 rounded-full flex items-center justify-center transition-all ${
-                            theme === 'autumn' ? 'bg-[#c87d46] text-white scale-100' : 'border border-white/20 scale-90'
-                        }`}>
+                        <div className={`w-6 h-6 rounded-full flex items-center justify-center transition-all ${theme === 'autumn' ? 'bg-[#c87d46] text-white scale-100' : 'border border-white/20 scale-90'
+                            }`}>
                             {theme === 'autumn' && <Check size={14} strokeWidth={3} />}
                         </div>
                     </div>
@@ -525,11 +510,10 @@ const Settings: React.FC<SettingsProps> = ({ user, isAuthenticated, onOpenAuth, 
 
             {/* 2.5 Spotify Account & Playlist Import */}
             <SectionTitle>Spotify Account & Playlist Import</SectionTitle>
-            <div className={`border rounded-3xl p-6 md:p-8 backdrop-blur-sm mb-6 transition-all duration-300 relative overflow-hidden ${
-                isOcean
+            <div className={`border rounded-3xl p-6 md:p-8 backdrop-blur-sm mb-6 transition-all duration-300 relative overflow-hidden ${isOcean
                     ? 'bg-gradient-to-br from-[#0c182c]/80 via-[#0a1424]/70 to-[#070e1a]/85 border-blue-500/20'
                     : 'bg-gradient-to-br from-[#1d1613]/80 via-[#17110e]/70 to-[#100b09]/85 border-white/10'
-            }`}>
+                }`}>
                 {/* Subtle Spotify green ambient glow */}
                 <div className="absolute -top-20 -right-20 w-52 h-52 bg-[#1DB954]/15 rounded-full blur-3xl pointer-events-none" />
 
@@ -605,13 +589,12 @@ const Settings: React.FC<SettingsProps> = ({ user, isAuthenticated, onOpenAuth, 
                                     key={num}
                                     type="button"
                                     onClick={() => setSpotifyLimit(num)}
-                                    className={`px-4 py-2 rounded-xl text-xs font-bold transition-all ${
-                                        spotifyLimit === num
+                                    className={`px-4 py-2 rounded-xl text-xs font-bold transition-all ${spotifyLimit === num
                                             ? isOcean
                                                 ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/30'
                                                 : 'bg-[#c87d46] text-white shadow-lg shadow-[#c87d46]/30'
                                             : 'bg-white/5 hover:bg-white/10 text-slate-300 border border-white/5'
-                                    }`}
+                                        }`}
                                 >
                                     {num} Playlists
                                 </button>
@@ -633,11 +616,10 @@ const Settings: React.FC<SettingsProps> = ({ user, isAuthenticated, onOpenAuth, 
                                     if (e.key === 'Enter') handleDiscoverPlaylists();
                                 }}
                                 placeholder="Paste playlist URLs, sp_dc cookie, or token (or leave blank for curated hits)..."
-                                className={`w-full px-4 py-3 rounded-2xl bg-black/50 border text-sm text-white placeholder-slate-500 focus:outline-none transition-colors pr-10 ${
-                                    isOcean
+                                className={`w-full px-4 py-3 rounded-2xl bg-black/50 border text-sm text-white placeholder-slate-500 focus:outline-none transition-colors pr-10 ${isOcean
                                         ? 'border-blue-500/20 focus:border-blue-500'
                                         : 'border-white/10 focus:border-[#f5d0b5]'
-                                }`}
+                                    }`}
                             />
                             {spotifyCredential && (
                                 <button
@@ -657,11 +639,10 @@ const Settings: React.FC<SettingsProps> = ({ user, isAuthenticated, onOpenAuth, 
                             type="button"
                             onClick={() => handleDiscoverPlaylists()}
                             disabled={isDiscovering}
-                            className={`inline-flex items-center space-x-2 px-5 py-2.5 rounded-xl text-xs md:text-sm font-bold text-white transition-all shadow-lg disabled:opacity-50 ${
-                                isOcean
+                            className={`inline-flex items-center space-x-2 px-5 py-2.5 rounded-xl text-xs md:text-sm font-bold text-white transition-all shadow-lg disabled:opacity-50 ${isOcean
                                     ? 'bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-500 hover:to-cyan-500 shadow-blue-600/25'
                                     : 'bg-gradient-to-r from-[#c87d46] to-[#d97736] hover:from-[#d97736] hover:to-[#e88847] shadow-[#c87d46]/25'
-                            }`}
+                                }`}
                         >
                             {isDiscovering ? (
                                 <>
@@ -732,11 +713,10 @@ const Settings: React.FC<SettingsProps> = ({ user, isAuthenticated, onOpenAuth, 
                                 >
                                     Deselect All
                                 </button>
-                                <span className={`px-2.5 py-1 rounded-lg text-xs font-bold ${
-                                    selectedPlaylistIds.size > 0
+                                <span className={`px-2.5 py-1 rounded-lg text-xs font-bold ${selectedPlaylistIds.size > 0
                                         ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30'
                                         : 'bg-white/5 text-slate-400'
-                                }`}>
+                                    }`}>
                                     {selectedPlaylistIds.size} of {discoveredPlaylists.length} selected
                                 </span>
                             </div>
@@ -750,18 +730,16 @@ const Settings: React.FC<SettingsProps> = ({ user, isAuthenticated, onOpenAuth, 
                                     <div
                                         key={pl.id}
                                         onClick={() => toggleSelectPlaylist(pl.id)}
-                                        className={`flex items-center space-x-3.5 p-3 rounded-2xl border cursor-pointer transition-all duration-200 select-none group ${
-                                            isSelected
+                                        className={`flex items-center space-x-3.5 p-3 rounded-2xl border cursor-pointer transition-all duration-200 select-none group ${isSelected
                                                 ? 'bg-emerald-950/30 border-emerald-500/50 shadow-md shadow-emerald-950/20 ring-1 ring-emerald-500/40'
                                                 : 'bg-black/40 border-white/5 hover:border-white/20 hover:bg-black/60'
-                                        }`}
+                                            }`}
                                     >
                                         {/* Checkbox */}
-                                        <div className={`w-5 h-5 rounded-lg flex items-center justify-center transition-all flex-shrink-0 ${
-                                            isSelected
+                                        <div className={`w-5 h-5 rounded-lg flex items-center justify-center transition-all flex-shrink-0 ${isSelected
                                                 ? 'bg-emerald-500 text-black shadow-sm'
                                                 : 'border border-white/20 group-hover:border-white/40'
-                                        }`}>
+                                            }`}>
                                             {isSelected && <Check size={14} strokeWidth={3} />}
                                         </div>
 
@@ -804,11 +782,10 @@ const Settings: React.FC<SettingsProps> = ({ user, isAuthenticated, onOpenAuth, 
                                 type="button"
                                 onClick={handleImportSelected}
                                 disabled={selectedPlaylistIds.size === 0 || isImporting}
-                                className={`inline-flex items-center justify-center space-x-2 px-6 py-3 rounded-2xl text-xs md:text-sm font-black transition-all shadow-xl disabled:opacity-40 disabled:cursor-not-allowed ${
-                                    isImporting
+                                className={`inline-flex items-center justify-center space-x-2 px-6 py-3 rounded-2xl text-xs md:text-sm font-black transition-all shadow-xl disabled:opacity-40 disabled:cursor-not-allowed ${isImporting
                                         ? 'bg-slate-700 text-slate-300'
                                         : 'bg-[#1DB954] hover:bg-[#1ed760] text-black shadow-emerald-500/20 active:scale-95'
-                                }`}
+                                    }`}
                             >
                                 {isImporting ? (
                                     <>
@@ -932,11 +909,10 @@ const Settings: React.FC<SettingsProps> = ({ user, isAuthenticated, onOpenAuth, 
 
             {/* 4. Privacy & Data Usage */}
             <SectionTitle>Privacy & Data Usage</SectionTitle>
-            <div className={`rounded-2xl p-6 border transition-all duration-300 ${
-                isOcean
+            <div className={`rounded-2xl p-6 border transition-all duration-300 ${isOcean
                     ? 'bg-[#0f172a]/50 border-blue-500/20 shadow-lg shadow-blue-500/5'
                     : 'bg-[#1F2937]/30 border-white/5'
-            }`}>
+                }`}>
                 <div className="flex items-start space-x-4">
                     <Shield className={`${isOcean ? 'text-blue-400' : 'text-[#f5d0b5]'} flex-shrink-0 mt-1`} size={24} />
                     <div className="space-y-4">
@@ -950,11 +926,10 @@ const Settings: React.FC<SettingsProps> = ({ user, isAuthenticated, onOpenAuth, 
                             {['Zero Login Required', 'Client-Side Cache', 'High-Fidelity Audio', 'Real-Time Privacy', 'Ad-Free Streams'].map(tag => (
                                 <span
                                     key={tag}
-                                    className={`px-3 py-1 rounded-full text-xs font-bold border transition-colors ${
-                                        isOcean
+                                    className={`px-3 py-1 rounded-full text-xs font-bold border transition-colors ${isOcean
                                             ? 'bg-blue-500/10 text-cyan-300 border-blue-500/25'
                                             : 'bg-[#f5d0b5]/10 text-[#f5d0b5] border-[#f5d0b5]/20'
-                                    }`}
+                                        }`}
                                 >
                                     {tag}
                                 </span>
@@ -1019,22 +994,20 @@ const Settings: React.FC<SettingsProps> = ({ user, isAuthenticated, onOpenAuth, 
 
             {/* 5. Support the Developer */}
             <SectionTitle>Support the Developer ☕</SectionTitle>
-            <div className={`rounded-3xl p-8 border text-center space-y-4 transition-all duration-300 ${
-                isOcean
+            <div className={`rounded-3xl p-8 border text-center space-y-4 transition-all duration-300 ${isOcean
                     ? 'bg-gradient-to-r from-blue-900/30 via-indigo-900/20 to-blue-950/40 border-blue-500/20 shadow-xl shadow-blue-500/5'
                     : 'bg-gradient-to-r from-[#c87d46]/20 via-[#d97736]/15 to-[#f5d0b5]/10 border-[#f5d0b5]/20 shadow-xl shadow-[#c87d46]/5'
-            }`}>
+                }`}>
                 <h3 className="text-2xl font-black text-white">Love using Slothify?</h3>
                 <p className="text-slate-300 max-w-md mx-auto">
                     If you enjoy discovering and streaming music with Slothify, consider supporting its open-source development!
                 </p>
                 <button
                     onClick={() => window.open('https://buymeacoffee.com/purvesh.dev', '_blank')}
-                    className={`inline-flex items-center space-x-3 px-8 py-4 rounded-full font-black text-lg transition-transform hover:scale-105 active:scale-95 shadow-xl ${
-                        isOcean
+                    className={`inline-flex items-center space-x-3 px-8 py-4 rounded-full font-black text-lg transition-transform hover:scale-105 active:scale-95 shadow-xl ${isOcean
                             ? 'bg-gradient-to-r from-blue-600 to-cyan-500 hover:from-blue-500 hover:to-cyan-400 text-white shadow-blue-500/25'
                             : 'bg-[#f5d0b5] hover:bg-[#ebd0bc] text-black shadow-[#f5d0b5]/20'
-                    }`}
+                        }`}
                 >
                     <Coffee size={24} />
                     <span>Buy Me a Coffee</span>
@@ -1044,21 +1017,19 @@ const Settings: React.FC<SettingsProps> = ({ user, isAuthenticated, onOpenAuth, 
             {/* 6. About & Legal */}
             <div className="text-center pt-12 pb-6 space-y-3">
                 <div className="flex items-center justify-center space-x-4 text-xs text-slate-400">
-                    <button onClick={() => navigate('/terms')} className={`underline transition-colors ${
-                        isOcean ? 'hover:text-cyan-400' : 'hover:text-[#f5d0b5]'
-                    }`}>
+                    <button onClick={() => navigate('/terms')} className={`underline transition-colors ${isOcean ? 'hover:text-cyan-400' : 'hover:text-[#f5d0b5]'
+                        }`}>
                         Terms & Conditions
                     </button>
                     <span>•</span>
-                    <button onClick={() => navigate('/privacy')} className={`underline transition-colors ${
-                        isOcean ? 'hover:text-cyan-400' : 'hover:text-[#f5d0b5]'
-                    }`}>
+                    <button onClick={() => navigate('/privacy')} className={`underline transition-colors ${isOcean ? 'hover:text-cyan-400' : 'hover:text-[#f5d0b5]'
+                        }`}>
                         Privacy Policy
                     </button>
                 </div>
                 <div className="flex items-center justify-center space-x-2 text-slate-500 font-bold">
                     <Info size={16} />
-                    <span>Slothify v1.0.1</span>
+                    <span>Slothify v{APP_VERSION}</span>
                 </div>
                 <p className="text-slate-600 text-sm">Modular Plugin & Scraper Architecture</p>
             </div>
@@ -1070,11 +1041,10 @@ const Settings: React.FC<SettingsProps> = ({ user, isAuthenticated, onOpenAuth, 
                     onClick={() => setIsAvatarModalOpen(false)}
                 >
                     <div
-                        className={`w-full max-w-lg rounded-3xl border p-6 md:p-7 shadow-2xl relative animate-in zoom-in-95 duration-200 max-h-[90vh] overflow-y-auto ${
-                            isOcean
+                        className={`w-full max-w-lg rounded-3xl border p-6 md:p-7 shadow-2xl relative animate-in zoom-in-95 duration-200 max-h-[90vh] overflow-y-auto ${isOcean
                                 ? 'bg-[#0b1329]/95 border-blue-500/30 shadow-blue-950/50'
                                 : 'bg-[#181412]/95 border-white/10 shadow-black/80'
-                        }`}
+                            }`}
                         onClick={(e) => e.stopPropagation()}
                     >
                         {/* Modal Header */}
@@ -1101,9 +1071,8 @@ const Settings: React.FC<SettingsProps> = ({ user, isAuthenticated, onOpenAuth, 
                         {/* Current Selection & Upload Options */}
                         <div className="py-5 flex flex-col sm:flex-row items-center sm:justify-between gap-4 border-b border-white/[0.08]">
                             <div className="flex items-center space-x-4">
-                                <div className={`w-16 h-16 rounded-full border-2 overflow-hidden shadow-xl p-0.5 flex-shrink-0 ${
-                                    isOcean ? 'border-blue-500' : 'border-[#f5d0b5]'
-                                }`}>
+                                <div className={`w-16 h-16 rounded-full border-2 overflow-hidden shadow-xl p-0.5 flex-shrink-0 ${isOcean ? 'border-blue-500' : 'border-[#f5d0b5]'
+                                    }`}>
                                     <img
                                         src={localAvatar || '/avatars/ghost.png'}
                                         alt="Current Profile"
@@ -1128,11 +1097,10 @@ const Settings: React.FC<SettingsProps> = ({ user, isAuthenticated, onOpenAuth, 
                                 />
                                 <button
                                     onClick={() => fileInputRef.current?.click()}
-                                    className={`flex items-center space-x-1.5 px-3.5 py-2 rounded-xl text-xs font-bold transition-all shadow-sm ${
-                                        isOcean
+                                    className={`flex items-center space-x-1.5 px-3.5 py-2 rounded-xl text-xs font-bold transition-all shadow-sm ${isOcean
                                             ? 'bg-blue-600/25 hover:bg-blue-600/40 text-blue-300 border border-blue-500/30'
                                             : 'bg-[#f5d0b5]/15 hover:bg-[#f5d0b5]/25 text-[#f5d0b5] border border-[#f5d0b5]/25'
-                                    }`}
+                                        }`}
                                 >
                                     <Upload size={13} />
                                     <span>Upload Photo</span>
@@ -1162,13 +1130,12 @@ const Settings: React.FC<SettingsProps> = ({ user, isAuthenticated, onOpenAuth, 
                                         <button
                                             key={avatar.id}
                                             onClick={() => handleSelectAvatar(avatar.url)}
-                                            className={`group flex flex-col items-center p-2 rounded-2xl border transition-all duration-200 select-none relative ${
-                                                isSelected
+                                            className={`group flex flex-col items-center p-2 rounded-2xl border transition-all duration-200 select-none relative ${isSelected
                                                     ? isOcean
                                                         ? 'bg-blue-600/20 border-blue-500 ring-2 ring-blue-500/50 scale-[1.04]'
                                                         : 'bg-[#f5d0b5]/15 border-[#f5d0b5] ring-2 ring-[#f5d0b5]/50 scale-[1.04]'
                                                     : 'bg-black/20 hover:bg-black/40 border-white/5 hover:border-white/20'
-                                            }`}
+                                                }`}
                                         >
                                             <div className="relative w-12 h-12 sm:w-14 sm:h-14 rounded-full overflow-hidden mb-1.5 shadow-md">
                                                 <img
@@ -1178,17 +1145,15 @@ const Settings: React.FC<SettingsProps> = ({ user, isAuthenticated, onOpenAuth, 
                                                 />
                                                 {isSelected && (
                                                     <div className="absolute inset-0 bg-black/25 flex items-center justify-center text-white">
-                                                        <div className={`w-5 h-5 rounded-full flex items-center justify-center shadow-lg ${
-                                                            isOcean ? 'bg-blue-600' : 'bg-[#c87d46]'
-                                                        }`}>
+                                                        <div className={`w-5 h-5 rounded-full flex items-center justify-center shadow-lg ${isOcean ? 'bg-blue-600' : 'bg-[#c87d46]'
+                                                            }`}>
                                                             <Check size={11} strokeWidth={3} />
                                                         </div>
                                                     </div>
                                                 )}
                                             </div>
-                                            <span className={`text-[11px] font-semibold truncate max-w-full ${
-                                                isSelected ? 'text-white font-bold' : 'text-slate-400 group-hover:text-slate-200'
-                                            }`}>
+                                            <span className={`text-[11px] font-semibold truncate max-w-full ${isSelected ? 'text-white font-bold' : 'text-slate-400 group-hover:text-slate-200'
+                                                }`}>
                                                 {avatar.name}
                                             </span>
                                         </button>
@@ -1205,9 +1170,8 @@ const Settings: React.FC<SettingsProps> = ({ user, isAuthenticated, onOpenAuth, 
                             </div>
                             <button
                                 onClick={() => setIsAvatarModalOpen(false)}
-                                className={`px-5 py-2 rounded-xl text-xs font-bold text-white shadow-md transition-all ${
-                                    isOcean ? 'bg-blue-600 hover:bg-blue-500' : 'bg-[#c87d46] hover:bg-[#d97736]'
-                                }`}
+                                className={`px-5 py-2 rounded-xl text-xs font-bold text-white shadow-md transition-all ${isOcean ? 'bg-blue-600 hover:bg-blue-500' : 'bg-[#c87d46] hover:bg-[#d97736]'
+                                    }`}
                             >
                                 Done
                             </button>

@@ -20,6 +20,7 @@ import BottomNav from './components/BottomNav';
 import Player from './components/Player';
 import ScrollToTop from './components/ScrollToTop';
 import BrandLogo from './components/BrandLogo';
+import Footer from './components/Footer';
 import { User, Track } from './types';
 import axios from 'axios';
 import { AuthModal } from './components/AuthModal';
@@ -597,6 +598,7 @@ const App: React.FC = () => {
                 <Route path="*" element={<Navigate to="/" replace />} />
               </Routes>
             </div>
+            <Footer />
           </main>
 
           <BottomNav />

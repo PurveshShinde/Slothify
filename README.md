@@ -4,7 +4,7 @@
 
 # Slothify — Ad-Free Music Streaming Platform
 
-![Version](https://img.shields.io/badge/Version-1.0.5-007ACC.svg?style=for-the-badge)
+![Version](https://img.shields.io/badge/Version-1.0.6-007ACC.svg?style=for-the-badge)
 ![License](https://img.shields.io/badge/License-MIT-green.svg?style=for-the-badge)
 ![React 18](https://img.shields.io/badge/React_18-20232A?style=for-the-badge&logo=react&logoColor=61DAFB)
 ![TypeScript](https://img.shields.io/badge/TypeScript-007ACC?style=for-the-badge&logo=typescript&logoColor=white)
@@ -34,6 +34,8 @@ Slothify is a lightweight music streaming application designed to deliver direct
 - **Skeleton Loading States**: Smooth shimmer skeleton placeholders across Home, Albums, and Artists views for fluid screen transitions.
 - **Encrypted Library Storage**: User playlists and saved favorites are encrypted before cloud persistence.
 - **Mobile-Optimized Experience**: Touch-friendly layout with gesture navigation, pull-to-refresh, and persistent player controls.
+- **Zero-Friction Account Creation**: Sign up with just a **username and password** — no email, no Google, no OAuth required. Upon registration a unique **12-word recovery passphrase** is issued (since no email is linked) so you can always regain access. Your avatar is auto-generated from your username via DiceBear, and accounts work even in offline/local-fallback mode.
+- **Listening-Driven Personalization**: Every track you play is recorded to your personal listening history (up to the 100 most recent plays). The recommendation engine cross-references your recent history and liked tracks to extract your top artists, then surfaces 25 artist-matched tracks weighted toward what you've been listening to lately. New accounts start with a global pop mix that evolves into a fully personalized feed the more you listen.
 
 ---
 

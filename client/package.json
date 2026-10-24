@@ -1,12 +1,14 @@
 {
     "name": "slothify-frontend",
     "private": true,
-    "version": "1.0.1",
+    "version": "1.0.6",
     "type": "module",
     "scripts": {
         "dev": "vite",
         "build": "tsc && vite build",
-        "preview": "vite preview"
+        "preview": "vite preview",
+        "version:sync": "node ../scripts/sync-version.mjs",
+        "version:set": "node ../scripts/sync-version.mjs"
     },
     "dependencies": {
         "axios": "^1.6.2",
