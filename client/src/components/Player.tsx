@@ -779,22 +779,9 @@ const Player: React.FC<PlayerProps> = ({
                                 </div>
                             </div>
                             <div className="flex flex-col min-w-0">
-                                <div className="flex items-center gap-1.5 truncate">
-                                    <span className={`text-xs font-semibold truncate text-white transition-colors leading-tight ${isOcean ? 'group-hover:text-blue-400' : 'group-hover:text-[#f5d0b5]'}`}>
-                                        {currentTrack.name}
-                                    </span>
-                                    {activeEngine && (
-                                        <span className={`text-[9px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded flex-shrink-0 border ${
-                                            activeEngine === 'jiosaavn'
-                                                ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30'
-                                                : isOcean
-                                                    ? 'bg-blue-500/15 text-blue-300 border-blue-500/30'
-                                                    : 'bg-[#f5d0b5]/15 text-[#f5d0b5] border-[#f5d0b5]/30'
-                                        }`} title={activeEngine === 'jiosaavn' ? 'Streaming via JioSaavn (320kbps CD Quality)' : 'Streaming via YouTube (Cobalt / Piped)'}>
-                                            {activeEngine === 'jiosaavn' ? '320k Saavn' : 'YouTube'}
-                                        </span>
-                                    )}
-                                </div>
+                                <span className={`text-xs font-semibold truncate text-white transition-colors leading-tight ${isOcean ? 'group-hover:text-blue-400' : 'group-hover:text-[#f5d0b5]'}`}>
+                                    {currentTrack.name}
+                                </span>
                                 <span className="text-[11px] text-[#8a8489] hover:text-white cursor-pointer truncate mt-0.5 leading-tight">
                                     {currentTrack.artists[0]?.name}
                                 </span>
