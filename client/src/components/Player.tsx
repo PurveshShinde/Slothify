@@ -7,6 +7,7 @@ import {
 import { Track } from '../types';
 import VintageTurntable from './VintageTurntable';
 import { useTheme } from '../context/ThemeContext';
+import { AudioService } from '../services/audioService';
 
 const rawApiBase = ((import.meta as any).env?.VITE_API_BASE || (import.meta as any).env?.VITE_API_URL || '').trim();
 const API_BASE = rawApiBase.replace(/\/api\/?$/, '').replace(/\/+$/, '');
@@ -221,6 +222,15 @@ const Player: React.FC<PlayerProps> = ({
             try {
                 let songId = track.id.startsWith('saavn_') ? track.id.replace('saavn_', '') : resolvedSaavnMap.current.get(track.id);
                 if (!songId) {
+                    // Try live Cloudflare AudioService first
+                    const match = await AudioService.findStreamForTrack(trackTitle, trackArtist);
+                    if (match?.songId) {
+                        songId = match.songId;
+                        resolvedSaavnMap.current.set(track.id, songId);
+                        persistSaavnCache();
+                    }
+                }
+                if (!songId) {
                     const sRes = await fetchSaavnApi(`/api/saavn/search?q=${encodeURIComponent(songQuery)}&title=${encodeURIComponent(trackTitle)}&artist=${encodeURIComponent(trackArtist)}`);
                     if (sRes.ok) {
                         const sData = await sRes.json();
@@ -327,6 +337,26 @@ const Player: React.FC<PlayerProps> = ({
                 const resolveSaavn = async (): Promise<string | null> => {
                     try {
                         let songId = trackId.startsWith('saavn_') ? trackId.replace('saavn_', '') : resolvedSaavnMap.current.get(trackId);
+
+                        // If songId is known from a previous resolve or saavn_ ID, fetch direct stream URL from worker
+                        if (songId) {
+                            try {
+                                const direct = await AudioService.getSongStreamUrl(songId, signal);
+                                if (direct) return direct;
+                            } catch { }
+                        }
+
+                        // Try finding stream directly via Cloudflare AudioService
+                        try {
+                            const match = await AudioService.findStreamForTrack(trackTitle, trackArtist, signal);
+                            if (match?.streamUrl) {
+                                resolvedSaavnMap.current.set(trackId, match.songId);
+                                persistSaavnCache();
+                                return match.streamUrl;
+                            }
+                        } catch { }
+
+                        // Fallback to local serverless proxy route
                         if (!songId) {
                             const sRes = await fetchSaavnApi(`/api/saavn/search?q=${encodeURIComponent(songQuery)}&title=${encodeURIComponent(trackTitle)}&artist=${encodeURIComponent(trackArtist)}`, { signal });
                             if (!sRes.ok) return null;

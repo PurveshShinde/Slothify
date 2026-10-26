@@ -5,6 +5,7 @@ import axios from 'axios';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useTheme } from '../context/ThemeContext';
 import PlaylistCover from '../components/PlaylistCover';
+import { AudioService } from '../services/audioService';
 
 interface CategoryItem {
   name: string;
@@ -165,6 +166,21 @@ const Search: React.FC<SearchProps> = ({ isAuthenticated, onPlayTrack }) => {
     const timer = setTimeout(async () => {
       setSearchParams({ q: trimmed }, { replace: true });
       setIsLoading(true);
+
+      // 1. First search directly via Cloudflare AudioService (JioSaavn)
+      try {
+        const saavnRes = await AudioService.searchSongs(trimmed);
+        if (saavnRes?.data?.results && saavnRes.data.results.length > 0) {
+          const mappedTracks = saavnRes.data.results.map(AudioService.toSlothifyTrack);
+          setResults(mappedTracks);
+          setIsLoading(false);
+          return;
+        }
+      } catch (saavnErr) {
+        console.warn('AudioService search failed, falling back to local search:', saavnErr);
+      }
+
+      // 2. Fallback to local API search
       try {
         const res = await axios.get(`/api/search?q=${encodeURIComponent(trimmed)}`, {
           signal: abortController.signal

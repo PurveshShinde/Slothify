@@ -118,6 +118,18 @@ const App: React.FC = () => {
   }, []);
 
   const handlePlayTrack = useCallback((track: Track, trackQueue?: Track[]) => {
+    const isCurrent = Boolean(currentTrack) && (
+      currentTrack?.id === track.id ||
+      (Boolean(currentTrack?.name && track.name) &&
+        currentTrack?.name.toLowerCase() === track.name.toLowerCase() &&
+        currentTrack?.artists?.[0]?.name?.toLowerCase() === track.artists?.[0]?.name?.toLowerCase())
+    );
+
+    if (isCurrent) {
+      setIsPlaying(prev => !prev);
+      return;
+    }
+
     setCurrentTrack(track);
     setIsPlaying(true);
     if (trackQueue && trackQueue.length > 0) setQueue(trackQueue);
@@ -127,7 +139,7 @@ const App: React.FC = () => {
     if (isAuthenticated && track && track.id) {
       axios.post('/api/me/history', { track }).catch(() => {});
     }
-  }, [isAuthenticated]);
+  }, [currentTrack, isAuthenticated]);
 
   const handleTrackChange = useCallback((track: Track) => {
     setCurrentTrack(track);
@@ -493,6 +505,7 @@ const App: React.FC = () => {
                     onPlayTrack={handlePlayTrack}
                     currentTrack={currentTrack}
                     isPlaying={isPlaying}
+                    onPlayPause={handlePlayPause}
                     onToggleLike={handleToggleLike}
                     likedTrackIds={likedTrackIds}
                     onOpenTurntable={() => setIsTurntableOpen(true)}

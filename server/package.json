@@ -1,6 +1,6 @@
 {
     "name": "slothify-backend",
-    "version": "1.0.6",
+    "version": "1.0.7",
     "description": "Backend for Slothify music player",
     "type": "module",
     "main": "dist/server.js",

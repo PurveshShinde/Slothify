@@ -4,7 +4,7 @@
 
 # Slothify — Ad-Free Music Streaming Platform
 
-![Version](https://img.shields.io/badge/Version-1.0.6-007ACC.svg?style=for-the-badge)
+![Version](https://img.shields.io/badge/Version-1.0.7-007ACC.svg?style=for-the-badge)
 ![License](https://img.shields.io/badge/License-MIT-green.svg?style=for-the-badge)
 ![React 18](https://img.shields.io/badge/React_18-20232A?style=for-the-badge&logo=react&logoColor=61DAFB)
 ![TypeScript](https://img.shields.io/badge/TypeScript-007ACC?style=for-the-badge&logo=typescript&logoColor=white)

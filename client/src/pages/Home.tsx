@@ -17,6 +17,7 @@ interface HomeProps {
   onPlayTrack: (track: Track, queue?: Track[]) => void;
   currentTrack?: Track | null;
   isPlaying?: boolean;
+  onPlayPause?: (playing: boolean) => void;
   onToggleLike?: (id: string, track?: Track) => void;
   likedTrackIds?: Set<string>;
   onOpenTurntable?: () => void;
@@ -962,6 +963,7 @@ const Home: React.FC<HomeProps> = ({
   onPlayTrack,
   currentTrack,
   isPlaying = false,
+  onPlayPause,
   onToggleLike,
   likedTrackIds,
   onOpenTurntable
@@ -1358,7 +1360,13 @@ const Home: React.FC<HomeProps> = ({
             }}
           >
             {FEATURED_HERO_TRACKS.map((track, idx) => {
-              const isTrackPlaying = isPlaying && currentTrack?.id === track.id;
+              const isSameTrack = Boolean(currentTrack) && (
+                currentTrack?.id === track.id ||
+                (Boolean(currentTrack?.name && track.name) &&
+                  currentTrack?.name.toLowerCase() === track.name.toLowerCase() &&
+                  currentTrack?.artists?.[0]?.name?.toLowerCase() === track.artists?.[0]?.name?.toLowerCase())
+              );
+              const isTrackPlaying = Boolean(isPlaying && isSameTrack);
               const isTrackLiked = track.id ? likedTrackIds?.has(track.id) : false;
               const isVisibleSlide = isDragging || touchDeltaX !== 0 || idx === featuredIndex;
 
@@ -1421,7 +1429,11 @@ const Home: React.FC<HomeProps> = ({
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
-                          onPlayTrack(track);
+                          if (isSameTrack && onPlayPause) {
+                            onPlayPause(!isPlaying);
+                          } else {
+                            onPlayTrack(track);
+                          }
                         }}
                         className={`px-7 py-2.5 rounded-full font-semibold text-xs md:text-sm flex items-center space-x-2 active:scale-95 transition-colors duration-200 text-slate-950 shadow-md ${isOcean
                             ? 'bg-cyan-400 hover:bg-cyan-300 shadow-cyan-500/20'
