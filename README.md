@@ -43,8 +43,8 @@ Slothify is a lightweight music streaming application designed to deliver direct
 
 | Engine | Source Mechanism | Coverage |
 | :--- | :--- | :--- |
-| **JioSaavn API** | Direct media stream delivery from edge CDNs | Studio releases, albums, and regional catalogs |
-| **YouTube (Piped & Invidious)** | Decentralized stream extraction across redundant instances | Global tracks, live performances, indie music, and covers |
+| **JioSaavn** | Direct media stream delivery via Cloudflare Worker backend ([EchoMusicApp/saavn-extension](https://github.com/EchoMusicApp/saavn-extension)) | Studio releases, albums, and regional catalogs (up to 320 kbps) |
+| **YouTube (Piped)** | Decentralized stream extraction across redundant Piped instances | Global tracks, live performances, indie music, and covers |
 | **Smart Fallback** | Automated priority routing across available sources | Seamless playback with high uptime |
 
 ---
@@ -53,8 +53,9 @@ Slothify is a lightweight music streaming application designed to deliver direct
 
 Slothify builds upon research, tools, and open-source implementations developed by the community:
 
+- **[saavn-extension (EchoMusicApp)](https://github.com/EchoMusicApp/saavn-extension)**: Cloudflare Worker backend powering direct JioSaavn audio stream extraction and high-bitrate streaming up to 320 kbps without datacenter geoblocking.
 - **[spotube-plugin-spotify](https://github.com/sonic-liberation/spotube-plugin-spotify)**: Reverse-engineered Spotify Web Player GQL discovery algorithms for clientless track and artist metadata.
-- **[Piped](https://github.com/TeamPiped/Piped) & [Invidious](https://invidious.io/)**: Decentralized YouTube API stream extraction frameworks for ad-free audio delivery.
+- **[Piped](https://github.com/TeamPiped/Piped)**: Decentralized YouTube API stream extraction framework for ad-free audio delivery.
 - **[Unofficial JioSaavn API](https://github.com/sumitkolhe/jiosaavn-api)**: Open-source research and media endpoint structures for direct streaming resolution.
 - **[Apple iTunes Search API](https://developer.apple.com/library/archive/documentation/AudioVideo/Conceptual/iTuneSearchAPI/index.html)**: High-resolution artwork enrichment and album lookup.
 

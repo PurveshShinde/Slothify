@@ -68,11 +68,16 @@ export interface SaavnGlobalSearchResponse {
   };
 }
 
-const RAW_URL = import.meta.env.VITE_AUDIO_SERVICE_URL || 'https://slothify-audio-service.shindepurvesh007.workers.dev';
-const BASE_URL = RAW_URL.replace(/\/+$/, '');
+const RAW_URL = import.meta.env.VITE_AUDIO_SERVICE_URL || '';
+const BASE_URL = RAW_URL ? RAW_URL.replace(/\/+$/, '') : '';
 
 export const AudioService = {
   baseUrl: BASE_URL,
+
+  /**
+   * Check if external audio service is configured
+   */
+  isConfigured: (): boolean => Boolean(BASE_URL),
 
   /**
    * Search for songs by query string
@@ -83,6 +88,7 @@ export const AudioService = {
     limit = 20,
     signal?: AbortSignal
   ): Promise<SaavnSearchSongsResponse | null> => {
+    if (!BASE_URL) return null;
     try {
       const response = await fetch(
         `${BASE_URL}/api/search/songs?query=${encodeURIComponent(query)}&page=${page}&limit=${limit}`,
@@ -102,6 +108,7 @@ export const AudioService = {
    * Global search across all categories (songs, albums, artists, playlists)
    */
   searchAll: async (query: string, signal?: AbortSignal): Promise<SaavnGlobalSearchResponse | null> => {
+    if (!BASE_URL) return null;
     try {
       const response = await fetch(`${BASE_URL}/api/search?query=${encodeURIComponent(query)}`, { signal });
       if (!response.ok) throw new Error(`Audio service global search failed (${response.status})`);
@@ -118,6 +125,7 @@ export const AudioService = {
    * Search for albums
    */
   searchAlbums: async (query: string, page = 1, limit = 20, signal?: AbortSignal) => {
+    if (!BASE_URL) return null;
     try {
       const response = await fetch(
         `${BASE_URL}/api/search/albums?query=${encodeURIComponent(query)}&page=${page}&limit=${limit}`,
@@ -137,6 +145,7 @@ export const AudioService = {
    * Search for artists
    */
   searchArtists: async (query: string, page = 1, limit = 20, signal?: AbortSignal) => {
+    if (!BASE_URL) return null;
     try {
       const response = await fetch(
         `${BASE_URL}/api/search/artists?query=${encodeURIComponent(query)}&page=${page}&limit=${limit}`,
@@ -156,6 +165,7 @@ export const AudioService = {
    * Search for playlists
    */
   searchPlaylists: async (query: string, page = 1, limit = 20, signal?: AbortSignal) => {
+    if (!BASE_URL) return null;
     try {
       const response = await fetch(
         `${BASE_URL}/api/search/playlists?query=${encodeURIComponent(query)}&page=${page}&limit=${limit}`,
@@ -175,6 +185,7 @@ export const AudioService = {
    * Get detailed song information and direct download URLs by song ID
    */
   getSongDetails: async (songId: string, signal?: AbortSignal): Promise<SaavnSong | null> => {
+    if (!BASE_URL) return null;
     try {
       const response = await fetch(`${BASE_URL}/api/songs/${encodeURIComponent(songId)}`, { signal });
       if (!response.ok) throw new Error(`Audio service getSongDetails failed (${response.status})`);
@@ -195,6 +206,7 @@ export const AudioService = {
    * Get album details by ID
    */
   getAlbumDetails: async (albumId: string, signal?: AbortSignal) => {
+    if (!BASE_URL) return null;
     try {
       const response = await fetch(`${BASE_URL}/api/albums?id=${encodeURIComponent(albumId)}`, { signal });
       if (!response.ok) throw new Error(`Audio service getAlbumDetails failed (${response.status})`);
@@ -211,6 +223,7 @@ export const AudioService = {
    * Get artist details by ID
    */
   getArtistDetails: async (artistId: string, signal?: AbortSignal) => {
+    if (!BASE_URL) return null;
     try {
       const response = await fetch(`${BASE_URL}/api/artists?id=${encodeURIComponent(artistId)}`, { signal });
       if (!response.ok) throw new Error(`Audio service getArtistDetails failed (${response.status})`);
@@ -227,6 +240,7 @@ export const AudioService = {
    * Get playlist details by ID
    */
   getPlaylistDetails: async (playlistId: string, signal?: AbortSignal) => {
+    if (!BASE_URL) return null;
     try {
       const response = await fetch(`${BASE_URL}/api/playlists?id=${encodeURIComponent(playlistId)}`, { signal });
       if (!response.ok) throw new Error(`Audio service getPlaylistDetails failed (${response.status})`);
