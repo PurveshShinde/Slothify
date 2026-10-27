@@ -1,6 +1,9 @@
 {
   "name": "slothify-workspace",
   "private": true,
+  "engines": {
+    "node": ">=24.22.1"
+  },
   "scripts": {
     "version:sync": "node scripts/sync-version.mjs",
     "version:set": "node scripts/sync-version.mjs"

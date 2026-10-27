@@ -4,6 +4,9 @@
     "description": "Backend for Slothify music player",
     "type": "module",
     "main": "dist/server.js",
+    "engines": {
+        "node": ">=24.22.1"
+    },
     "scripts": {
         "start": "node dist/server.js",
         "build": "tsc",
