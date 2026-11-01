@@ -1,0 +1,9 @@
+# Allow all search engine crawlers and Googlebot-Image to crawl the site and favicons
+User-agent: *
+Allow: /
+
+User-agent: Googlebot
+Allow: /
+
+User-agent: Googlebot-Image
+Allow: /
