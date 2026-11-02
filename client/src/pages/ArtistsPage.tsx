@@ -12,6 +12,7 @@ interface ArtistItem {
   images: { url: string }[];
   genres?: string[];
   followers?: { total: number };
+  monthlyListeners?: number;
   isFollowing?: boolean;
 }
 
@@ -224,10 +225,11 @@ export const ArtistsPage: React.FC<ArtistsPageProps> = ({
                   : [{ url: `https://ui-avatars.com/api/?name=${encodeURIComponent(item.name)}&background=181824&color=f5d0b5&size=300&bold=true` }],
                 genres: item.genres || ['Artist'],
                 followers: item.followers || { total: 0 },
+                monthlyListeners: item.monthlyListeners || 0,
                 isFollowing: false
               }));
             // Strictly rank by popularity / follower count descending
-            items.sort((a, b) => (b.followers?.total || 0) - (a.followers?.total || 0));
+            items.sort((a, b) => ((b.followers?.total || b.monthlyListeners) || 0) - ((a.followers?.total || a.monthlyListeners) || 0));
             setSearchResults(items);
           }
         })
@@ -286,13 +288,14 @@ export const ArtistsPage: React.FC<ArtistsPageProps> = ({
     });
   };
 
-  const formatFollowers = (count?: number | { total: number }) => {
+  const formatFollowers = (count?: number | { total: number }, monthly?: number) => {
     const num = typeof count === 'object' && count !== null ? (count as any).total : typeof count === 'number' ? count : 0;
-    if (!num || num <= 0) return 'Popular Artist';
-    if (num >= 1000000) return `${(num / 1000000).toFixed(1)}M followers`;
-    if (num >= 10000) return `${(num / 1000).toFixed(0)}K followers`;
-    if (num >= 1000) return `${(num / 1000).toFixed(1)}K followers`;
-    return `${num} followers`;
+    const effective = num > 0 ? num : (monthly || 0);
+    if (!effective || effective <= 0) return 'Popular Artist';
+    if (effective >= 1000000) return `${(effective / 1000000).toFixed(1)}M followers`;
+    if (effective >= 10000) return `${(effective / 1000).toFixed(0)}K followers`;
+    if (effective >= 1000) return `${(effective / 1000).toFixed(1)}K followers`;
+    return `${effective} followers`;
   };
 
   // Determine which list to render:
@@ -489,7 +492,7 @@ export const ArtistsPage: React.FC<ArtistsPageProps> = ({
                   </h3>
 
                   <p className="text-[11px] text-slate-400 truncate w-full mt-0.5">
-                    {artist.genres?.[0] || 'Artist'} • {formatFollowers(artist.followers?.total)}
+                    {artist.genres?.[0] || 'Artist'} • {formatFollowers(artist.followers?.total, artist.monthlyListeners)}
                   </p>
                 </Link>
 

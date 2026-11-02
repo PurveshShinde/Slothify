@@ -35,6 +35,7 @@ export interface Artist {
     images: { url: string }[];
     genres: string[];
     followers?: { total: number };
+    monthlyListeners?: number;
 }
 
 export interface Category {

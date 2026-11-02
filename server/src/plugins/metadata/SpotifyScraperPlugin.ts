@@ -908,17 +908,9 @@ async function resolveArtistMetadata(artistName: string): Promise<ArtistMeta> {
         return ARTIST_META_CACHE.get(norm)!;
     }
 
-    // Modest fallback for unknown artists
-    let hash = 0;
-    for (let i = 0; i < norm.length; i++) {
-        hash = (hash << 5) - hash + norm.charCodeAt(i);
-        hash |= 0;
-    }
-    const fallbackFollowers = Math.abs(hash % 500);
-
     const normalizedClean = norm.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
     let imageUrl = TOP_ARTIST_PROFILES[norm] || TOP_ARTIST_PROFILES[normalizedClean] || '';
-    let followers = fallbackFollowers;
+    let followers = 0;
     let monthlyListeners = 0;
     let bio: string | undefined = undefined;
     let verified = false;
@@ -1771,7 +1763,8 @@ export class SpotifyScraperPlugin implements MetadataPlugin {
                 name,
                 images: [{ url: meta.imageUrl }],
                 genres: meta.genres,
-                followers: { total: meta.followers }
+                followers: { total: meta.followers },
+                monthlyListeners: meta.monthlyListeners
             };
         });
 
@@ -1804,25 +1797,29 @@ export class SpotifyScraperPlugin implements MetadataPlugin {
                         name: capitalized,
                         images: [{ url: meta.imageUrl }],
                         genres: meta.genres,
-                        followers: { total: meta.followers }
+                        followers: { total: meta.followers },
+                        monthlyListeners: meta.monthlyListeners
                     });
                 }
             }
         }
 
-        // 2. Direct Spotify dedicated Artist Search via Pathfinder GraphQL (time-boxed to 800ms)
+        // 2. Direct Spotify dedicated Artist Search via Pathfinder GraphQL (healthy 4000ms timeout)
         try {
-            const spArtists = await withTimeout(searchSpotifyArtists(clean, Math.min(limit * 2, 40)), 800).catch(() => []);
-            // Enrich top candidates with genuine Spotify follower counts (time-boxed)
-            await Promise.all(spArtists.slice(0, 10).map(async (sa) => {
+            const spArtists = await withTimeout(searchSpotifyArtists(clean, Math.min(limit * 2, 40)), 4000).catch(() => []);
+            // Enrich top candidates with genuine Spotify follower counts
+            await Promise.all(spArtists.slice(0, 15).map(async (sa) => {
                 const norm = sa.name.toLowerCase().trim();
-                if (!ARTIST_META_CACHE.has(norm)) {
-                    const overview = await withTimeout(fetchSpotifyArtistOverview(sa.id), 800).catch(() => null);
+                const existing = ARTIST_META_CACHE.get(norm);
+                if (!existing || (existing.followers || 0) <= 500) {
+                    const overview = await withTimeout(fetchSpotifyArtistOverview(sa.id), 3500).catch(() => null);
                     if (overview) {
                         ARTIST_META_CACHE.set(norm, {
                             imageUrl: overview.avatarUrl || sa.picture,
-                            genres: ['Pop', 'Artist'],
-                            followers: overview.followers
+                            genres: ['Pop', 'Top Hits'],
+                            followers: overview.followers,
+                            monthlyListeners: overview.monthlyListeners,
+                            verified: overview.verified
                         });
                         TOP_ARTIST_SPOTIFY_IDS[norm] = sa.id;
                     }
@@ -1843,8 +1840,10 @@ export class SpotifyScraperPlugin implements MetadataPlugin {
                     if (!ARTIST_META_CACHE.has(norm)) {
                         ARTIST_META_CACHE.set(norm, {
                             imageUrl: picture,
-                            genres: ['Pop', 'Artist'],
-                            followers: fans
+                            genres: ['Pop', 'Top Hits'],
+                            followers: fans,
+                            monthlyListeners: cachedMeta?.monthlyListeners || 0,
+                            verified: cachedMeta?.verified ?? true
                         });
                         TOP_ARTIST_SPOTIFY_IDS[norm] = sa.id;
                     }
@@ -1853,8 +1852,9 @@ export class SpotifyScraperPlugin implements MetadataPlugin {
                         id: `sp_art_${encodeURIComponent(aName)}`,
                         name: aName,
                         images: picture ? [{ url: picture }] : [],
-                        genres: ['Pop', 'Artist'],
-                        followers: { total: fans }
+                        genres: ['Pop', 'Top Hits'],
+                        followers: { total: fans },
+                        monthlyListeners: cachedMeta?.monthlyListeners || 0
                     });
                 }
             }
@@ -1919,14 +1919,20 @@ export class SpotifyScraperPlugin implements MetadataPlugin {
         });
 
         const topResults = results.slice(0, limit);
-        // Enrich portraits in parallel for the top candidates if needed
+        // Enrich portraits and authentic follower counts in parallel for the top candidates if needed
         await Promise.all(topResults.map(async (art) => {
-            if (!art.images || art.images.length === 0 || !art.images[0]?.url) {
+            const curFans = typeof art.followers === 'object' && art.followers !== null ? art.followers.total : (Number(art.followers) || 0);
+            if (!art.images || art.images.length === 0 || !art.images[0]?.url || curFans <= 500) {
                 const meta = await resolveArtistMetadata(art.name);
-                art.images = [{ url: meta.imageUrl }];
+                if (!art.images || art.images.length === 0 || !art.images[0]?.url) {
+                    art.images = [{ url: meta.imageUrl }];
+                }
                 art.genres = meta.genres;
-                if (!art.followers?.total && meta.followers) {
+                if (meta.followers && meta.followers > curFans) {
                     art.followers = { total: meta.followers };
+                }
+                if (meta.monthlyListeners && (!art.monthlyListeners || meta.monthlyListeners > art.monthlyListeners)) {
+                    art.monthlyListeners = meta.monthlyListeners;
                 }
             }
         }));
@@ -2102,10 +2108,17 @@ export class SpotifyScraperPlugin implements MetadataPlugin {
      */
     async getArtistDetails(artistId: string, artistName?: string): Promise<any> {
         const decoded = decodeURIComponent(artistName || artistId || '');
-        const cleanName = decoded
+        let cleanName = decoded
             .replace(/^(sp_art_|yt_art_|dz_|it_|artist-)/i, '')
             .replace(/[-_]/g, ' ')
             .trim();
+
+        if (/^[0-9A-Za-z]{22}$/.test(artistId)) {
+            const ov = await fetchSpotifyArtistOverview(artistId);
+            if (ov && ov.name) {
+                cleanName = ov.name;
+            }
+        }
 
         const meta = await resolveArtistMetadata(cleanName);
         const displayName = cleanName.replace(/\b\w/g, c => c.toUpperCase());

@@ -24,6 +24,7 @@ interface ArtistData {
   coverImage: string;
   images?: { url: string }[];
   monthlyListeners: number;
+  followers?: number | { total: number };
   genres?: string[];
   bio?: string;
   verified?: boolean;
@@ -107,6 +108,11 @@ export default function ArtistProfile({
   const tracksLoading = isDangerous ? false : (tracks.length === 0 && isTracksLoading);
   const error = isDangerous ? "Invalid Artist ID" : (profileError ? profileError.message : null);
 
+  const monthlyListenersCount = Number(artist?.monthlyListeners) || 0;
+  const followersCount = typeof artist?.followers === 'object' && artist?.followers !== null
+    ? Number((artist.followers as any).total) || 0
+    : Number(artist?.followers) || 0;
+
   const [localIsFollowing, setLocalIsFollowing] = useState(false);
   const [copiedShare, setCopiedShare] = useState(false);
 
@@ -132,7 +138,8 @@ export default function ArtistProfile({
         id: artist.id,
         name: artist.name,
         images: artist.images || (artist.coverImage ? [{ url: artist.coverImage }] : []),
-        followers: { total: artist.monthlyListeners || 0 }
+        followers: { total: followersCount || monthlyListenersCount || 0 },
+        monthlyListeners: monthlyListenersCount
       });
       return;
     }
@@ -296,20 +303,34 @@ export default function ArtistProfile({
               {artist.name}
             </h1>
 
-            {/* Listeners & Genres */}
+            {/* Listeners & Followers & Genres */}
             <div className="flex flex-wrap items-center justify-center md:justify-start gap-2.5 text-xs text-[#a39ea4]">
-              {artist.monthlyListeners && Number(artist.monthlyListeners) > 0 ? (
+              {monthlyListenersCount > 0 && (
                 <>
                   <span className="font-semibold text-white">
-                    {Number(artist.monthlyListeners).toLocaleString()}
+                    {monthlyListenersCount.toLocaleString()}
                   </span>
                   <span>monthly listeners</span>
                 </>
-              ) : null}
+              )}
+
+              {followersCount > 0 && (
+                <>
+                  {monthlyListenersCount > 0 && <span>•</span>}
+                  <span className="font-semibold text-white">
+                    {followersCount.toLocaleString()}
+                  </span>
+                  <span>followers</span>
+                </>
+              )}
+
+              {monthlyListenersCount === 0 && followersCount === 0 && (
+                <span className="font-semibold text-white">Popular Artist</span>
+              )}
 
               {artist.genres && artist.genres.length > 0 && (
                 <>
-                  {artist.monthlyListeners && Number(artist.monthlyListeners) > 0 && <span>•</span>}
+                  <span>•</span>
                   <div className="flex items-center gap-1.5 flex-wrap">
                     {artist.genres.slice(0, 3).map((g) => (
                       <span key={g} className="px-2 py-0.5 rounded-full bg-white/[0.08] text-[10px] font-medium text-white/80">

@@ -25,7 +25,7 @@ interface CacheContextType {
     clearCache: () => void;
 }
 
-const STORAGE_KEY = 'slothify_browser_cache_v9';
+const STORAGE_KEY = 'slothify_browser_cache_v10';
 
 // Check if current session started from a browser reload/F5
 const checkIsReload = (): boolean => {
@@ -41,12 +41,13 @@ const checkIsReload = (): boolean => {
 const getInitialCache = (): CacheState => {
     const isReload = checkIsReload();
 
-    // Clean up deprecated cache versions that may contain old track cover avatars
+    // Clean up deprecated cache versions that may contain old track cover avatars or mock follower counts
     try {
         localStorage.removeItem('slothify_browser_cache_v5');
         localStorage.removeItem('slothify_browser_cache_v6');
         localStorage.removeItem('slothify_browser_cache_v7');
         localStorage.removeItem('slothify_browser_cache_v8');
+        localStorage.removeItem('slothify_browser_cache_v9');
     } catch (e) {}
 
     try {
@@ -54,9 +55,10 @@ const getInitialCache = (): CacheState => {
         if (stored) {
             const parsed = JSON.parse(stored);
 
-            // Invalidate stale artistsData if it has hardcoded 12.5M followers or dzcdn placeholder
+            // Invalidate stale artistsData if it has hardcoded 12.5M followers, mock counts <= 500, or dzcdn placeholder
             if (Array.isArray(parsed.artistsData)) {
                 const hasStale = parsed.artistsData.some((a: any) => 
+                    (a.followers?.total || 0) <= 500 ||
                     a.followers?.total === 12500000 || 
                     a.images?.[0]?.url?.includes('5b95c0c9aaefc8eb741369cfbb0498b5')
                 );
