@@ -25,7 +25,7 @@ const defaultPlaylists = [
     id: 'acoustic-mornings',
     name: 'Acoustic Mornings',
     description: 'Soft, calm & beautiful acoustic strings',
-    images: [{ url: 'https://images.unsplash.com/photo-1518609878373-06d740f60d8b?w=500' }],
+    images: [{ url: 'https://images.unsplash.com/photo-1510915361894-db8b60106cb1?w=500' }],
     tracks: { total: 18 }
   },
   {

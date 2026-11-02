@@ -122,7 +122,27 @@ const App: React.FC = () => {
   const [followedArtistsList, setFollowedArtistsList] = useState<any[]>(() => {
     try {
       const saved = localStorage.getItem('slothify_followed_artist_profiles');
-      if (saved) return Object.values(JSON.parse(saved));
+      if (saved) {
+        const raw = Object.values(JSON.parse(saved));
+        const byName = new Map<string, any>();
+        raw.forEach((a: any) => {
+          if (!a?.name) return;
+          const norm = a.name.trim().toLowerCase();
+          const existing = byName.get(norm);
+          if (!existing) {
+            byName.set(norm, a);
+          } else {
+            const fA = typeof a.followers === 'object' && a.followers !== null ? a.followers.total : (Number(a.followers) || 0);
+            const fE = typeof existing.followers === 'object' && existing.followers !== null ? existing.followers.total : (Number(existing.followers) || 0);
+            if (fA > fE) byName.set(norm, a);
+          }
+        });
+        const deduped = Array.from(byName.values());
+        const cleanMap: Record<string, any> = {};
+        deduped.forEach(a => { cleanMap[a.id || a.artistId || a.name] = a; });
+        localStorage.setItem('slothify_followed_artist_profiles', JSON.stringify(cleanMap));
+        return deduped;
+      }
     } catch (e) {}
     return [];
   });
@@ -295,11 +315,25 @@ const App: React.FC = () => {
       .then(res => {
         const items = Array.isArray(res.data?.items) ? res.data.items : [];
         const ids = new Set<string>();
-        const profilesMap: Record<string, any> = {};
+        const byName = new Map<string, any>();
         items.forEach((a: any) => {
-          if (a && a.id) {
-            ids.add(a.id);
-            profilesMap[a.id] = a;
+          if (a && (a.id || a.artistId)) {
+            const rawId = a.id || a.artistId;
+            const norm = (a.name || '').trim().toLowerCase();
+            ids.add(rawId);
+            if (norm) {
+              ids.add(`sp_art_${encodeURIComponent(a.name)}`);
+              ids.add(`sp_art_${norm}`);
+              ids.add(norm);
+              const existing = byName.get(norm);
+              if (!existing) {
+                byName.set(norm, a);
+              } else {
+                const fA = typeof a.followers === 'object' && a.followers !== null ? a.followers.total : (Number(a.followers) || 0);
+                const fE = typeof existing.followers === 'object' && existing.followers !== null ? existing.followers.total : (Number(existing.followers) || 0);
+                if (fA > fE) byName.set(norm, a);
+              }
+            }
           }
         });
 
@@ -314,8 +348,12 @@ const App: React.FC = () => {
           return;
         }
 
+        const dedupedItems = Array.from(byName.values());
+        const profilesMap: Record<string, any> = {};
+        dedupedItems.forEach(a => { profilesMap[a.id || a.artistId || a.name] = a; });
+
         setFollowedArtistIds(ids);
-        setFollowedArtistsList(items);
+        setFollowedArtistsList(dedupedItems);
         try {
           localStorage.setItem('slothify_user_followed_artist_ids', JSON.stringify(Array.from(ids)));
           localStorage.setItem('slothify_followed_artist_profiles', JSON.stringify(profilesMap));
@@ -327,49 +365,74 @@ const App: React.FC = () => {
   }, [isAuthenticated]);
 
   const handleToggleFollowArtist = useCallback((artist: any) => {
-    const artistId = artist.id || artist.artistId;
-    if (!artistId) return;
+    const rawId = artist.id || artist.artistId;
+    const normName = (artist.name || '').trim().toLowerCase();
+    if (!rawId && !normName) return;
 
-    const willFollow = !followedArtistIds.has(artistId);
+    const enc = encodeURIComponent(artist.name || '');
+    const aliases = [rawId, `sp_art_${enc}`, `sp_art_${normName}`, `artist-${normName}`, normName].filter(Boolean);
 
-    // 1. Optimistic UI update
+    // Check if any alias or matching name is currently followed
+    const isCurrentlyFollowed = aliases.some(id => followedArtistIds.has(id)) ||
+      followedArtistsList.some(a => (a.name || '').trim().toLowerCase() === normName);
+
+    const willFollow = !isCurrentlyFollowed;
+
+    // 1. Optimistic UI update: sync all ID aliases
     setFollowedArtistIds(prev => {
       const next = new Set(prev);
-      if (willFollow) next.add(artistId);
-      else next.delete(artistId);
+      if (willFollow) {
+        aliases.forEach(id => next.add(id));
+      } else {
+        aliases.forEach(id => next.delete(id));
+        followedArtistsList
+          .filter(a => (a.name || '').trim().toLowerCase() === normName)
+          .forEach(a => {
+            if (a.id) next.delete(a.id);
+            if (a.artistId) next.delete(a.artistId);
+          });
+      }
       try {
         localStorage.setItem('slothify_user_followed_artist_ids', JSON.stringify(Array.from(next)));
       } catch (e) {}
       return next;
     });
 
+    // 2. Update followed artists list (Deduplicated strictly by normalized name)
     setFollowedArtistsList(prev => {
       let next: any[];
       if (willFollow) {
-        next = [artist, ...prev.filter(a => (a.id || a.artistId) !== artistId)];
+        const filtered = prev.filter(a => (a.name || '').trim().toLowerCase() !== normName);
+        next = [artist, ...filtered];
       } else {
-        next = prev.filter(a => (a.id || a.artistId) !== artistId);
+        next = prev.filter(a => (a.name || '').trim().toLowerCase() !== normName);
       }
       try {
         const map: Record<string, any> = {};
-        next.forEach(a => { map[a.id || a.artistId] = a; });
+        next.forEach(a => { map[a.id || a.artistId || a.name] = a; });
         localStorage.setItem('slothify_followed_artist_profiles', JSON.stringify(map));
       } catch (e) {}
       return next;
     });
 
-    // 2. Persist to MongoDB if authenticated
+    // 3. Persist to MongoDB if authenticated
     if (isAuthenticated) {
-      axios.post('/api/me/artists', {
-        artistId,
-        artistName: artist.name,
-        artistImage: artist.images?.[0]?.url || artist.image || '',
-        followers: artist.followers?.total || artist.followers || 0
-      }).catch(err => {
-        console.error("Failed to sync followed artist to database:", err);
-      });
+      if (willFollow) {
+        axios.post('/api/me/artists', {
+          artistId: rawId || `sp_art_${enc}`,
+          artistName: artist.name,
+          artistImage: artist.images?.[0]?.url || artist.coverImage || artist.image || '',
+          followers: artist.followers?.total || artist.followers || 0
+        }).catch(err => {
+          console.error("Failed to sync followed artist to database:", err);
+        });
+      } else {
+        axios.delete(`/api/me/artists/${encodeURIComponent(rawId)}`).catch(err => {
+          console.error("Failed to remove followed artist from database:", err);
+        });
+      }
     }
-  }, [followedArtistIds, isAuthenticated]);
+  }, [followedArtistIds, followedArtistsList, isAuthenticated]);
 
   // Check stored auth token on mount
   useEffect(() => {

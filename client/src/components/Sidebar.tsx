@@ -20,7 +20,7 @@ interface SidebarProps {
 
 const defaultPlaylists = [
   { id: 'late-night-drive', name: 'Late Night Drive', image: 'https://images.unsplash.com/photo-1509198397868-475647b2a1e5?w=100' },
-  { id: 'acoustic-mornings', name: 'Acoustic Mornings', image: 'https://images.unsplash.com/photo-1518609878373-06d740f60d8b?w=100' },
+  { id: 'acoustic-mornings', name: 'Acoustic Mornings', image: 'https://images.unsplash.com/photo-1510915361894-db8b60106cb1?w=100' },
   { id: 'heartbreak-diaries', name: 'Heartbreak Diaries', image: 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=100' },
   { id: 'good-vibes', name: 'Good Vibes', image: 'https://images.unsplash.com/photo-1470225620780-dba8ba36b745?w=100' },
 ];

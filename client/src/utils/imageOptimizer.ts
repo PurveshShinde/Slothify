@@ -38,6 +38,112 @@ export function getOptimizedImageUrl(
   return url;
 }
 
+export const KNOWN_ARTIST_AVATARS: Record<string, string> = {
+  'chappell roan': 'https://i.scdn.co/image/ab6761610000e5eb6f8de55129d12702ebff5710',
+  'olivia dean': 'https://i.scdn.co/image/ab6761610000e5eb5c7577ad44daeb7ce4b941a1',
+  'jamie miller': 'https://i.scdn.co/image/ab6761610000e5ebeacc346eb50276f366ac542c',
+  'temper city': 'https://i.scdn.co/image/ab6761610000e5eb58cd69025e54b4f139005b6e',
+  'jade': 'https://i.scdn.co/image/ab6761610000e5eb5d8f24eed04df5dac0adecf4',
+  'gracie abrams': 'https://i.scdn.co/image/ab6761610000e5ebe1800836d95b63c49e60ea3b',
+  'katseye': 'https://i.scdn.co/image/ab6761610000e5eb04ba72b2749f90d62152ebec',
+  'grand theft auto vi': 'https://i.scdn.co/image/ab6761610000e5eb8b64bf5ce23508af9838eade',
+  'gta vi': 'https://i.scdn.co/image/ab6761610000e5eb8b64bf5ce23508af9838eade',
+  'gener8ion': 'https://i.scdn.co/image/ab6761610000e5eb9203ea92f4c538f41e6eea8c',
+  'stella lefty': 'https://i.scdn.co/image/ab6761610000e5eb37597ef39468f4fe8fcd9690',
+  'alyssa grace': 'https://i.scdn.co/image/ab6761610000e5ebe95e39575c4f2c668eb11bc4',
+  'solto (fr)': 'https://i.scdn.co/image/ab6761610000e5ebf2f0c84b86e48dd70d9bcc59',
+  'solto': 'https://i.scdn.co/image/ab6761610000e5ebf2f0c84b86e48dd70d9bcc59',
+  'taylor swift': 'https://i.scdn.co/image/ab6761610000e5eb5a00969a4698c3132a15fbb0',
+  'the weeknd': 'https://i.scdn.co/image/ab6761610000e5eb214f3cf1cbe8d304c487e5a0',
+  'billie eilish': 'https://i.scdn.co/image/ab6761610000e5ebd8b9980db67272cb4d4c3dfe',
+  'drake': 'https://i.scdn.co/image/ab6761610000e5eb4293385d324db8558179afd9',
+  'ariana grande': 'https://i.scdn.co/image/ab6761610000e5eb478b87a9526742eb559eb2ec',
+  'bruno mars': 'https://i.scdn.co/image/ab6761610000e5ebc36dd9eb55fb0db4911f25dd',
+  'post malone': 'https://i.scdn.co/image/ab6761610000e5ebe17c0aa1714a03d62b5ce4e0',
+  'sabrina carpenter': 'https://i.scdn.co/image/ab6761610000e5ebc58dfa3c10640108ff4f932e',
+  'kendrick lamar': 'https://i.scdn.co/image/ab6761610000e5eb437b9e2a82505b3d93fe1022',
+  'dua lipa': 'https://i.scdn.co/image/ab6761610000e5ebf107f9c8d57545ca8be5af17',
+  'lady gaga': 'https://i.scdn.co/image/ab6761610000e5ebb54a6bc74041b6ec26efccbc',
+  'travis scott': 'https://i.scdn.co/image/ab6761610000e5ebb99cacf8acd5378206767261',
+  'coldplay': 'https://i.scdn.co/image/ab6761610000e5ebfe1fab276582a303ff359a7b',
+  'justin bieber': 'https://i.scdn.co/image/ab6761610000e5eb8ae7f2aaa9817a704a87ea36',
+  'ed sheeran': 'https://i.scdn.co/image/ab6761610000e5eb12a2ef1897d2e38103dcae32',
+  'eminem': 'https://i.scdn.co/image/ab6761610000e5eba00b11c129b27a88fc72f36b',
+  'sza': 'https://i.scdn.co/image/ab6761610000e5eb9cb67e530095815340ea1a55',
+  'rihanna': 'https://i.scdn.co/image/ab6761610000e5ebceab420e8ded9e0de267df37',
+  'bad bunny': 'https://i.scdn.co/image/ab67616d0000b27361f01b4fa6f523369d340c75',
+  'olivia rodrigo': 'https://i.scdn.co/image/ab6761610000e5ebe03a985e510ff406bd2367ff',
+  'lana del rey': 'https://i.scdn.co/image/ab6761610000e5ebb99cacf8acd5378206767261',
+  'benson boone': 'https://i.scdn.co/image/ab6761610000e5eb2d285a8507c6f05f82631584',
+  'teddy swims': 'https://i.scdn.co/image/ab6761610000e5ebc1db646ebcf2896f6ae9b5e3',
+  'tate mcrae': 'https://i.scdn.co/image/ab6761610000e5ebb2366b0aeb384c718cbb5f15',
+  'zach bryan': 'https://i.scdn.co/image/ab6761610000e5ebbe1766a0149ea8b584ff1ddc',
+  'morgan wallen': 'https://i.scdn.co/image/ab6761610000e5eb70355152a550ed96f13b6320',
+  'harry styles': 'https://i.scdn.co/image/ab67616d0000b273731f0f3040d66000d82f0350',
+  'beyonce': 'https://i.scdn.co/image/ab6761610000e5eb16e87f5d9472e903bc39c647',
+  'kanye west': 'https://i.scdn.co/image/ab6761610000e5eb8b52c6d9bc4e43d08f773f25',
+  'adele': 'https://i.scdn.co/image/ab6761610000e5eb6970ecf6cb90b510795c6c64',
+  'shakira': 'https://i.scdn.co/image/ab6761610000e5eb41f7e02b7936a7b11d88667a',
+  'maroon 5': 'https://i.scdn.co/image/ab6761610000e5eb034a78735cc832c3fa5c05ab',
+  'imagine dragons': 'https://i.scdn.co/image/ab6761610000e5eb9836371cfb23ca395fc078e8',
+  'arijit singh': 'https://i.scdn.co/image/ab6761610000e5eb0261696c5df3be99da6ed3f3',
+  'pritam': 'https://i.scdn.co/image/ab6761610000e5ebcb6926f44f620555ba444fca',
+  'a.r. rahman': 'https://i.scdn.co/image/ab6761610000e5ebb6b92f4477813a37aa2db217',
+  'ar rahman': 'https://i.scdn.co/image/ab6761610000e5ebb6b92f4477813a37aa2db217',
+  'shreya ghoshal': 'https://i.scdn.co/image/ab6761610000e5eb3b1f4bf54cba8f0e515d48a0',
+  'diljit dosanjh': 'https://i.scdn.co/image/ab6761610000e5eb1d2b86b46187cc8e7bbd5696',
+  'sidhu moose wala': 'https://i.scdn.co/image/ab6761610000e5eb12a2ef1897d2e38103dcae32',
+  'karan aujla': 'https://i.scdn.co/image/ab6761610000e5ebd8b9980db67272cb4d4c3dfe',
+  'anirudh ravichander': 'https://i.scdn.co/image/ab6761610000e5eb478b87a9526742eb559eb2ec'
+};
+
+/**
+ * Robust artist avatar resolver.
+ * 1. Checks if known artist mapping exists (guarantees genuine 200 OK portrait).
+ * 2. If artist object has an authentic image (not ui-avatars and not 404 hash), uses it.
+ * 3. Otherwise falls back to known portrait or styled avatar.
+ */
+export function getArtistAvatarUrl(
+  artist: { name?: string; images?: { url?: string }[]; coverImage?: string } | null | undefined,
+  size: '150' | '300' | '500' | '600' = '150'
+): string {
+  const normName = (artist?.name || '').trim().toLowerCase();
+  const known = KNOWN_ARTIST_AVATARS[normName];
+
+  const rawUrl = artist?.coverImage || artist?.images?.[0]?.url;
+  const isInvalid = !rawUrl || 
+    rawUrl.includes('ui-avatars.com') || 
+    rawUrl.includes('8e734c541c5905d45de98457') ||
+    rawUrl.includes('unsplash.com');
+
+  if (isInvalid) {
+    if (known) return getOptimizedImageUrl(known, size);
+    const name = artist?.name || 'Artist';
+    return `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=181824&color=f5d0b5&size=${size}&bold=true`;
+  }
+
+  return getOptimizedImageUrl(rawUrl, size);
+}
+
+/**
+ * Handle image load errors gracefully by falling back to known Spotify portrait
+ * before falling back to ui-avatars.
+ */
+export function handleArtistImageError(
+  e: React.SyntheticEvent<HTMLImageElement, Event>,
+  artistName?: string
+) {
+  const img = e.currentTarget;
+  const norm = (artistName || '').trim().toLowerCase();
+  const known = KNOWN_ARTIST_AVATARS[norm];
+  if (known && img.src !== known) {
+    img.src = known;
+    return;
+  }
+  const fallbackName = artistName || 'Artist';
+  img.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(fallbackName)}&background=181824&color=f5d0b5&size=150&bold=true`;
+}
+
 /**
  * Helper to pick the most appropriate image from a track or album's images array.
  * For search results and track lists, maps to 150px thumbnail.

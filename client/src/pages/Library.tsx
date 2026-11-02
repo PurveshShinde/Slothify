@@ -188,42 +188,46 @@ const Library: React.FC<LibraryProps> = ({ isAuthenticated, user, likedTrackIds,
   };
 
   // Modal Component
-  const CreatePlaylistModal = () => (
-    <div className={`fixed inset-0 z-[100] flex items-center justify-center p-6 transition-all duration-300 ${isModalOpen ? 'opacity-100 scale-100' : 'opacity-0 scale-95 pointer-events-none'}`}>
-      <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={() => setIsModalOpen(false)} />
-      <div className="relative bg-[#282828] w-full max-w-sm rounded-2xl overflow-hidden shadow-2xl animate-in fade-in zoom-in-95 duration-200">
-        <div className="p-8 flex flex-col items-center text-center space-y-8">
-          <h2 className="text-2xl font-bold text-white">Give your playlist a name</h2>
-          <div className="w-full border-b-2 border-white/10 focus-within:border-white/40 transition-colors pb-2 px-2">
-            <input
-              type="text"
-              autoFocus
-              value={newPlaylistName}
-              onChange={(e) => setNewPlaylistName(e.target.value)}
-              className="w-full bg-transparent text-center text-2xl font-bold text-white outline-none placeholder-white/20"
-              placeholder="My Playlist"
-            />
-          </div>
-          <div className="flex flex-col w-full space-y-3 pt-4">
-            <button
-              onClick={handleCreatePlaylist}
-              className={`w-full py-3.5 rounded-full font-bold text-base hover:scale-[1.02] active:scale-[0.98] transition-all ${
-                isOcean ? 'bg-blue-600 hover:bg-blue-500 text-white shadow-lg shadow-blue-500/25' : 'bg-[#f5d0b5] hover:bg-white text-black shadow-lg shadow-[#c87d46]/25'
-              }`}
-            >
-              Create
-            </button>
-            <button
-              onClick={() => setIsModalOpen(false)}
-              className="w-full py-3.5 text-white/70 hover:text-white rounded-full font-bold text-base hover:scale-[1.02] active:scale-[0.98] transition-all"
-            >
-              Cancel
-            </button>
+  const CreatePlaylistModal = () => {
+    if (!isModalOpen) return null;
+
+    return (
+      <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 transition-all duration-300 opacity-100 scale-100">
+        <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={() => setIsModalOpen(false)} />
+        <div className="relative bg-[#282828] w-full max-w-sm rounded-2xl overflow-hidden shadow-2xl animate-in fade-in zoom-in-95 duration-200">
+          <div className="p-8 flex flex-col items-center text-center space-y-8">
+            <h2 className="text-2xl font-bold text-white">Give your playlist a name</h2>
+            <div className="w-full border-b-2 border-white/10 focus-within:border-white/40 transition-colors pb-2 px-2">
+              <input
+                type="text"
+                autoFocus
+                value={newPlaylistName}
+                onChange={(e) => setNewPlaylistName(e.target.value)}
+                className="w-full bg-transparent text-center text-2xl font-bold text-white outline-none placeholder-white/20"
+                placeholder="My Playlist"
+              />
+            </div>
+            <div className="flex flex-col w-full space-y-3 pt-4">
+              <button
+                onClick={handleCreatePlaylist}
+                className={`w-full py-3.5 rounded-full font-bold text-base hover:scale-[1.02] active:scale-[0.98] transition-all ${
+                  isOcean ? 'bg-blue-600 hover:bg-blue-500 text-white shadow-lg shadow-blue-500/25' : 'bg-[#f5d0b5] hover:bg-white text-black shadow-lg shadow-[#c87d46]/25'
+                }`}
+              >
+                Create
+              </button>
+              <button
+                onClick={() => setIsModalOpen(false)}
+                className="w-full py-3.5 text-white/70 hover:text-white rounded-full font-bold text-base hover:scale-[1.02] active:scale-[0.98] transition-all"
+              >
+                Cancel
+              </button>
+            </div>
           </div>
         </div>
       </div>
-    </div>
-  );
+    );
+  };
 
   if (!isAuthenticated) {
     return (
@@ -426,7 +430,7 @@ const Library: React.FC<LibraryProps> = ({ isAuthenticated, user, likedTrackIds,
         )}
       </div>
 
-      <CreatePlaylistModal />
+      {isModalOpen && <CreatePlaylistModal />}
 
       {/* Delete Confirmation Modal */}
       {playlistToDelete && (

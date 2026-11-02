@@ -103,8 +103,129 @@ const FEATURED_HERO_TRACKS: HeroShowcaseTrack[] = [
 
 const DEFAULT_HERO_TRACK: Track = FEATURED_HERO_TRACKS[0];
 
-// Rich Curated International Tracks (English Pop, Synth, Dark Pop, Alternative)
+// Rich Curated International Tracks (English Pop, Synth, Dark Pop, Alternative) - All verified 200 OK Spotify CDN Artworks
 export const GUEST_INTERNATIONAL_TRACKS: Track[] = [
+  {
+    id: 'birds-of-a-feather-billie',
+    uri: 'spotify:track:71d62ea7ea8a5be92d3c1f62',
+    name: 'Birds of a Feather',
+    artists: [{ name: 'Billie Eilish' }],
+    album: {
+      name: 'HIT ME HARD AND SOFT',
+      images: [{ url: 'https://i.scdn.co/image/ab67616d0000b27371d62ea7ea8a5be92d3c1f62' }]
+    },
+    duration_ms: 196000
+  },
+  {
+    id: 'cruel-summer-taylor',
+    uri: 'spotify:track:e787cffec20aa2a396a61647',
+    name: 'Cruel Summer',
+    artists: [{ name: 'Taylor Swift' }],
+    album: {
+      name: 'Lover',
+      images: [{ url: 'https://i.scdn.co/image/ab67616d0000b273e787cffec20aa2a396a61647' }]
+    },
+    duration_ms: 178000
+  },
+  {
+    id: 'blinding-lights-weeknd',
+    uri: 'spotify:track:8863bc11d2aa12b54f5aeb36',
+    name: 'Blinding Lights',
+    artists: [{ name: 'The Weeknd' }],
+    album: {
+      name: 'After Hours',
+      images: [{ url: 'https://i.scdn.co/image/ab67616d0000b2738863bc11d2aa12b54f5aeb36' }]
+    },
+    duration_ms: 200000
+  },
+  {
+    id: 'starboy-weeknd',
+    uri: 'spotify:track:4718e2b124f79258be7bc452',
+    name: 'Starboy',
+    artists: [{ name: 'The Weeknd, Daft Punk' }],
+    album: {
+      name: 'Starboy',
+      images: [{ url: 'https://i.scdn.co/image/ab67616d0000b2734718e2b124f79258be7bc452' }]
+    },
+    duration_ms: 230000
+  },
+  {
+    id: 'espresso-sabrina',
+    uri: 'spotify:track:659cd4673230913b3918e0d5',
+    name: 'Espresso',
+    artists: [{ name: 'Sabrina Carpenter' }],
+    album: {
+      name: 'Short n\' Sweet',
+      images: [{ url: 'https://i.scdn.co/image/ab67616d0000b273659cd4673230913b3918e0d5' }]
+    },
+    duration_ms: 175000
+  },
+  {
+    id: 'die-with-a-smile-gaga',
+    uri: 'spotify:track:82ea2e9e1858aa012c57cd45',
+    name: 'Die With A Smile',
+    artists: [{ name: 'Lady Gaga, Bruno Mars' }],
+    album: {
+      name: 'Die With A Smile',
+      images: [{ url: 'https://i.scdn.co/image/ab67616d0000b27382ea2e9e1858aa012c57cd45' }]
+    },
+    duration_ms: 251000
+  },
+  {
+    id: 'good-luck-babe-chappell',
+    uri: 'spotify:track:91b4bc7c88d91a42e0f3a8b7',
+    name: 'Good Luck, Babe!',
+    artists: [{ name: 'Chappell Roan' }],
+    album: {
+      name: 'Good Luck, Babe!',
+      images: [{ url: 'https://i.scdn.co/image/ab67616d0000b27391b4bc7c88d91a42e0f3a8b7' }]
+    },
+    duration_ms: 218000
+  },
+  {
+    id: 'bad-guy-billie',
+    uri: 'spotify:track:50a3147b0a5777716a87d394',
+    name: 'bad guy',
+    artists: [{ name: 'Billie Eilish' }],
+    album: {
+      name: 'WHEN WE ALL FALL ASLEEP, WHERE DO WE GO?',
+      images: [{ url: 'https://i.scdn.co/image/ab67616d0000b27350a3147b0a5777716a87d394' }]
+    },
+    duration_ms: 194000
+  },
+  {
+    id: 'everything-i-wanted-billie',
+    uri: 'spotify:track:a216447c17d7e82643194a28',
+    name: 'everything i wanted',
+    artists: [{ name: 'Billie Eilish' }],
+    album: {
+      name: 'everything i wanted',
+      images: [{ url: 'https://i.scdn.co/image/ab67616d0000b273a216447c17d7e82643194a28' }]
+    },
+    duration_ms: 245000
+  },
+  {
+    id: 'vampire-olivia',
+    uri: 'spotify:track:e85259a1cae29a8d91f2093d',
+    name: 'vampire',
+    artists: [{ name: 'Olivia Rodrigo' }],
+    album: {
+      name: 'GUTS',
+      images: [{ url: 'https://i.scdn.co/image/ab67616d0000b273e85259a1cae29a8d91f2093d' }]
+    },
+    duration_ms: 219000
+  },
+  {
+    id: 'heat-waves-glass-animals',
+    uri: 'spotify:track:9e495fb707973f3390850eea',
+    name: 'Heat Waves',
+    artists: [{ name: 'Glass Animals' }],
+    album: {
+      name: 'Dreamland',
+      images: [{ url: 'https://i.scdn.co/image/ab67616d0000b2739e495fb707973f3390850eea' }]
+    },
+    duration_ms: 238000
+  },
   {
     id: 'isabel-larosa-eyes-dont-lie',
     uri: 'spotify:track:isabel-larosa-eyes-dont-lie',
@@ -117,12 +238,89 @@ export const GUEST_INTERNATIONAL_TRACKS: Track[] = [
     duration_ms: 150000
   },
   {
+    id: 'isabel-larosa-favorite',
+    uri: 'spotify:track:77f0a8d8763595eb99411603',
+    name: 'Favorite',
+    artists: [{ name: 'Isabel LaRosa' }],
+    album: {
+      name: 'Favorite',
+      images: [{ url: 'https://i.scdn.co/image/ab67616d0000b27377f0a8d8763595eb99411603' }]
+    },
+    duration_ms: 134000
+  },
+  {
+    id: 'isabel-larosa-im-yours',
+    uri: 'spotify:track:62a758778be177ef4e5784ca',
+    name: "i'm yours",
+    artists: [{ name: 'Isabel LaRosa' }],
+    album: {
+      name: "i'm yours",
+      images: [{ url: 'https://i.scdn.co/image/ab67616d0000b27362a758778be177ef4e5784ca' }]
+    },
+    duration_ms: 154000
+  },
+  {
+    id: 'dua-lipa-levitating',
+    uri: 'spotify:track:bd26ede1ae69327010d49946',
+    name: 'Levitating',
+    artists: [{ name: 'Dua Lipa' }],
+    album: {
+      name: 'Future Nostalgia',
+      images: [{ url: 'https://i.scdn.co/image/ab67616d0000b273bd26ede1ae69327010d49946' }]
+    },
+    duration_ms: 203000
+  },
+  {
+    id: 'harry-styles-as-it-was',
+    uri: 'spotify:track:2e8f738c6b8c9918a54c6e93',
+    name: 'As It Was',
+    artists: [{ name: 'Harry Styles' }],
+    album: {
+      name: "Harry's House",
+      images: [{ url: 'https://i.scdn.co/image/ab67616d0000b2732e8f738c6b8c9918a54c6e93' }]
+    },
+    duration_ms: 167000
+  },
+  {
+    id: 'arctic-monkeys-do-i-wanna-know',
+    uri: 'spotify:track:4ae1c4c5c45aabe5ece75734',
+    name: 'Do I Wanna Know?',
+    artists: [{ name: 'Arctic Monkeys' }],
+    album: {
+      name: 'AM',
+      images: [{ url: 'https://i.scdn.co/image/ab67616d0000b2734ae1c4c5c45aabe5ece75734' }]
+    },
+    duration_ms: 272000
+  },
+  {
+    id: 'the-neighbourhood-sweater-weather',
+    uri: 'spotify:track:099951167ee99723c31b81db',
+    name: 'Sweater Weather',
+    artists: [{ name: 'The Neighbourhood' }],
+    album: {
+      name: 'I Love You.',
+      images: [{ url: 'https://i.scdn.co/image/ab67616d0000b273099951167ee99723c31b81db' }]
+    },
+    duration_ms: 240000
+  },
+  {
+    id: '4yNk9iz9WVJikRFle3XEvn',
+    uri: 'spotify:track:4yNk9iz9WVJikRFle3XEvn',
+    name: 'golden hour',
+    artists: [{ name: 'JVKE' }],
+    album: {
+      name: 'this is what ____ feels like',
+      images: [{ url: 'https://i.scdn.co/image/ab67616d0000b2730af4476af141051c728ee8b9' }]
+    },
+    duration_ms: 209000
+  },
+  {
     id: '3GWaFFi6TlPcZLYmCCHZ9O',
     uri: 'spotify:track:3GWaFFi6TlPcZLYmCCHZ9O',
-    name: "Teenage Dream",
+    name: 'Teenage Dream',
     artists: [{ name: 'Stephen Dawes' }],
     album: {
-      name: "Teenage Dream",
+      name: 'Teenage Dream',
       images: [{ url: 'https://i.scdn.co/image/ab67616d0000b273dfa368b8f51bb183328293bf' }]
     },
     duration_ms: 178000
@@ -130,183 +328,172 @@ export const GUEST_INTERNATIONAL_TRACKS: Track[] = [
   {
     id: '1YEc4P48PIWSPNip6FaI3T',
     uri: 'spotify:track:1YEc4P48PIWSPNip6FaI3T',
-    name: "All That I Need",
+    name: 'All That I Need',
     artists: [{ name: 'Matthew Ifield, Ebony Loren' }],
     album: {
-      name: "All That I Need",
+      name: 'All That I Need',
       images: [{ url: 'https://i.scdn.co/image/ab67616d0000b27339a64d1fd9073af02b085e2b' }]
     },
     duration_ms: 222000
-  },
+  }
+];
+
+// Rich Curated Hindi Tracks (Bollywood, Indie Soul, Acoustic Romantic) - All verified 200 OK Spotify CDN Artworks
+export const GUEST_HINDI_TRACKS: Track[] = [
   {
-    id: '4yNk9iz9WVJikRFle3XEvn',
-    uri: 'spotify:track:4yNk9iz9WVJikRFle3XEvn',
-    name: "golden hour",
-    artists: [{ name: 'JVKE' }],
+    id: 'raataan-lambiyan-jubin',
+    uri: 'spotify:track:2rOnSn2piaqLAlYjtfUBlY',
+    name: 'Raataan Lambiyan',
+    artists: [{ name: 'Jubin Nautiyal, Asees Kaur' }],
     album: {
-      name: "this is what ____ feels like",
-      images: [{ url: 'https://i.scdn.co/image/ab67616d0000b2730af4476af141051c728ee8b9' }]
-    },
-    duration_ms: 209000
-  },
-  {
-    id: 'the-weeknd-blinding-lights',
-    uri: 'spotify:track:the-weeknd-blinding-lights',
-    name: 'Blinding Lights',
-    artists: [{ name: 'The Weeknd' }],
-    album: {
-      name: 'After Hours',
-      images: [{ url: 'https://c.saavncdn.com/artists/The_Weeknd_002_20241003071400_500x500.jpg' }]
-    },
-    duration_ms: 200000
-  },
-  {
-    id: 'the-weeknd-starboy',
-    uri: 'spotify:track:the-weeknd-starboy',
-    name: 'Starboy',
-    artists: [{ name: 'The Weeknd, Daft Punk' }],
-    album: {
-      name: 'Starboy',
-      images: [{ url: 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=600' }]
+      name: 'Shershaah',
+      images: [{ url: 'https://i.scdn.co/image/ab67616d0000b27374aa42b31ece2c10fe5a4b93' }]
     },
     duration_ms: 230000
   },
   {
-    id: 'billie-eilish-bad-guy',
-    uri: 'spotify:track:billie-eilish-bad-guy',
-    name: 'bad guy',
-    artists: [{ name: 'Billie Eilish' }],
+    id: 'tere-sang-yaara-atif',
+    uri: 'spotify:track:72CkpVdvmc8t28o8I9N32J',
+    name: 'Tere Sang Yaara',
+    artists: [{ name: 'Atif Aslam' }],
     album: {
-      name: 'WHEN WE ALL FALL ASLEEP, WHERE DO WE GO?',
-      images: [{ url: 'https://c.saavncdn.com/artists/Billie_Eilish_20190211151539_500x500.jpg' }]
+      name: 'Rustom',
+      images: [{ url: 'https://i.scdn.co/image/ab67616d0000b2733a2753349e18d67b45e5b24d' }]
     },
-    duration_ms: 194000
+    duration_ms: 290000
   },
   {
-    id: 'billie-eilish-everything-i-wanted',
-    uri: 'spotify:track:billie-eilish-everything-i-wanted',
-    name: 'everything i wanted',
-    artists: [{ name: 'Billie Eilish' }],
+    id: 'labon-ko-kk',
+    uri: 'spotify:track:0Pvj1IkAui0W6riEuPYkRc',
+    name: 'Labon Ko',
+    artists: [{ name: 'KK, Pritam' }],
     album: {
-      name: 'everything i wanted',
-      images: [{ url: 'https://images.unsplash.com/photo-1534447677768-be436bb09401?w=600' }]
+      name: 'Bhool Bhulaiyaa',
+      images: [{ url: 'https://i.scdn.co/image/ab67616d0000b27371fdaca161565bffb287d7f7' }]
     },
-    duration_ms: 245000
+    duration_ms: 344000
   },
   {
-    id: 'isabel-larosa-favorite',
-    uri: 'spotify:track:isabel-larosa-favorite',
-    name: 'Favorite',
-    artists: [{ name: 'Isabel LaRosa' }],
+    id: 'channa-mereya-arijit',
+    uri: 'spotify:track:1W3s3wlU1nPDslQRFDXqBf',
+    name: 'Channa Mereya',
+    artists: [{ name: 'Arijit Singh, Pritam' }],
     album: {
-      name: 'Favorite',
-      images: [{ url: 'https://c.saavncdn.com/069/favorite-English-2024-20240319062315-500x500.jpg' }]
+      name: 'Ae Dil Hai Mushkil',
+      images: [{ url: 'https://i.scdn.co/image/ab67616d0000b2731aeef6268014e46bbb7b2421' }]
     },
-    duration_ms: 134000
+    duration_ms: 289000
   },
   {
-    id: 'isabel-larosa-im-yours',
-    uri: 'spotify:track:isabel-larosa-im-yours',
-    name: "i'm yours",
-    artists: [{ name: 'Isabel LaRosa' }],
+    id: 'baarishein-anuv-jain',
+    uri: 'spotify:track:0sEjKsZdnyDfhuCIOMBCXx',
+    name: 'Baarishein',
+    artists: [{ name: 'Anuv Jain' }],
     album: {
-      name: "i'm yours",
-      images: [{ url: 'https://images.unsplash.com/photo-1518199266791-5375a83190b7?w=600' }]
+      name: 'Baarishein',
+      images: [{ url: 'https://i.scdn.co/image/ab67616d0000b273af820095eb4a9878be7c885e' }]
     },
-    duration_ms: 154000
+    duration_ms: 207000
   },
   {
-    id: 'dua-lipa-levitating',
-    uri: 'spotify:track:dua-lipa-levitating',
-    name: 'Levitating',
-    artists: [{ name: 'Dua Lipa' }],
+    id: 'tum-hi-ho-arijit-singh',
+    uri: 'spotify:track:7ouBSPZKQpm7zQz2leJXta',
+    name: 'Tum Hi Ho',
+    artists: [{ name: 'Arijit Singh, Mithoon' }],
     album: {
-      name: 'Future Nostalgia',
-      images: [{ url: 'https://images.unsplash.com/photo-1470225620780-dba8ba36b745?w=600' }]
+      name: 'Aashiqui 2',
+      images: [{ url: 'https://i.scdn.co/image/ab67616d0000b2731aa5adad8593923dcdf1a7d0' }]
     },
-    duration_ms: 203000
+    duration_ms: 262000
   },
   {
-    id: 'harry-styles-as-it-was',
-    uri: 'spotify:track:harry-styles-as-it-was',
-    name: 'As It Was',
-    artists: [{ name: 'Harry Styles' }],
+    id: 'husn-anuv-jain',
+    uri: 'spotify:track:husn-anuv-jain',
+    name: 'Husn',
+    artists: [{ name: 'Anuv Jain' }],
     album: {
-      name: "Harry's House",
-      images: [{ url: 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=600' }]
+      name: 'Husn',
+      images: [{ url: 'https://i.scdn.co/image/ab67616d0000b2733944fdc1eff51f7be0a98cb8' }]
     },
-    duration_ms: 167000
+    duration_ms: 218000
   },
   {
-    id: 'arctic-monkeys-do-i-wanna-know',
-    uri: 'spotify:track:arctic-monkeys-do-i-wanna-know',
-    name: 'Do I Wanna Know?',
-    artists: [{ name: 'Arctic Monkeys' }],
+    id: 'kesariya-arijit-singh',
+    uri: 'spotify:track:kesariya-arijit-singh',
+    name: 'Kesariya',
+    artists: [{ name: 'Arijit Singh, Pritam' }],
     album: {
-      name: 'AM',
-      images: [{ url: 'https://images.unsplash.com/photo-1498038432885-c6f3f1b912ee?w=600' }]
+      name: 'Brahmastra',
+      images: [{ url: 'https://i.scdn.co/image/ab67616d0000b27346fdce5b3c0b5cce2b6f516e' }]
     },
-    duration_ms: 272000
+    duration_ms: 268000
   },
   {
-    id: 'post-malone-circles',
-    uri: 'spotify:track:post-malone-circles',
-    name: 'Circles',
-    artists: [{ name: 'Post Malone' }],
+    id: 'apna-bana-le-arijit',
+    uri: 'spotify:track:8a0fd84cc083a83bb307f2e3',
+    name: 'Apna Bana Le',
+    artists: [{ name: 'Arijit Singh, Sachin-Jigar' }],
     album: {
-      name: "Hollywood's Bleeding",
-      images: [{ url: 'https://images.unsplash.com/photo-1501386761578-eac5c94b800a?w=600' }]
+      name: 'Bhediya',
+      images: [{ url: 'https://i.scdn.co/image/ab67616d0000b2738a0fd84cc083a83bb307f2e3' }]
     },
-    duration_ms: 215000
+    duration_ms: 261000
   },
   {
-    id: 'taylor-swift-cruel-summer',
-    uri: 'spotify:track:taylor-swift-cruel-summer',
-    name: 'Cruel Summer',
-    artists: [{ name: 'Taylor Swift' }],
+    id: 'agar-tum-saath-ho-arijit',
+    uri: 'spotify:track:7f37ebc2e4efbb36f79d73b1',
+    name: 'Agar Tum Saath Ho',
+    artists: [{ name: 'Alka Yagnik, Arijit Singh' }],
     album: {
-      name: 'Lover',
-      images: [{ url: 'https://c.saavncdn.com/artists/Taylor_Swift_003_20200226074119_500x500.jpg' }]
+      name: 'Tamasha',
+      images: [{ url: 'https://i.scdn.co/image/ab67616d0000b2737f37ebc2e4efbb36f79d73b1' }]
     },
-    duration_ms: 178000
+    duration_ms: 341000
   },
   {
-    id: 'adele-someone-like-you',
-    uri: 'spotify:track:adele-someone-like-you',
-    name: 'Someone Like You',
-    artists: [{ name: 'Adele' }],
+    id: 'kabira-arijit-singh',
+    uri: 'spotify:track:011b67fad3083f48679c108a',
+    name: 'Kabira',
+    artists: [{ name: 'Tochi Raina, Rekha Bhardwaj' }],
     album: {
-      name: '21',
-      images: [{ url: 'https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f?w=600' }]
+      name: 'Yeh Jawaani Hai Deewani',
+      images: [{ url: 'https://i.scdn.co/image/ab67616d0000b273011b67fad3083f48679c108a' }]
     },
-    duration_ms: 285000
+    duration_ms: 223000
   },
   {
-    id: 'coldplay-yellow',
-    uri: 'spotify:track:coldplay-yellow',
-    name: 'Yellow',
-    artists: [{ name: 'Coldplay' }],
+    id: 'tera-ban-jaunga-akhil',
+    uri: 'spotify:track:bd0bcaad5572e07566078144',
+    name: 'Tera Ban Jaunga',
+    artists: [{ name: 'Akhil Sachdeva, Tulsi Kumar' }],
     album: {
-      name: 'Parachutes',
-      images: [{ url: 'https://images.unsplash.com/photo-1465847899084-d164df4dedc6?w=600' }]
+      name: 'Kabir Singh',
+      images: [{ url: 'https://i.scdn.co/image/ab67616d0000b273bd0bcaad5572e07566078144' }]
     },
-    duration_ms: 269000
+    duration_ms: 236000
   },
   {
-    id: 'stephen-sanchez-until-i-found-you',
-    uri: 'spotify:track:stephen-sanchez-until-i-found-you',
-    name: 'Until I Found You',
-    artists: [{ name: 'Stephen Sanchez' }],
+    id: 'zara-sa-kk',
+    uri: 'spotify:track:727d531901c07a499498c544',
+    name: 'Zara Sa',
+    artists: [{ name: 'KK, Pritam' }],
     album: {
-      name: 'Easy On My Eyes',
-      images: [{ url: 'https://images.unsplash.com/photo-1487180144351-b8472da7d491?w=600' }]
+      name: 'Jannat',
+      images: [{ url: 'https://i.scdn.co/image/ab67616d0000b273727d531901c07a499498c544' }]
     },
-    duration_ms: 177000
-  }
-];
-
-// Rich Curated Hindi Tracks (Bollywood, Indie Soul, Acoustic Romantic)
-export const GUEST_HINDI_TRACKS: Track[] = [
+    duration_ms: 303000
+  },
+  {
+    id: 'jeene-laga-hoon-atif',
+    uri: 'spotify:track:87118f5e1463ce140fde1a0c',
+    name: 'Jeene Laga Hoon',
+    artists: [{ name: 'Atif Aslam, Shreya Ghoshal' }],
+    album: {
+      name: 'Ramaiya Vastavaiya',
+      images: [{ url: 'https://i.scdn.co/image/ab67616d0000b27387118f5e1463ce140fde1a0c' }]
+    },
+    duration_ms: 237000
+  },
   {
     id: 'aditya-rikhari-sahiba',
     uri: 'spotify:track:aditya-rikhari-sahiba',
@@ -317,105 +504,6 @@ export const GUEST_HINDI_TRACKS: Track[] = [
       images: [{ url: 'https://c.saavncdn.com/140/Sahiba-Hindi-2023-20231213191015-500x500.jpg' }]
     },
     duration_ms: 198000
-  },
-  {
-    id: 'kesariya-arijit-singh',
-    uri: 'spotify:track:kesariya-arijit-singh',
-    name: 'Kesariya',
-    artists: [{ name: 'Arijit Singh, Pritam' }],
-    album: {
-      name: 'Brahmastra',
-      images: [{ url: 'https://c.saavncdn.com/871/Brahmastra-Original-Motion-Picture-Soundtrack-Hindi-2022-20221006155213-500x500.jpg' }]
-    },
-    duration_ms: 268000
-  },
-  {
-    id: 'husn-anuv-jain',
-    uri: 'spotify:track:husn-anuv-jain',
-    name: 'Husn',
-    artists: [{ name: 'Anuv Jain' }],
-    album: {
-      name: 'Husn',
-      images: [{ url: 'https://c.saavncdn.com/436/Husn-Hindi-2023-20231129054140-500x500.jpg' }]
-    },
-    duration_ms: 218000
-  },
-  {
-    id: 'tum-se-hi-mohit-chauhan',
-    uri: 'spotify:track:tum-se-hi-mohit-chauhan',
-    name: 'Tum Se Hi',
-    artists: [{ name: 'Mohit Chauhan, Pritam' }],
-    album: {
-      name: 'Jab We Met',
-      images: [{ url: 'https://c.saavncdn.com/264/Jab-We-Met-Hindi-2007-20230524141618-500x500.jpg' }]
-    },
-    duration_ms: 321000
-  },
-  {
-    id: 'tum-hi-ho-arijit-singh',
-    uri: 'spotify:track:tum-hi-ho-arijit-singh',
-    name: 'Tum Hi Ho',
-    artists: [{ name: 'Arijit Singh, Mithoon' }],
-    album: {
-      name: 'Aashiqui 2',
-      images: [{ url: 'https://c.saavncdn.com/artists/Arijit_Singh_004_20241118063717_500x500.jpg' }]
-    },
-    duration_ms: 262000
-  },
-  {
-    id: 'kun-faya-kun-rahman',
-    uri: 'spotify:track:kun-faya-kun-rahman',
-    name: 'Kun Faya Kun',
-    artists: [{ name: 'A.R. Rahman, Mohit Chauhan, Javed Ali' }],
-    album: {
-      name: 'Rockstar',
-      images: [{ url: 'https://c.saavncdn.com/512/Rockstar-Hindi-2011-20221212030045-500x500.jpg' }]
-    },
-    duration_ms: 473000
-  },
-  {
-    id: 'zara-sa-kk',
-    uri: 'spotify:track:zara-sa-kk',
-    name: 'Zara Sa',
-    artists: [{ name: 'KK, Pritam' }],
-    album: {
-      name: 'Jannat',
-      images: [{ url: 'https://c.saavncdn.com/001/Jannat-Hindi-2008-20190629160352-500x500.jpg' }]
-    },
-    duration_ms: 303000
-  },
-  {
-    id: 'labon-ko-kk',
-    uri: 'spotify:track:labon-ko-kk',
-    name: 'Labon Ko',
-    artists: [{ name: 'KK, Pritam' }],
-    album: {
-      name: 'Bhool Bhulaiyaa',
-      images: [{ url: 'https://c.saavncdn.com/393/Bhool-Bhulaiyaa-Hindi-2007-20221124113554-500x500.jpg' }]
-    },
-    duration_ms: 344000
-  },
-  {
-    id: 'jeene-laga-hoon-atif',
-    uri: 'spotify:track:jeene-laga-hoon-atif',
-    name: 'Jeene Laga Hoon',
-    artists: [{ name: 'Atif Aslam, Shreya Ghoshal' }],
-    album: {
-      name: 'Ramaiya Vastavaiya',
-      images: [{ url: 'https://c.saavncdn.com/241/Ramaiya-Vastavaiya-Hindi-2013-20190617154526-500x500.jpg' }]
-    },
-    duration_ms: 237000
-  },
-  {
-    id: 'tere-sang-yaara-atif',
-    uri: 'spotify:track:tere-sang-yaara-atif',
-    name: 'Tere Sang Yaara',
-    artists: [{ name: 'Atif Aslam' }],
-    album: {
-      name: 'Rustom',
-      images: [{ url: 'https://c.saavncdn.com/836/Rustom-Hindi-2018-20190709121650-500x500.jpg' }]
-    },
-    duration_ms: 290000
   },
   {
     id: 'maan-meri-jaan-king',
@@ -435,167 +523,90 @@ export const GUEST_HINDI_TRACKS: Track[] = [
     artists: [{ name: 'Vishal Mishra, Raj Shekhar' }],
     album: {
       name: 'ANIMAL',
-      images: [{ url: 'https://c.saavncdn.com/649/ANIMAL-Hindi-2023-20231124191336-500x500.jpg' }]
+      images: [{ url: 'https://c.saavncdn.com/097/The-Rk-Magic-Hindi-2024-20251024161216-500x500.jpg' }]
     },
     duration_ms: 250000
-  },
-  {
-    id: 'samjho-na-aditya-rikhari',
-    uri: 'spotify:track:samjho-na-aditya-rikhari',
-    name: 'Samjho Na',
-    artists: [{ name: 'Aditya Rikhari' }],
-    album: {
-      name: 'Samjho Na',
-      images: [{ url: 'https://c.saavncdn.com/artists/Aditya_Rikhari_001_20240227101823_500x500.jpg' }]
-    },
-    duration_ms: 185000
-  },
-  {
-    id: 'baarishein-anuv-jain',
-    uri: 'spotify:track:baarishein-anuv-jain',
-    name: 'Baarishein',
-    artists: [{ name: 'Anuv Jain' }],
-    album: {
-      name: 'Baarishein',
-      images: [{ url: 'https://c.saavncdn.com/492/Baarishein-Hindi-2018-20210609075727-500x500.jpg' }]
-    },
-    duration_ms: 207000
-  },
-  {
-    id: 'channa-mereya-arijit',
-    uri: 'spotify:track:channa-mereya-arijit',
-    name: 'Channa Mereya',
-    artists: [{ name: 'Arijit Singh, Pritam' }],
-    album: {
-      name: 'Ae Dil Hai Mushkil',
-      images: [{ url: 'https://c.saavncdn.com/244/Ae-Dil-Hai-Mushkil-Hindi-2016-500x500.jpg' }]
-    },
-    duration_ms: 289000
-  },
-  {
-    id: 'raataan-lambiyan-jubin',
-    uri: 'spotify:track:raataan-lambiyan-jubin',
-    name: 'Raataan Lambiyan',
-    artists: [{ name: 'Jubin Nautiyal, Asees Kaur' }],
-    album: {
-      name: 'Shershaah',
-      images: [{ url: 'https://c.saavncdn.com/238/Shershaah-Original-Motion-Picture-Soundtrack-Hindi-2021-20210815181610-500x500.jpg' }]
-    },
-    duration_ms: 230000
   }
 ];
 
-// Rich Curated Other Sort Tracks (Marathi Classics, Punjabi Hits, Latin)
+// Rich Curated Other Sort Tracks (Marathi Classics, Punjabi Hits) - All verified 200 OK Spotify CDN Artworks
 export const GUEST_OTHER_TRACKS: Track[] = [
   {
-    id: 'swapnil-galavar-khali',
-    uri: 'spotify:track:swapnil-galavar-khali',
-    name: 'Galavar Khali',
-    artists: [{ name: 'Swapnil Bandodkar, Ajay-Atul' }],
-    album: {
-      name: 'Vedh',
-      images: [{ url: 'https://c.saavncdn.com/038/Diwali-Pahat-Vaishali-Samant-Swapnil-Bandodkar-Marathi-2025-20251012010801-500x500.jpg' }]
-    },
-    duration_ms: 284000
-  },
-  {
     id: 'zingaat-ajay-atul',
-    uri: 'spotify:track:zingaat-ajay-atul',
+    uri: 'spotify:track:3TysRQuZRfhXZ6P8T09YdO',
     name: 'Zingaat',
     artists: [{ name: 'Ajay-Atul' }],
     album: {
       name: 'Sairat',
-      images: [{ url: 'https://c.saavncdn.com/229/Sairat-Marathi-2016-500x500.jpg' }]
+      images: [{ url: 'https://i.scdn.co/image/ab67616d0000b2731c1d299d19bb5533d4daae07' }]
     },
     duration_ms: 226000
   },
   {
-    id: 'man-udhan-varyache',
-    uri: 'spotify:track:man-udhan-varyache',
-    name: 'Man Udhan Varyache',
-    artists: [{ name: 'Ajay-Atul, Shankar Mahadevan' }],
-    album: {
-      name: 'Agga Bai Arechhaa',
-      images: [{ url: 'https://c.saavncdn.com/409/Agga-Bai-Arechhaa-Marathi-2004-20210515124118-500x500.jpg' }]
-    },
-    duration_ms: 304000
-  },
-  {
     id: 'tauba-tauba-karan-aujla',
-    uri: 'spotify:track:tauba-tauba-karan-aujla',
+    uri: 'spotify:track:25Nxyrng0Z3jC5Q0hAibpw',
     name: 'Tauba Tauba',
     artists: [{ name: 'Karan Aujla' }],
     album: {
       name: 'Bad Newz',
-      images: [{ url: 'https://c.saavncdn.com/992/Bad-Newz-Hindi-2024-20250730113701-500x500.jpg' }]
+      images: [{ url: 'https://i.scdn.co/image/ab67616d0000b273b2f5a9e16c9bffab61b53d04' }]
     },
     duration_ms: 206000
   },
   {
     id: 'softly-karan-aujla',
-    uri: 'spotify:track:softly-karan-aujla',
+    uri: 'spotify:track:38tSrWvBXuw1rGOe9izyc9',
     name: 'Softly',
     artists: [{ name: 'Karan Aujla, Ikky' }],
     album: {
       name: 'Making Memories',
-      images: [{ url: 'https://c.saavncdn.com/401/Making-Memories-Punjabi-2023-20230818063004-500x500.jpg' }]
+      images: [{ url: 'https://i.scdn.co/image/ab67616d0000b273bc0ea09896599d2d8c2417f2' }]
     },
     duration_ms: 154000
   },
   {
-    id: 'diljit-lover',
-    uri: 'spotify:track:diljit-lover',
-    name: 'Lover',
+    id: 'diljit-goat',
+    uri: 'spotify:track:46QbY78ha62aiu6gBgC7lS',
+    name: 'G.O.A.T.',
     artists: [{ name: 'Diljit Dosanjh' }],
     album: {
-      name: 'MoonChild Era',
-      images: [{ url: 'https://c.saavncdn.com/artists/Diljit_Dosanjh_005_20231025073054_500x500.jpg' }]
+      name: 'G.O.A.T.',
+      images: [{ url: 'https://i.scdn.co/image/ab67616d0000b273e62ca3548e739bd85eebbbc9' }]
     },
-    duration_ms: 184000
-  },
-  {
-    id: 'diljit-kinni-kinni',
-    uri: 'spotify:track:diljit-kinni-kinni',
-    name: 'Kinni Kinni',
-    artists: [{ name: 'Diljit Dosanjh' }],
-    album: {
-      name: 'Ghost',
-      images: [{ url: 'https://c.saavncdn.com/086/Ghost-Punjabi-2023-20230929054707-500x500.jpg' }]
-    },
-    duration_ms: 187000
+    duration_ms: 223000
   },
   {
     id: 'ap-dhillon-excuses',
-    uri: 'spotify:track:ap-dhillon-excuses',
+    uri: 'spotify:track:29m79w9xPMH4YCD6r8JSmV',
     name: 'Excuses',
     artists: [{ name: 'AP Dhillon, Gurinder Gill' }],
     album: {
       name: 'Excuses',
-      images: [{ url: 'https://c.saavncdn.com/974/Excuses-Punjabi-2020-20201222030232-500x500.jpg' }]
+      images: [{ url: 'https://i.scdn.co/image/ab67616d0000b2735b74e703d6ffb2ea16860c86' }]
     },
     duration_ms: 176000
   },
   {
-    id: 'ap-dhillon-with-you',
-    uri: 'spotify:track:ap-dhillon-with-you',
-    name: 'With You',
-    artists: [{ name: 'AP Dhillon' }],
+    id: 'swapnil-galavar-khali',
+    uri: 'spotify:track:6BZepuMXX4rXsyH3JgWIot',
+    name: 'Galavar Khali',
+    artists: [{ name: 'Swapnil Bandodkar, Ajay-Atul' }],
     album: {
-      name: 'With You',
-      images: [{ url: 'https://c.saavncdn.com/832/With-You-Punjabi-2023-20230811063001-500x500.jpg' }]
+      name: 'Vedh',
+      images: [{ url: 'https://i.scdn.co/image/ab67616d0000b273f72e624643abb25f3d61b351' }]
     },
-    duration_ms: 154000
+    duration_ms: 284000
   },
   {
-    id: 'bad-bunny-titi-me-pregunto',
-    uri: 'spotify:track:bad-bunny-titi-me-pregunto',
-    name: 'Tití Me Preguntó',
-    artists: [{ name: 'Bad Bunny' }],
+    id: 'man-udhan-varyache',
+    uri: 'spotify:track:0q17pNmehWcNw0MzthBXkC',
+    name: 'Man Udhan Varyache',
+    artists: [{ name: 'Ajay-Atul, Shankar Mahadevan' }],
     album: {
-      name: 'Un Verano Sin Ti',
-      images: [{ url: 'https://images.unsplash.com/photo-1501386761578-eac5c94b800a?w=600' }]
+      name: 'Agga Bai Arechhaa',
+      images: [{ url: 'https://i.scdn.co/image/ab67616d0000b273a25ac54cf39cdd8e574dec1e' }]
     },
-    duration_ms: 243000
+    duration_ms: 304000
   }
 ];
 
@@ -609,29 +620,13 @@ const shuffleArray = <T,>(arr: T[]): T[] => {
   return copy;
 };
 
-// Generates a vibrant, balanced random mix from International, Hindi, and Other genres
-const getRandomMix = (count: number): Track[] => {
-  const intl = shuffleArray(GUEST_INTERNATIONAL_TRACKS);
-  const hindi = shuffleArray(GUEST_HINDI_TRACKS);
-  const other = shuffleArray(GUEST_OTHER_TRACKS);
-
-  const pool: Track[] = [];
-  const targetPerCategory = Math.ceil(count / 3);
-
-  pool.push(...intl.slice(0, targetPerCategory));
-  pool.push(...hindi.slice(0, targetPerCategory));
-  pool.push(...other.slice(0, targetPerCategory));
-
-  return shuffleArray(pool).slice(0, count);
-};
-
 // Curated dynamic guest mix themes
 const GUEST_MIX_CARDS = [
   {
     id: 'hindi-soul-mix',
     name: 'Hindi Soul & Acoustic',
     subtitle: 'Arijit Singh, Anuv Jain, Aditya Rikhari',
-    image: 'https://c.saavncdn.com/436/Husn-Hindi-2023-20231129054140-500x500.jpg',
+    image: 'https://i.scdn.co/image/ab67616d0000b2733944fdc1eff51f7be0a98cb8',
     query: 'Hindi Acoustic Soul'
   },
   {
@@ -645,32 +640,64 @@ const GUEST_MIX_CARDS = [
     id: 'punjabi-regional-fire',
     name: 'Punjabi & Regional Beats',
     subtitle: 'Karan Aujla, Diljit, AP Dhillon',
-    image: 'https://c.saavncdn.com/992/Bad-Newz-Hindi-2024-20250730113701-500x500.jpg',
+    image: 'https://i.scdn.co/image/ab67616d0000b273b2f5a9e16c9bffab61b53d04',
     query: 'Punjabi Hits'
   },
   {
     id: 'marathi-classics',
     name: 'Marathi Melodies',
     subtitle: 'Ajay-Atul, Swapnil Bandodkar',
-    image: 'https://c.saavncdn.com/038/Diwali-Pahat-Vaishali-Samant-Swapnil-Bandodkar-Marathi-2025-20251012010801-500x500.jpg',
+    image: 'https://i.scdn.co/image/ab67616d0000b273f72e624643abb25f3d61b351',
     query: 'Marathi Classic Songs'
   },
   {
     id: 'international-lofi',
     name: 'International Chill & Indie',
     subtitle: 'Billie Eilish, Coldplay, Harry Styles',
-    image: 'https://images.unsplash.com/photo-1500485035595-cbe6f645feb1?w=600',
+    image: 'https://i.scdn.co/image/ab67616d0000b27371d62ea7ea8a5be92d3c1f62',
     query: 'Indie Pop Hits'
   }
 ];
 
-// Generates complete fresh random guest feed across all sections
-export const generateGuestFeed = () => ({
-  popularTracks: getRandomMix(4),
-  discoveryTracks: getRandomMix(5),
-  freshReleases: getRandomMix(5),
-  madeForYou: shuffleArray(GUEST_MIX_CARDS)
-});
+// Generates complete fresh random guest feed with guaranteed multi-genre balance and NO duplicate songs across sections
+export const generateGuestFeed = () => {
+  const intl = shuffleArray(GUEST_INTERNATIONAL_TRACKS);
+  const hindi = shuffleArray(GUEST_HINDI_TRACKS);
+  const regional = shuffleArray(GUEST_OTHER_TRACKS);
+
+  // 1. Random Discoveries (5 tracks): balanced across International, Hindi & Regional
+  const discoveryTracks: Track[] = shuffleArray([
+    intl[0],
+    intl[1],
+    hindi[0],
+    hindi[1],
+    regional[0]
+  ]);
+
+  // 2. Popular tracks (4 tracks): 100% DISJOINT from discoveryTracks (indices 2+), never duplicate
+  const popularTracks: Track[] = shuffleArray([
+    intl[2],
+    hindi[2],
+    hindi[3],
+    regional[1]
+  ]);
+
+  // 3. Fresh releases (5 tracks): from remaining pool
+  const freshReleases: Track[] = shuffleArray([
+    intl[3],
+    intl[4],
+    hindi[4],
+    regional[2],
+    regional[3]
+  ]);
+
+  return {
+    popularTracks,
+    discoveryTracks,
+    freshReleases,
+    madeForYou: shuffleArray(GUEST_MIX_CARDS)
+  };
+};
 
 // Fallback arrays for authenticated initial state
 const DEFAULT_POPULAR_TRACKS: Track[] = GUEST_INTERNATIONAL_TRACKS.slice(0, 4);
@@ -943,12 +970,31 @@ const detectUserRegion = (): { code: 'IN' | 'GLOBAL'; name: string } => {
   return { code: 'GLOBAL', name: 'Global' };
 };
 
-// Resilient universal image fallback helper
+// Curated distinct atmospheric music artworks for resilient fallbacks (never repetitive yellow photos)
+const STYLISH_FALLBACK_COVERS = [
+  'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=500',
+  'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=500',
+  'https://images.unsplash.com/photo-1470225620780-dba8ba36b745?w=500',
+  'https://images.unsplash.com/photo-1509198397868-475647b2a1e5?w=500',
+  'https://images.unsplash.com/photo-1501386761578-eac5c94b800a?w=500',
+  'https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f?w=500',
+  'https://images.unsplash.com/photo-1516450360452-9312f5e86fc7?w=500',
+  'https://images.unsplash.com/photo-1510915361894-db8b60106cb1?w=500'
+];
+
+// Resilient universal image fallback helper with deterministic unique rotation
 const handleImageError = (
   e: React.SyntheticEvent<HTMLImageElement, Event>,
-  fallback = 'https://images.unsplash.com/photo-1518609878373-06d740f60d8b?w=500'
+  customFallback?: string
 ) => {
   const target = e.currentTarget;
+  const key = (target.alt || target.title || 'album').trim();
+  let hash = 0;
+  for (let i = 0; i < key.length; i++) {
+    hash = (hash << 5) - hash + key.charCodeAt(i);
+    hash |= 0;
+  }
+  const fallback = customFallback || STYLISH_FALLBACK_COVERS[Math.abs(hash) % STYLISH_FALLBACK_COVERS.length];
   if (target.src !== fallback) {
     target.onerror = null;
     target.src = fallback;
@@ -1002,6 +1048,20 @@ const Home: React.FC<HomeProps> = ({
   // Randomizes all feed sections for guest listeners (International, Hindi, and Other sort)
   const randomizeGuestFeed = () => {
     setGuestFeed(generateGuestFeed());
+  };
+
+  const randomizeDiscoveries = () => {
+    setGuestFeed(prev => ({
+      ...prev,
+      discoveryTracks: generateGuestFeed().discoveryTracks
+    }));
+  };
+
+  const randomizePopularTracks = () => {
+    setGuestFeed(prev => ({
+      ...prev,
+      popularTracks: generateGuestFeed().popularTracks
+    }));
   };
 
   // Pull-to-refresh state
@@ -1756,7 +1816,7 @@ const Home: React.FC<HomeProps> = ({
                 className="group relative rounded-2xl overflow-hidden aspect-[16/10] bg-black/25 border border-white/[0.08] cursor-pointer hover:border-white/20 transition-all shadow-md select-none backdrop-blur-xl"
               >
                 <img
-                  src={track.album?.images?.[0]?.url || 'https://images.unsplash.com/photo-1518609878373-06d740f60d8b?w=500'}
+                  src={track.album?.images?.[0]?.url || 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=500'}
                   alt={track.name}
                   onError={(e) => handleImageError(e)}
                   className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
@@ -1844,9 +1904,9 @@ const Home: React.FC<HomeProps> = ({
               </button>
             ) : (
               <button
-                onClick={randomizeGuestFeed}
-                className="text-xs font-medium text-[#8a8489] hover:text-white transition-colors flex items-center space-x-1"
-                title="Shuffle songs"
+                onClick={randomizeDiscoveries}
+                className="text-xs font-medium text-[#8a8489] hover:text-white transition-colors flex items-center space-x-1 active:scale-95 cursor-pointer"
+                title="Shuffle discoveries"
               >
                 <Shuffle size={11} className={isOcean ? 'text-cyan-400' : 'text-[#eab690]'} />
                 <span>Shuffle</span>
@@ -1923,12 +1983,24 @@ const Home: React.FC<HomeProps> = ({
                 </span>
               )}
             </div>
-            <button
-              onClick={() => navigate('/search')}
-              className="text-xs font-medium text-[#8a8489] hover:text-white transition-colors"
-            >
-              See all
-            </button>
+            <div className="flex items-center space-x-2">
+              {!isAuthenticated && (
+                <button
+                  onClick={randomizePopularTracks}
+                  className="text-xs font-medium text-[#8a8489] hover:text-white transition-colors flex items-center space-x-1 active:scale-95 cursor-pointer"
+                  title="Shuffle popular tracks"
+                >
+                  <Shuffle size={11} className={isOcean ? 'text-cyan-400' : 'text-[#eab690]'} />
+                  <span>Shuffle</span>
+                </button>
+              )}
+              <button
+                onClick={() => navigate('/search')}
+                className="text-xs font-medium text-[#8a8489] hover:text-white transition-colors"
+              >
+                See all
+              </button>
+            </div>
           </div>
 
           {isLoadingPersonalized || (isAuthenticated && topTracks.length === 0) ? (

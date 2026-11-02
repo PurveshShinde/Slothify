@@ -716,7 +716,18 @@ const TOP_ARTIST_PROFILES: Record<string, string> = {
     'maroon 5': 'https://image-cdn-ak.spotifycdn.com/image/ab6761610000e5ebf8349dfb619a7f842242de77',
     'selena gomez': 'https://image-cdn-ak.spotifycdn.com/image/ab6761610000e5eb815e520e3ce7fe210046ba66',
     'khalid': 'https://image-cdn-ak.spotifycdn.com/image/ab6761610000e5eb4a21b4760d2ecb7b0dcdc8da',
-    'chappell roan': 'https://image-cdn-ak.spotifycdn.com/image/ab6761610000e5eb8e734c541c5905d45de98457',
+    'chappell roan': 'https://i.scdn.co/image/ab6761610000e5eb6f8de55129d12702ebff5710',
+    'olivia dean': 'https://i.scdn.co/image/ab6761610000e5eb5c7577ad44daeb7ce4b941a1',
+    'jamie miller': 'https://i.scdn.co/image/ab6761610000e5ebeacc346eb50276f366ac542c',
+    'temper city': 'https://i.scdn.co/image/ab6761610000e5eb58cd69025e54b4f139005b6e',
+    'jade': 'https://i.scdn.co/image/ab6761610000e5eb5d8f24eed04df5dac0adecf4',
+    'gracie abrams': 'https://i.scdn.co/image/ab6761610000e5ebe1800836d95b63c49e60ea3b',
+    'katseye': 'https://i.scdn.co/image/ab6761610000e5eb04ba72b2749f90d62152ebec',
+    'grand theft auto vi': 'https://i.scdn.co/image/ab6761610000e5eb8b64bf5ce23508af9838eade',
+    'gener8ion': 'https://i.scdn.co/image/ab6761610000e5eb9203ea92f4c538f41e6eea8c',
+    'stella lefty': 'https://i.scdn.co/image/ab6761610000e5eb37597ef39468f4fe8fcd9690',
+    'alyssa grace': 'https://i.scdn.co/image/ab6761610000e5ebe95e39575c4f2c668eb11bc4',
+    'solto (fr)': 'https://i.scdn.co/image/ab6761610000e5ebf2f0c84b86e48dd70d9bcc59',
     'tate mcrae': 'https://image-cdn-ak.spotifycdn.com/image/ab6761610000e5ebeefdef74a162b2913094ad9c',
     'karol g': 'https://image-cdn-ak.spotifycdn.com/image/ab6761610000e5eb3869e286c9043f85e8e4bc06',
     'ashe': 'https://image-cdn-ak.spotifycdn.com/image/ab6761610000e5eb1ecbc7955919e10c45604e85',
@@ -725,13 +736,13 @@ const TOP_ARTIST_PROFILES: Record<string, string> = {
     'malcolm todd': 'https://image-cdn-ak.spotifycdn.com/image/ab6761610000e5eb9f6f7c2d12975d2a4b3a0fd8',
     'judeline': 'https://image-cdn-ak.spotifycdn.com/image/ab6761610000e5ebfdd8220f7ef970a38f319160',
     'rusowsky': 'https://image-cdn-ak.spotifycdn.com/image/ab6761610000e5eb2d66e1921d069934588aa080',
-    'post malone': 'https://image-cdn-ak.spotifycdn.com/image/ab6761610000e5ebb50a0097ecae32f0c76db397',
+    'post malone': 'https://i.scdn.co/image/ab6761610000e5ebe17c0aa1714a03d62b5ce4e0',
     'eminem': 'https://image-cdn-ak.spotifycdn.com/image/ab6761610000e5eba00b11c129b27a88fc72f36b',
-    'bad bunny': 'https://image-cdn-ak.spotifycdn.com/image/ab6761610000e5eb9ad50e578a43e0485605777e',
-    'lana del rey': 'https://image-cdn-ak.spotifycdn.com/image/ab6761610000e5ebb77579c05423019808a946b5',
-    'coldplay': 'https://image-cdn-ak.spotifycdn.com/image/ab6761610000e5eb971a1795c477ee5db0a996f0',
-    'rihanna': 'https://image-cdn-ak.spotifycdn.com/image/ab6761610000e5eb803511eb02b9ff9b2a00c6d2',
-    'harry styles': 'https://image-cdn-ak.spotifycdn.com/image/ab6761610000e5eb1151dba9b3edc0633adf35b6',
+    'bad bunny': 'https://i.scdn.co/image/ab67616d0000b27361f01b4fa6f523369d340c75',
+    'lana del rey': 'https://i.scdn.co/image/ab6761610000e5ebb99cacf8acd5378206767261',
+    'coldplay': 'https://i.scdn.co/image/ab6761610000e5ebfe1fab276582a303ff359a7b',
+    'rihanna': 'https://i.scdn.co/image/ab6761610000e5ebceab420e8ded9e0de267df37',
+    'harry styles': 'https://i.scdn.co/image/ab67616d0000b273731f0f3040d66000d82f0350',
     'doja cat': 'https://image-cdn-ak.spotifycdn.com/image/ab6761610000e5eb9e3a3b8792a04c4578da7b90',
     'future': 'https://image-cdn-ak.spotifycdn.com/image/ab6761610000e5eb1a695ee9c2cb49fab81d4088',
     'metro boomin': 'https://image-cdn-ak.spotifycdn.com/image/ab6761610000e5ebbc031b73f958987fa1030310',
@@ -777,11 +788,11 @@ const TOP_ARTIST_SPOTIFY_IDS: Record<string, string> = {
     'rusowsky': '1XEVu7gdRFfzEFqsPrancH',
     'post malone': '246dkjvS1zLTtiykXe5h60',
     'eminem': '7dGJoVhflACIMRgwmHGw7F',
-    'bad bunny': '4q3ewBCX7sLwd24euuV69X',
-    'lana del rey': '00FQVU4rrxdAUvdqv51aQ0',
-    'coldplay': '4gzpq5YvW9XsURILUJnh4G',
-    'rihanna': '5pKCCKE222ZGEQo2Zif4Qi',
-    'harry styles': '6KImCVD70vtIoJWnq6nGn3',
+    'bad bunny': '4q3ewBCX7sLwd24euqV69X',
+    'lana del rey': '00FQb4jTyendYWaN8pK0wa',
+    'coldplay': '4gzpq5Yv4ugG4snTC7egGg',
+    'rihanna': '5pKCCKE222Gq7TrgTROiCo',
+    'harry styles': '6KImCVD70vtRI0nl9ydGBr',
     'doja cat': '5cj0nqj0qpeqvuj2tm1zb7',
     'future': '1RyvyyTE3KVwmbtSYdZVvK',
     'metro boomin': '0iEtIxbK0KxaSlF7G52ZYY',
@@ -996,11 +1007,20 @@ async function resolveArtistMetadata(artistName: string): Promise<ArtistMeta> {
     }
 
     if (!imageUrl) {
+        try {
+            const ytAvatar = await resolveYouTubeArtistAvatar(artistName);
+            if (ytAvatar) imageUrl = ytAvatar;
+        } catch {}
+    }
+
+    if (!imageUrl) {
         imageUrl = `https://ui-avatars.com/api/?name=${encodeURIComponent(artistName)}&background=181824&color=f5d0b5&size=500&bold=true`;
     }
 
     const meta: ArtistMeta = { imageUrl, headerUrl: headerUrl || imageUrl, followers, monthlyListeners, genres, bio, verified, topTracks };
-    ARTIST_META_CACHE.set(norm, meta);
+    if (!imageUrl.includes('ui-avatars.com')) {
+        ARTIST_META_CACHE.set(norm, meta);
+    }
     return meta;
 }
 
@@ -1153,6 +1173,12 @@ function isJunkChannel(name: string, query: string): boolean {
     const lowerName = name.toLowerCase().trim();
     const lowerQ = query.toLowerCase().trim();
     if (lowerName === lowerQ) return false;
+
+    // Reject composite artist names like "Dove Cameron, Khalid" when searching for an individual artist
+    if ((lowerName.includes(',') || lowerName.includes('&') || /\b(feat\.?|ft\.?|with)\b/i.test(lowerName)) &&
+        !lowerQ.includes(',') && !lowerQ.includes('&') && !/\b(feat\.?|ft\.?|with)\b/i.test(lowerQ)) {
+        return true;
+    }
 
     // Reject common corporate / commercial / junk channels
     const junkPatterns = [
@@ -1960,7 +1986,17 @@ export class SpotifyScraperPlugin implements MetadataPlugin {
             return calculateArtistRelevanceScore(b, clean) - calculateArtistRelevanceScore(a, clean);
         });
 
-        const topResults = results.slice(0, limit);
+        // Strictly deduplicate by normalized artist name to eliminate duplicate cards
+        const uniqueResults: Artist[] = [];
+        const seenNorms = new Set<string>();
+        for (const art of results) {
+            const norm = (art.name || '').trim().toLowerCase();
+            if (!norm || seenNorms.has(norm)) continue;
+            seenNorms.add(norm);
+            uniqueResults.push(art);
+        }
+
+        const topResults = uniqueResults.slice(0, limit);
         // Enrich portraits and authentic follower counts in parallel for the top candidates if needed
         await Promise.all(topResults.map(async (art) => {
             const curFans = typeof art.followers === 'object' && art.followers !== null ? art.followers.total : (Number(art.followers) || 0);
@@ -2127,8 +2163,13 @@ export class SpotifyScraperPlugin implements MetadataPlugin {
             .replace(/[-_]/g, ' ')
             .trim();
 
-        if (/^[0-9A-Za-z]{22}$/.test(artistId)) {
-            const ov = await fetchSpotifyArtistOverview(artistId);
+        const norm = cleanName.toLowerCase().trim();
+        const knownSpotifyId = TOP_ARTIST_SPOTIFY_IDS[norm];
+        const effectiveId = (/^[0-9A-Za-z]{22}$/.test(artistId)) ? artistId : (knownSpotifyId || '');
+
+        let ov: any = null;
+        if (effectiveId) {
+            ov = await fetchSpotifyArtistOverview(effectiveId);
             if (ov && ov.name) {
                 cleanName = ov.name;
             }
@@ -2136,18 +2177,20 @@ export class SpotifyScraperPlugin implements MetadataPlugin {
 
         const meta = await resolveArtistMetadata(cleanName);
         const displayName = cleanName.replace(/\b\w/g, c => c.toUpperCase());
+        const coverImage = (ov?.avatarUrl) || meta.imageUrl;
+        const headerImage = (ov?.headerUrl) || meta.headerUrl || coverImage;
 
         return {
             id: artistId,
             name: displayName,
-            coverImage: meta.imageUrl,
-            headerImage: meta.headerUrl || meta.imageUrl,
-            images: [{ url: meta.imageUrl }],
-            monthlyListeners: meta.monthlyListeners || meta.followers || 0,
-            followers: meta.followers || 0,
+            coverImage,
+            headerImage,
+            images: [{ url: coverImage }],
+            monthlyListeners: ov?.monthlyListeners || meta.monthlyListeners || meta.followers || 0,
+            followers: ov?.followers || meta.followers || 0,
             genres: meta.genres,
             bio: meta.bio || `<strong>${displayName}</strong> is a celebrated musical artist with millions of fans worldwide. Known for innovative sound design and emotive melodies, ${displayName} continues to craft charting tracks and iconic records.`,
-            verified: meta.verified ?? true
+            verified: ov?.verified ?? meta.verified ?? true
         };
     }
 

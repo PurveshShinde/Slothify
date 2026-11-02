@@ -20,7 +20,7 @@ const KNOWN_PLAYLIST_META: Record<string, { name: string; description: string; i
   'acoustic-mornings': {
     name: 'Acoustic Mornings',
     description: 'Soft, calm & beautiful acoustic strings',
-    image: 'https://images.unsplash.com/photo-1518609878373-06d740f60d8b?w=500'
+    image: 'https://images.unsplash.com/photo-1510915361894-db8b60106cb1?w=500'
   },
   'heartbreak-diaries': {
     name: 'Heartbreak Diaries',

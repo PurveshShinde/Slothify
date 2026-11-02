@@ -16,7 +16,7 @@ import {
 import DOMPurify from 'dompurify';
 import { Track } from '../types';
 import { useTheme } from '../context/ThemeContext';
-import { getOptimizedImageUrl } from '../utils/imageOptimizer';
+import { getOptimizedImageUrl, getArtistAvatarUrl, handleArtistImageError } from '../utils/imageOptimizer';
 
 interface ArtistData {
   id: string;
@@ -117,28 +117,62 @@ export default function ArtistProfile({
   const [localIsFollowing, setLocalIsFollowing] = useState(false);
   const [copiedShare, setCopiedShare] = useState(false);
 
+  const isFollowing = (() => {
+    if (!artist && !artistId) return false;
+    const norm = (artist?.name || '').trim().toLowerCase();
+    if (followedArtistIds) {
+      if (artistId && followedArtistIds.has(artistId)) return true;
+      if (artist?.id && followedArtistIds.has(artist.id)) return true;
+      if (norm) {
+        const enc = encodeURIComponent(artist?.name || '');
+        if (followedArtistIds.has(`sp_art_${enc}`) ||
+            followedArtistIds.has(`sp_art_${norm}`) ||
+            followedArtistIds.has(`artist-${norm}`) ||
+            followedArtistIds.has(norm)) {
+          return true;
+        }
+      }
+    }
+    return localIsFollowing;
+  })();
+
   useEffect(() => {
-    if (!artistId) return;
+    if (!artistId && !artist) return;
     try {
       const saved = localStorage.getItem('slothify_user_followed_artist_ids');
+      const savedProfiles = localStorage.getItem('slothify_followed_artist_profiles');
+      const norm = (artist?.name || '').trim().toLowerCase();
+
+      let matched = false;
       if (saved) {
         const set = new Set(JSON.parse(saved));
-        setLocalIsFollowing(set.has(artistId));
+        if (artistId && set.has(artistId)) matched = true;
+        if (artist?.id && set.has(artist.id)) matched = true;
+        if (norm) {
+          const enc = encodeURIComponent(artist?.name || '');
+          if (set.has(`sp_art_${enc}`) || set.has(`sp_art_${norm}`) || set.has(`artist-${norm}`) || set.has(norm)) {
+            matched = true;
+          }
+        }
       }
+      if (!matched && savedProfiles && norm) {
+        const map = JSON.parse(savedProfiles);
+        matched = Object.values(map).some((p: any) => (p?.name || '').trim().toLowerCase() === norm);
+      }
+      setLocalIsFollowing(matched);
     } catch (e) {}
-  }, [artistId]);
-
-  const isFollowing = (followedArtistIds && artistId)
-    ? followedArtistIds.has(artistId)
-    : localIsFollowing;
+  }, [artistId, artist?.name, artist?.id]);
 
   const toggleFollow = () => {
-    if (!artistId) return;
-    if (onToggleFollow && artist) {
+    if (!artist && !artistId) return;
+    const norm = (artist?.name || '').trim().toLowerCase();
+    const effectiveArtist = artist || { id: artistId, name: artistId };
+
+    if (onToggleFollow) {
       onToggleFollow({
-        id: artist.id,
-        name: artist.name,
-        images: artist.images || (artist.coverImage ? [{ url: artist.coverImage }] : []),
+        id: effectiveArtist.id || artistId,
+        name: effectiveArtist.name,
+        images: effectiveArtist.images || (effectiveArtist.coverImage ? [{ url: effectiveArtist.coverImage }] : []),
         followers: { total: followersCount || monthlyListenersCount || 0 },
         monthlyListeners: monthlyListenersCount
       });
@@ -150,8 +184,13 @@ export default function ArtistProfile({
       try {
         const saved = localStorage.getItem('slothify_user_followed_artist_ids');
         const set = new Set(saved ? JSON.parse(saved) : []);
-        if (next) set.add(artistId);
-        else set.delete(artistId);
+        const enc = encodeURIComponent(effectiveArtist.name || '');
+        const aliases = [artistId, effectiveArtist.id, `sp_art_${enc}`, `sp_art_${norm}`, `artist-${norm}`, norm].filter(Boolean);
+        if (next) {
+          aliases.forEach(id => set.add(id));
+        } else {
+          aliases.forEach(id => set.delete(id));
+        }
         localStorage.setItem('slothify_user_followed_artist_ids', JSON.stringify(Array.from(set)));
       } catch (e) {}
       return next;
@@ -272,20 +311,31 @@ export default function ArtistProfile({
           : 'bg-gradient-to-br from-[#2a170f]/90 via-[#180f0a]/80 to-[#0f0704]/95') : ''
       }`}>
         {/* Authentic Spotify Widescreen Header Background */}
-        {artist.headerImage && (
-          <div className="absolute inset-0 z-0 overflow-hidden pointer-events-none">
-            <img
-              src={artist.headerImage}
-              alt=""
-              className="w-full h-full object-cover object-top filter brightness-[0.70] transform scale-105"
-            />
-            {/* Ambient vignette and smooth fade overlay matching Spotify */}
-            <div className="absolute inset-0 bg-gradient-to-t from-black/95 via-black/40 to-black/20" />
-            <div className={`absolute inset-0 opacity-30 mix-blend-multiply ${
-              isOcean ? 'bg-blue-950' : 'bg-[#180f0a]'
-            }`} />
-          </div>
-        )}
+        {(() => {
+          const banner = (artist.headerImage && !artist.headerImage.includes('ui-avatars.com')) 
+            ? artist.headerImage 
+            : getArtistAvatarUrl(artist, '600');
+          const hasBanner = banner && !banner.includes('ui-avatars.com');
+          if (!hasBanner) return null;
+
+          return (
+            <div className="absolute inset-0 z-0 overflow-hidden pointer-events-none">
+              <img
+                src={banner}
+                alt=""
+                className="w-full h-full object-cover object-top filter brightness-[0.70] transform scale-105"
+                onError={(e) => {
+                  (e.target as HTMLImageElement).style.display = 'none';
+                }}
+              />
+              {/* Ambient vignette and smooth fade overlay matching Spotify */}
+              <div className="absolute inset-0 bg-gradient-to-t from-black/95 via-black/40 to-black/20" />
+              <div className={`absolute inset-0 opacity-30 mix-blend-multiply ${
+                isOcean ? 'bg-blue-950' : 'bg-[#180f0a]'
+              }`} />
+            </div>
+          );
+        })()}
 
         {/* Ambient Glow */}
         <div 
@@ -298,11 +348,9 @@ export default function ArtistProfile({
           {/* Artist Portrait */}
           <div className="relative group w-36 h-36 md:w-48 md:h-48 rounded-full overflow-hidden shadow-2xl ring-4 ring-white/20 flex-shrink-0 bg-black/40">
             <img
-              src={getOptimizedImageUrl(artist.coverImage || artist.images?.[0]?.url, '500') || `https://ui-avatars.com/api/?name=${encodeURIComponent(artist.name)}&background=181824&color=f5d0b5&size=500&bold=true`}
+              src={getArtistAvatarUrl(artist, '500')}
               alt={artist.name}
-              onError={(e) => {
-                (e.target as HTMLImageElement).src = `https://ui-avatars.com/api/?name=${encodeURIComponent(artist.name)}&background=181824&color=f5d0b5&size=500&bold=true`;
-              }}
+              onError={(e) => handleArtistImageError(e, artist.name)}
               className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
             />
           </div>

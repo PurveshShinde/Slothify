@@ -7,7 +7,7 @@ import { useTheme } from '../context/ThemeContext';
 import PlaylistCover from '../components/PlaylistCover';
 import { AudioService } from '../services/audioService';
 import { useDebounce } from '../hooks/useDebounce';
-import { getOptimizedImageUrl, getTrackThumbnail } from '../utils/imageOptimizer';
+import { getOptimizedImageUrl, getTrackThumbnail, getArtistAvatarUrl, handleArtistImageError } from '../utils/imageOptimizer';
 
 interface CategoryItem {
   name: string;
@@ -684,7 +684,7 @@ const Search: React.FC<SearchProps> = ({ isAuthenticated, onPlayTrack }) => {
               <h2 className="text-sm font-bold tracking-wider text-[#8a8489] uppercase">Artists</h2>
               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
                 {artists.map((artist) => {
-                  const imgUrl = getOptimizedImageUrl(artist.images?.[0]?.url || artist.imageUrl, '150') || `https://ui-avatars.com/api/?name=${encodeURIComponent(artist.name)}&background=181824&color=f5d0b5&size=150&bold=true`;
+                  const imgUrl = getArtistAvatarUrl(artist, '150');
                   return (
                     <Link
                       key={artist.id}
@@ -696,6 +696,7 @@ const Search: React.FC<SearchProps> = ({ isAuthenticated, onPlayTrack }) => {
                           src={imgUrl}
                           loading="lazy"
                           alt={artist.name}
+                          onError={(e) => handleArtistImageError(e, artist.name)}
                           className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
                         />
                       </div>

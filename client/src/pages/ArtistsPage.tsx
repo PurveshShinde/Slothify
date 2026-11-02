@@ -4,7 +4,7 @@ import { Users, Search, Sparkles, Check, Plus, Play, Loader2, X } from 'lucide-r
 import axios from 'axios';
 import { useTheme } from '../context/ThemeContext';
 import { useCache } from '../context/CacheContext';
-import { getOptimizedImageUrl } from '../utils/imageOptimizer';
+import { getOptimizedImageUrl, getArtistAvatarUrl, handleArtistImageError } from '../utils/imageOptimizer';
 
 interface ArtistItem {
   id: string;
@@ -132,26 +132,75 @@ export const ArtistsPage: React.FC<ArtistsPageProps> = ({
   const [localFollowedProfiles, setLocalFollowedProfiles] = useState<Record<string, ArtistItem>>(() => {
     try {
       const saved = localStorage.getItem('slothify_followed_artist_profiles');
-      if (saved) return JSON.parse(saved);
+      if (saved) {
+        const raw = Object.values(JSON.parse(saved)) as ArtistItem[];
+        const byName = new Map<string, ArtistItem>();
+        raw.forEach(a => {
+          if (!a?.name) return;
+          const norm = a.name.trim().toLowerCase();
+          const existing = byName.get(norm);
+          if (!existing) byName.set(norm, a);
+          else {
+            const fA = typeof a.followers === 'object' && a.followers !== null ? a.followers.total : (Number(a.followers) || 0);
+            const fE = typeof existing.followers === 'object' && existing.followers !== null ? existing.followers.total : (Number(existing.followers) || 0);
+            if (fA > fE) byName.set(norm, a);
+          }
+        });
+        const map: Record<string, ArtistItem> = {};
+        byName.forEach(a => { map[a.id] = a; });
+        return map;
+      }
     } catch (e) {}
     return {};
   });
 
   const followedProfiles = React.useMemo(() => {
-    if (propFollowedList && propFollowedList.length > 0) {
-      const map: Record<string, ArtistItem> = {};
-      propFollowedList.forEach(a => { if (a && a.id) map[a.id] = a; });
-      return map;
-    }
-    return localFollowedProfiles;
+    const list = propFollowedList && propFollowedList.length > 0
+      ? propFollowedList
+      : Object.values(localFollowedProfiles);
+
+    const byName = new Map<string, ArtistItem>();
+    list.forEach(a => {
+      if (!a?.name) return;
+      const norm = a.name.trim().toLowerCase();
+      const existing = byName.get(norm);
+      if (!existing) {
+        byName.set(norm, a);
+      } else {
+        const fA = typeof a.followers === 'object' && a.followers !== null ? a.followers.total : (Number(a.followers) || 0);
+        const fE = typeof existing.followers === 'object' && existing.followers !== null ? existing.followers.total : (Number(existing.followers) || 0);
+        if (fA > fE) byName.set(norm, a);
+      }
+    });
+
+    const map: Record<string, ArtistItem> = {};
+    byName.forEach(a => { map[a.id] = a; });
+    return map;
   }, [propFollowedList, localFollowedProfiles]);
+
+  const followedCount = Object.keys(followedProfiles).length;
+
+  const checkIsFollowing = (artist: ArtistItem) => {
+    if (followedIds.has(artist.id)) return true;
+    const norm = (artist.name || '').trim().toLowerCase();
+    if (!norm) return false;
+    if (followedIds.has(`sp_art_${encodeURIComponent(artist.name)}`) ||
+        followedIds.has(`sp_art_${norm}`) ||
+        followedIds.has(`artist-${norm}`) ||
+        followedIds.has(norm)) {
+      return true;
+    }
+    return Object.values(followedProfiles).some(p => (p.name || '').trim().toLowerCase() === norm);
+  };
 
   // Authentic artists from API or cache (instant, zero loading delay if visited before)
   const [topArtists, setTopArtists] = useState<ArtistItem[]>(() => {
     if (Array.isArray(cache.artistsData)) {
       const hasStale = cache.artistsData.some(a => 
         a.followers?.total === 12500000 || 
-        a.images?.[0]?.url?.includes('5b95c0c9aaefc8eb741369cfbb0498b5')
+        a.images?.[0]?.url?.includes('5b95c0c9aaefc8eb741369cfbb0498b5') ||
+        a.images?.[0]?.url?.includes('8e734c541c5905d45de98457') ||
+        a.images?.[0]?.url?.includes('ui-avatars.com')
       );
       if (!hasStale && cache.artistsData.length > 0) {
         return cache.artistsData;
@@ -177,9 +226,9 @@ export const ArtistsPage: React.FC<ArtistsPageProps> = ({
           const apiArtists: ArtistItem[] = res.data.map((item: any) => ({
             id: item.id || `artist-${item.name}`,
             name: item.name,
-            images: item.images && item.images.length > 0
+            images: item.images && item.images.length > 0 && !item.images[0]?.url?.includes('ui-avatars.com') && !item.images[0]?.url?.includes('8e734c541c5905d45de98457')
               ? item.images
-              : [{ url: `https://ui-avatars.com/api/?name=${encodeURIComponent(item.name)}&background=181824&color=f5d0b5&size=300&bold=true` }],
+              : [{ url: getArtistAvatarUrl(item, '300') }],
             genres: item.genres || ['Artist'],
             followers: item.followers || { total: 0 },
             isFollowing: false
@@ -215,20 +264,34 @@ export const ArtistsPage: React.FC<ArtistsPageProps> = ({
       })
         .then(res => {
           if (!abortController.signal.aborted && Array.isArray(res.data)) {
-            const items: ArtistItem[] = res.data
+            const dedupedMap = new Map<string, ArtistItem>();
+            res.data
               .filter((item: any) => isArtistNameMatch(item.name, q))
-              .map((item: any) => ({
-                id: item.id || `artist-${item.name}`,
-                name: item.name,
-                images: item.images && item.images.length > 0
-                  ? item.images
-                  : [{ url: `https://ui-avatars.com/api/?name=${encodeURIComponent(item.name)}&background=181824&color=f5d0b5&size=300&bold=true` }],
-                genres: item.genres || ['Artist'],
-                followers: item.followers || { total: 0 },
-                monthlyListeners: item.monthlyListeners || 0,
-                isFollowing: false
-              }));
-            // Strictly rank by popularity / follower count descending
+              .forEach((item: any) => {
+                const norm = (item.name || '').trim().toLowerCase();
+                if (!norm) return;
+                const mapped: ArtistItem = {
+                  id: item.id || `artist-${item.name}`,
+                  name: item.name,
+                  images: item.images && item.images.length > 0 && !item.images[0]?.url?.includes('ui-avatars.com') && !item.images[0]?.url?.includes('8e734c541c5905d45de98457')
+                    ? item.images
+                    : [{ url: getArtistAvatarUrl(item, '300') }],
+                  genres: item.genres || ['Artist'],
+                  followers: item.followers || { total: 0 },
+                  monthlyListeners: item.monthlyListeners || 0,
+                  isFollowing: false
+                };
+                const existing = dedupedMap.get(norm);
+                if (!existing) {
+                  dedupedMap.set(norm, mapped);
+                } else {
+                  const fA = mapped.followers?.total || mapped.monthlyListeners || 0;
+                  const fE = existing.followers?.total || existing.monthlyListeners || 0;
+                  if (fA > fE) dedupedMap.set(norm, mapped);
+                }
+              });
+
+            const items = Array.from(dedupedMap.values());
             items.sort((a, b) => ((b.followers?.total || b.monthlyListeners) || 0) - ((a.followers?.total || a.monthlyListeners) || 0));
             setSearchResults(items);
           }
@@ -260,13 +323,18 @@ export const ArtistsPage: React.FC<ArtistsPageProps> = ({
       return;
     }
 
-    const id = artist.id;
+    const normName = (artist.name || '').trim().toLowerCase();
+    const isCurrentlyFollowed = checkIsFollowing(artist);
+    const willFollow = !isCurrentlyFollowed;
+
     setLocalFollowedIds(prev => {
       const next = new Set(prev);
-      if (next.has(id)) {
-        next.delete(id);
+      const enc = encodeURIComponent(artist.name);
+      const aliases = [artist.id, `sp_art_${enc}`, `sp_art_${normName}`, `artist-${normName}`, normName];
+      if (willFollow) {
+        aliases.forEach(id => next.add(id));
       } else {
-        next.add(id);
+        aliases.forEach(id => next.delete(id));
       }
       try {
         localStorage.setItem('slothify_user_followed_artist_ids', JSON.stringify(Array.from(next)));
@@ -275,11 +343,14 @@ export const ArtistsPage: React.FC<ArtistsPageProps> = ({
     });
 
     setLocalFollowedProfiles(prev => {
-      const next = { ...prev };
-      if (next[id]) {
-        delete next[id];
-      } else {
-        next[id] = artist;
+      const next: Record<string, ArtistItem> = {};
+      Object.values(prev).forEach(p => {
+        if ((p.name || '').trim().toLowerCase() !== normName) {
+          next[p.id] = p;
+        }
+      });
+      if (willFollow) {
+        next[artist.id] = artist;
       }
       try {
         localStorage.setItem('slothify_followed_artist_profiles', JSON.stringify(next));
@@ -299,21 +370,27 @@ export const ArtistsPage: React.FC<ArtistsPageProps> = ({
   };
 
   // Determine which list to render:
-  // If search active: show search results
   const activeBaseList = (searchQuery.trim().length >= 2
     ? searchResults.filter(a => isArtistNameMatch(a.name, searchQuery))
     : topArtists
   ).slice().sort((a, b) => (b.followers?.total || 0) - (a.followers?.total || 0));
 
-  // Build map of all known artists (including followed ones from storage)
-  const allKnownMap = new Map<string, ArtistItem>();
-  Object.values(followedProfiles).forEach(p => allKnownMap.set(p.id, p));
-  activeBaseList.forEach(a => allKnownMap.set(a.id, a));
+  const rawList = filterType === 'following' ? Object.values(followedProfiles) : activeBaseList;
 
-  const filteredArtists = (filterType === 'following' ? Array.from(allKnownMap.values()) : activeBaseList)
+  // Strictly deduplicate by normalized artist name!
+  const deduplicatedList: ArtistItem[] = [];
+  const seenNorms = new Set<string>();
+  for (const art of rawList) {
+    const norm = (art.name || '').trim().toLowerCase();
+    if (!norm || seenNorms.has(norm)) continue;
+    seenNorms.add(norm);
+    deduplicatedList.push(art);
+  }
+
+  const filteredArtists = deduplicatedList
     .map(a => ({
       ...a,
-      isFollowing: followedIds.has(a.id)
+      isFollowing: checkIsFollowing(a)
     }))
     .filter(a => {
       if (filterType === 'following') {
@@ -338,7 +415,7 @@ export const ArtistsPage: React.FC<ArtistsPageProps> = ({
             <h1 className="text-2xl sm:text-3xl font-black text-white tracking-tight">Artists</h1>
           </div>
           <p className="text-xs text-slate-400">
-            {followedIds.size} followed • {isLoading ? 'Loading trending artists...' : searchQuery.trim().length >= 2 ? `${searchResults.length} search results` : `${topArtists.length} trending artists`}
+            {followedCount} followed • {isLoading ? 'Loading trending artists...' : searchQuery.trim().length >= 2 ? `${searchResults.length} search results` : `${topArtists.length} trending artists`}
           </p>
         </div>
 
@@ -367,7 +444,7 @@ export const ArtistsPage: React.FC<ArtistsPageProps> = ({
                   : 'text-slate-400 hover:text-white'
               }`}
             >
-              Following ({followedIds.size})
+              Following ({followedCount})
             </button>
           </div>
 
@@ -446,7 +523,7 @@ export const ArtistsPage: React.FC<ArtistsPageProps> = ({
       ) : filteredArtists.length > 0 ? (
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4 sm:gap-6">
           {filteredArtists.map((artist) => {
-            const avatar = getOptimizedImageUrl(artist.images?.[0]?.url, '150') || `https://ui-avatars.com/api/?name=${encodeURIComponent(artist.name)}&background=181824&color=f5d0b5&size=150&bold=true`;
+            const avatar = getArtistAvatarUrl(artist, '150');
 
             return (
               <div
@@ -469,9 +546,7 @@ export const ArtistsPage: React.FC<ArtistsPageProps> = ({
                       src={avatar}
                       loading="lazy"
                       alt={artist.name}
-                      onError={(e) => {
-                        (e.target as HTMLImageElement).src = `https://ui-avatars.com/api/?name=${encodeURIComponent(artist.name)}&background=181824&color=f5d0b5&size=150&bold=true`;
-                      }}
+                      onError={(e) => handleArtistImageError(e, artist.name)}
                       className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
                     />
                     <div className="absolute inset-0 bg-black/10 group-hover:bg-black/30 transition-colors" />

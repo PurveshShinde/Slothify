@@ -727,7 +727,18 @@ router.get('/artists/search', artistSearchCacheMiddleware, async (req, res) => {
                 if (fB !== fA) return fB - fA;
                 return calculateArtistRelevanceScore(b, query) - calculateArtistRelevanceScore(a, query);
             });
-            return res.json(filtered.slice(0, limit));
+
+            // Deduplicate by normalized name so caller never receives duplicate cards
+            const deduplicated: any[] = [];
+            const seen = new Set<string>();
+            for (const a of filtered) {
+                const norm = (a.name || '').trim().toLowerCase();
+                if (!norm || seen.has(norm)) continue;
+                seen.add(norm);
+                deduplicated.push(a);
+            }
+
+            return res.json(deduplicated.slice(0, limit));
         }
 
         return res.json([]);
