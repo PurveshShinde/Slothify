@@ -68,8 +68,14 @@ export interface SaavnGlobalSearchResponse {
   };
 }
 
-const RAW_URL = import.meta.env.VITE_AUDIO_SERVICE_URL || '';
-const BASE_URL = RAW_URL ? RAW_URL.replace(/\/+$/, '') : '';
+const RAW_URL = import.meta.env.VITE_AUDIO_SERVICE_URL || 'https://slothify-audio-services.shindepurvesh007.workers.dev';
+const BASE_URL = RAW_URL ? RAW_URL.replace(/\/+$/, '') : 'https://slothify-audio-services.shindepurvesh007.workers.dev';
+
+// Known direct JioSaavn URLs for studio original tracks (bypasses search algorithm for exact audio fidelity)
+const KNOWN_DIRECT_TRACK_LINKS: Record<string, string> = {
+  'boyfriend dove cameron': 'https://www.jiosaavn.com/song/boyfriend/Cg0RaSNAW2w',
+  'dove cameron boyfriend': 'https://www.jiosaavn.com/song/boyfriend/Cg0RaSNAW2w'
+};
 
 export const AudioService = {
   baseUrl: BASE_URL,
@@ -78,6 +84,31 @@ export const AudioService = {
    * Check if external audio service is configured
    */
   isConfigured: (): boolean => Boolean(BASE_URL),
+
+  /**
+   * Fetch song directly by JioSaavn URL (bypasses search algorithm, guarantees exact original studio track)
+   */
+  getSongByLink: async (
+    link: string,
+    signal?: AbortSignal
+  ): Promise<SaavnSong | null> => {
+    const base = AudioService.baseUrl || 'https://slothify-audio-services.shindepurvesh007.workers.dev';
+    try {
+      const response = await fetch(
+        `${base}/api/songs?link=${encodeURIComponent(link)}`,
+        { signal }
+      );
+      if (!response.ok) throw new Error(`Audio service link fetch failed (${response.status})`);
+      const json = await response.json();
+      const song = json.data?.[0] || json.data;
+      return song || null;
+    } catch (error: any) {
+      if (error?.name !== 'AbortError') {
+        console.warn('Error fetching song by direct link:', error.message);
+      }
+      return null;
+    }
+  },
 
   /**
    * Search for songs by query string
@@ -276,28 +307,133 @@ export const AudioService = {
   },
 
   /**
-   * Find matching JioSaavn stream by track title and artist
+   * Find matching JioSaavn stream by track title and artist with timestamp/duration matching
    */
   findStreamForTrack: async (
     title: string,
     artist = '',
+    targetDurationSec = 0,
     signal?: AbortSignal
   ): Promise<{ songId: string; streamUrl: string; song: SaavnSong } | null> => {
+    // 0. Direct link bypass: check if title is a JioSaavn link or known direct track link
+    const urlMatch = (title || '').match(/jiosaavn\.com\/song\/[^/]+\/([a-zA-Z0-9_-]+)/);
+    const lookupKey = `${title} ${artist}`.toLowerCase().replace(/[^a-z0-9]/g, ' ').replace(/\s+/g, ' ').trim();
+    const reverseKey = `${artist} ${title}`.toLowerCase().replace(/[^a-z0-9]/g, ' ').replace(/\s+/g, ' ').trim();
+    const directUrl = urlMatch ? title.trim() : (KNOWN_DIRECT_TRACK_LINKS[lookupKey] || KNOWN_DIRECT_TRACK_LINKS[reverseKey]);
+
+    if (directUrl) {
+      const directSong = await AudioService.getSongByLink(directUrl, signal);
+      if (directSong) {
+        // If duration is provided, ensure direct link doesn't wildly deviate
+        if (!targetDurationSec || !directSong.duration || Math.abs(directSong.duration - targetDurationSec) <= 12) {
+          const streamUrl = AudioService.extractBestStreamUrl(directSong.downloadUrl);
+          if (streamUrl) {
+            return {
+              songId: directSong.id,
+              streamUrl,
+              song: directSong
+            };
+          }
+        }
+      }
+    }
+
     const cleanTitle = title
       .replace(/\([^)]*\)/g, '')
       .replace(/\[[^\]]*\]/g, '')
       .replace(/["'’]/g, '')
       .trim();
     const query = `${cleanTitle} ${artist}`.trim();
-    const res = await AudioService.searchSongs(query, 1, 10, signal);
+    const res = await AudioService.searchSongs(query, 1, 20, signal);
 
     if (!res?.data?.results || res.data.results.length === 0) {
       return null;
     }
 
-    const best = res.data.results[0];
-    const streamUrl = AudioService.extractBestStreamUrl(best.downloadUrl);
+    const normArtist = artist.toLowerCase().replace(/[^a-z0-9]/g, '');
+    const normTitle = cleanTitle.toLowerCase().replace(/[^a-z0-9]/g, '');
+    const targetHasRemix = /\b(remix|mix)\b/i.test(cleanTitle);
+    const junkPattern = /\b(8-?bit|16-?bit|karaoke|instrumental|nightcore|tribute|cover|lofi|slowed|reverb|sped\s*up|speed\s*up|hardstyle|techno|bass\s*boosted)\b/i;
 
+    interface ScoredCandidate {
+      song: SaavnSong;
+      score: number;
+      durationDelta: number;
+    }
+
+    const scored: ScoredCandidate[] = [];
+
+    for (const song of res.data.results) {
+      const songDuration = song.duration || 0;
+      const durationDelta = targetDurationSec > 0 ? Math.abs(songDuration - targetDurationSec) : 0;
+      let score = 0;
+
+      // 1. Duration / Timestamp Matching: Authentic digital masters across platforms match within 1-4 seconds
+      if (targetDurationSec > 0) {
+        if (durationDelta <= 2) {
+          score += 150; // Exact match to studio release
+        } else if (durationDelta <= 5) {
+          score += 90;
+        } else {
+          score -= 350; // Any deviation > 5s is an edit, cover, or different track
+        }
+      }
+
+      // 2. Junk title check
+      if (junkPattern.test(song.name || '')) {
+        score -= 350;
+      }
+
+      // 3. Remix / Version Guard: Never return a remix when the authentic original was requested
+      const candHasRemix = /\b(remix|mix|hypertechno|techno|drum & bass|drum and bass|dnb|sped\s*up|speed\s*up|slowed|reverb)\b/i.test(song.name || '');
+      if (!targetHasRemix && candHasRemix) {
+        score -= 300;
+      }
+
+      // 4. Primary Artist Matching: The requested artist MUST be primary or featured performer, NOT merely songwriter
+      const primaryArtists = (song.artists?.primary || []).map((a) => (a.name || '').toLowerCase().replace(/[^a-z0-9]/g, ''));
+      const featuredArtists = (song.artists?.featured || []).map((a) => (a.name || '').toLowerCase().replace(/[^a-z0-9]/g, ''));
+
+      if (normArtist) {
+        const isPrimary = primaryArtists.some(a => a === normArtist || a.includes(normArtist) || normArtist.includes(a));
+        const isFeatured = featuredArtists.some(a => a === normArtist || a.includes(normArtist) || normArtist.includes(a));
+
+        if (isPrimary) {
+          score += 130;
+        } else if (isFeatured) {
+          score += 90;
+        } else {
+          // Artist is not performing this track (it's a cover or another artist's track)
+          score -= 500;
+        }
+      }
+
+      // 5. Title Matching
+      const songTitleNorm = (song.name || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+      if (normTitle) {
+        if (songTitleNorm === normTitle) {
+          score += 80;
+        } else if (songTitleNorm.includes(normTitle) || normTitle.includes(songTitleNorm)) {
+          score += 40;
+        } else {
+          score -= 60;
+        }
+      }
+
+      scored.push({ song, score, durationDelta });
+    }
+
+    scored.sort((a, b) => b.score - a.score);
+
+    const top = scored[0];
+    // Reject if score is low or if timestamp duration differs by more than 5 seconds
+    if (!top || top.score < 80 || (targetDurationSec > 0 && top.durationDelta > 5)) {
+      // JioSaavn Worker search does not have the authentic original; return null to fall back to direct JioSaavn / YouTube
+      return null;
+    }
+
+    const best = top.song;
+    const streamUrl = AudioService.extractBestStreamUrl(best.downloadUrl);
     if (!streamUrl) return null;
 
     return {

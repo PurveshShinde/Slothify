@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { Users, Search, Sparkles, Check, Plus, Play, Loader2, X } from 'lucide-react';
 import axios from 'axios';
 import { useTheme } from '../context/ThemeContext';
 import { useCache } from '../context/CacheContext';
+import { getOptimizedImageUrl } from '../utils/imageOptimizer';
 
 interface ArtistItem {
   id: string;
@@ -12,6 +13,90 @@ interface ArtistItem {
   genres?: string[];
   followers?: { total: number };
   isFollowing?: boolean;
+}
+
+function stringSimilarity(s1: string, s2: string): number {
+  let longer = s1.toLowerCase().trim();
+  let shorter = s2.toLowerCase().trim();
+  if (longer.length < shorter.length) {
+    const tmp = longer;
+    longer = shorter;
+    shorter = tmp;
+  }
+  const longerLength = longer.length;
+  if (longerLength === 0) return 1.0;
+
+  const costs: number[] = [];
+  for (let i = 0; i <= longer.length; i++) {
+    let lastValue = i;
+    for (let j = 0; j <= shorter.length; j++) {
+      if (i === 0) {
+        costs[j] = j;
+      } else if (j > 0) {
+        let newValue = costs[j - 1];
+        if (longer.charAt(i - 1) !== shorter.charAt(j - 1)) {
+          newValue = Math.min(Math.min(newValue, lastValue), costs[j]) + 1;
+        }
+        costs[j - 1] = lastValue;
+        lastValue = newValue;
+      }
+    }
+    if (i > 0) costs[shorter.length] = lastValue;
+  }
+  return (longerLength - costs[shorter.length]) / parseFloat(longerLength.toString());
+}
+
+function isArtistNameMatch(artistName: string, query: string): boolean {
+  if (!artistName || !query) return false;
+
+  const normName = artistName
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .trim();
+
+  const normQuery = query
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .trim();
+
+  if (!normName || !normQuery) return false;
+
+  if (normName.includes(normQuery) || normQuery.includes(normName)) {
+    return true;
+  }
+
+  const queryTokens = normQuery.split(/\s+/).filter(Boolean);
+  const nameTokens = normName.split(/\s+/).filter(Boolean);
+
+  if (queryTokens.length > 0 && queryTokens.every(qTok => 
+    nameTokens.some(nTok => nTok.startsWith(qTok) || nTok === qTok)
+  )) {
+    return true;
+  }
+
+  const condensedName = normName.replace(/\s+/g, '');
+  const condensedQuery = normQuery.replace(/\s+/g, '');
+  if (condensedName.startsWith(condensedQuery) || condensedQuery.startsWith(condensedName)) {
+    return true;
+  }
+
+  // Typo tolerance: Levenshtein distance check for query length >= 3
+  if (normQuery.length >= 3) {
+    if (stringSimilarity(normName, normQuery) >= 0.72) return true;
+    if (stringSimilarity(condensedName, condensedQuery) >= 0.72) return true;
+    if (queryTokens.length === nameTokens.length) {
+      if (queryTokens.every((qTok, i) => {
+        const nTok = nameTokens[i];
+        return nTok && (nTok.startsWith(qTok) || stringSimilarity(nTok, qTok) >= 0.7);
+      })) return true;
+    }
+  }
+
+  return false;
 }
 
 export const ArtistsPage: React.FC = () => {
@@ -38,22 +123,30 @@ export const ArtistsPage: React.FC = () => {
   });
 
   // Authentic artists from API or cache (instant, zero loading delay if visited before)
-  const [topArtists, setTopArtists] = useState<ArtistItem[]>(() => cache.artistsData || []);
-  const [isLoading, setIsLoading] = useState<boolean>(() => !cache.artistsData || cache.artistsData.length === 0);
+  const [topArtists, setTopArtists] = useState<ArtistItem[]>(() => {
+    if (Array.isArray(cache.artistsData)) {
+      const hasStale = cache.artistsData.some(a => 
+        a.followers?.total === 12500000 || 
+        a.images?.[0]?.url?.includes('5b95c0c9aaefc8eb741369cfbb0498b5')
+      );
+      if (!hasStale && cache.artistsData.length > 0) {
+        return cache.artistsData;
+      }
+    }
+    return [];
+  });
+  const [isLoading, setIsLoading] = useState<boolean>(() => topArtists.length === 0);
   const [searchResults, setSearchResults] = useState<ArtistItem[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [filterType, setFilterType] = useState<'all' | 'following'>('all');
 
-  // Initial load: Fetch 50 real top artists from backend if not in cache
+  // Initial load: Always fetch 50 authentic top artists from backend (Stale-While-Revalidate)
   useEffect(() => {
-    if (cache.artistsData && cache.artistsData.length > 0) {
-      setTopArtists(cache.artistsData);
-      setIsLoading(false);
-      return;
+    if (topArtists.length === 0) {
+      setIsLoading(true);
     }
 
-    setIsLoading(true);
     axios.get('/api/me/top/artists?limit=50')
       .then(res => {
         if (Array.isArray(res.data) && res.data.length > 0) {
@@ -67,6 +160,7 @@ export const ArtistsPage: React.FC = () => {
             followers: item.followers || { total: 0 },
             isFollowing: false
           }));
+          apiArtists.sort((a, b) => (b.followers?.total || 0) - (a.followers?.total || 0));
           setTopArtists(apiArtists);
           setArtistsData(apiArtists);
         }
@@ -77,9 +171,9 @@ export const ArtistsPage: React.FC = () => {
       .finally(() => {
         setIsLoading(false);
       });
-  }, [cache.artistsData, setArtistsData]);
+  }, [setArtistsData]);
 
-  // Real-time live search with debouncing
+  // Real-time live search with 300ms debouncing and AbortController to prevent race conditions
   useEffect(() => {
     const q = searchQuery.trim();
     if (q.length < 2) {
@@ -88,34 +182,52 @@ export const ArtistsPage: React.FC = () => {
       return;
     }
 
+    const abortController = new AbortController();
     setIsSearching(true);
     const timer = setTimeout(() => {
-      axios.get('/api/artists/search', { params: { q, limit: 30 } })
+      axios.get('/api/artists/search', {
+        params: { q, limit: 30 },
+        signal: abortController.signal
+      })
         .then(res => {
-          if (Array.isArray(res.data)) {
-            const items: ArtistItem[] = res.data.map((item: any) => ({
-              id: item.id || `artist-${item.name}`,
-              name: item.name,
-              images: item.images && item.images.length > 0
-                ? item.images
-                : [{ url: `https://ui-avatars.com/api/?name=${encodeURIComponent(item.name)}&background=181824&color=f5d0b5&size=300&bold=true` }],
-              genres: item.genres || ['Artist'],
-              followers: item.followers || { total: 0 },
-              isFollowing: false
-            }));
+          if (!abortController.signal.aborted && Array.isArray(res.data)) {
+            const items: ArtistItem[] = res.data
+              .filter((item: any) => isArtistNameMatch(item.name, q))
+              .map((item: any) => ({
+                id: item.id || `artist-${item.name}`,
+                name: item.name,
+                images: item.images && item.images.length > 0
+                  ? item.images
+                  : [{ url: `https://ui-avatars.com/api/?name=${encodeURIComponent(item.name)}&background=181824&color=f5d0b5&size=300&bold=true` }],
+                genres: item.genres || ['Artist'],
+                followers: item.followers || { total: 0 },
+                isFollowing: false
+              }));
+            // Strictly rank by popularity / follower count descending
+            items.sort((a, b) => (b.followers?.total || 0) - (a.followers?.total || 0));
             setSearchResults(items);
           }
         })
         .catch(err => {
-          console.error('Failed to search artists', err);
+          if (!axios.isCancel(err) && err.name !== 'CanceledError') {
+            console.error('Failed to search artists', err);
+          }
         })
-        .finally(() => setIsSearching(false));
-    }, 280);
+        .finally(() => {
+          if (!abortController.signal.aborted) {
+            setIsSearching(false);
+          }
+        });
+    }, 300);
 
-    return () => clearTimeout(timer);
+    return () => {
+      clearTimeout(timer);
+      abortController.abort();
+    };
   }, [searchQuery]);
 
   const toggleFollow = (artist: ArtistItem, e: React.MouseEvent) => {
+    e.preventDefault();
     e.stopPropagation();
     const id = artist.id;
     setFollowedIds(prev => {
@@ -145,17 +257,21 @@ export const ArtistsPage: React.FC = () => {
     });
   };
 
-  const formatFollowers = (count?: number) => {
-    if (!count) return 'Popular Artist';
-    if (count >= 1000000) return `${(count / 1000000).toFixed(1)}M followers`;
-    if (count >= 1000) return `${(count / 1000).toFixed(0)}K followers`;
-    return `${count} followers`;
+  const formatFollowers = (count?: number | { total: number }) => {
+    const num = typeof count === 'object' && count !== null ? (count as any).total : typeof count === 'number' ? count : 0;
+    if (!num || num <= 0) return 'Popular Artist';
+    if (num >= 1000000) return `${(num / 1000000).toFixed(1)}M followers`;
+    if (num >= 10000) return `${(num / 1000).toFixed(0)}K followers`;
+    if (num >= 1000) return `${(num / 1000).toFixed(1)}K followers`;
+    return `${num} followers`;
   };
 
   // Determine which list to render:
   // If search active: show search results
-  // Else: show 50 top artists
-  const activeBaseList = searchQuery.trim().length >= 2 ? searchResults : topArtists;
+  const activeBaseList = (searchQuery.trim().length >= 2
+    ? searchResults.filter(a => isArtistNameMatch(a.name, searchQuery))
+    : topArtists
+  ).slice().sort((a, b) => (b.followers?.total || 0) - (a.followers?.total || 0));
 
   // Build map of all known artists (including followed ones from storage)
   const allKnownMap = new Map<string, ArtistItem>();
@@ -175,7 +291,8 @@ export const ArtistsPage: React.FC = () => {
         return a.isFollowing && matchesQuery;
       }
       return true;
-    });
+    })
+    .sort((a, b) => (b.followers?.total || 0) - (a.followers?.total || 0));
 
   return (
     <div className="space-y-6 animate-in fade-in duration-300 pb-20 select-none">
@@ -297,50 +414,61 @@ export const ArtistsPage: React.FC = () => {
       ) : filteredArtists.length > 0 ? (
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4 sm:gap-6">
           {filteredArtists.map((artist) => {
-            const avatar = artist.images?.[0]?.url || `https://ui-avatars.com/api/?name=${encodeURIComponent(artist.name)}&background=181824&color=f5d0b5&size=500&bold=true`;
+            const avatar = getOptimizedImageUrl(artist.images?.[0]?.url, '150') || `https://ui-avatars.com/api/?name=${encodeURIComponent(artist.name)}&background=181824&color=f5d0b5&size=150&bold=true`;
 
             return (
               <div
                 key={artist.id}
-                onClick={() => navigate(`/search?q=${encodeURIComponent(artist.name)}`)}
-                className={`group p-4 rounded-3xl cursor-pointer transition-all duration-300 border flex flex-col items-center text-center relative ${
+                className={`artist-card group p-4 rounded-3xl transition-all duration-300 border flex flex-col items-center text-center relative ${
                   isOcean
                     ? 'bg-[#0a152d]/40 hover:bg-[#0f1d38]/70 border-white/[0.04] hover:border-blue-500/30 hover:shadow-xl hover:shadow-blue-950/40'
                     : 'bg-[#181312]/40 hover:bg-[#231a18]/70 border-white/[0.04] hover:border-[#f5d0b5]/25 hover:shadow-xl hover:shadow-black/60'
                 }`}
               >
-                {/* Circular Avatar with Ambient Ring */}
-                <div className="relative w-28 h-28 sm:w-32 sm:h-32 rounded-full overflow-hidden mb-3 bg-black/40 shadow-xl flex-shrink-0">
-                  <img
-                    src={avatar}
-                    alt={artist.name}
-                    className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
-                  />
-                  <div className="absolute inset-0 bg-black/10 group-hover:bg-black/30 transition-colors" />
+                {/* Clickable Area to Open Artist Profile */}
+                <Link
+                  to={`/artist/${artist.id}`}
+                  state={{ artist: { ...artist, coverImage: avatar } }}
+                  className="w-full flex flex-col items-center cursor-pointer"
+                >
+                  {/* Circular Avatar with Ambient Ring (150px lazy-loaded) */}
+                  <div className="relative w-28 h-28 sm:w-32 sm:h-32 rounded-full overflow-hidden mb-3 bg-black/40 shadow-xl flex-shrink-0">
+                    <img
+                      src={avatar}
+                      loading="lazy"
+                      alt={artist.name}
+                      onError={(e) => {
+                        (e.target as HTMLImageElement).src = `https://ui-avatars.com/api/?name=${encodeURIComponent(artist.name)}&background=181824&color=f5d0b5&size=150&bold=true`;
+                      }}
+                      className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+                    />
+                    <div className="absolute inset-0 bg-black/10 group-hover:bg-black/30 transition-colors" />
 
-                  {/* Play on Search hover badge */}
-                  <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                    <div className={`w-10 h-10 rounded-full flex items-center justify-center shadow-2xl ${
-                      isOcean ? 'bg-blue-600 text-white' : 'bg-[#f5d0b5] text-black'
-                    }`}>
-                      <Play size={18} fill="currentColor" className="ml-0.5" />
+                    {/* Play on Search hover badge */}
+                    <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                      <div className={`w-10 h-10 rounded-full flex items-center justify-center shadow-2xl ${
+                        isOcean ? 'bg-blue-600 text-white' : 'bg-[#f5d0b5] text-black'
+                      }`}>
+                        <Play size={18} fill="currentColor" className="ml-0.5" />
+                      </div>
                     </div>
                   </div>
-                </div>
 
-                {/* Artist Name */}
-                <h3 className="font-bold text-white text-sm truncate w-full group-hover:text-white transition-colors">
-                  {artist.name}
-                </h3>
+                  {/* Artist Name */}
+                  <h3 className="font-bold text-white text-sm truncate w-full group-hover:text-white transition-colors">
+                    {artist.name}
+                  </h3>
 
-                <p className="text-[11px] text-slate-400 truncate w-full mt-0.5">
-                  {artist.genres?.[0] || 'Artist'} • {formatFollowers(artist.followers?.total)}
-                </p>
+                  <p className="text-[11px] text-slate-400 truncate w-full mt-0.5">
+                    {artist.genres?.[0] || 'Artist'} • {formatFollowers(artist.followers?.total)}
+                  </p>
+                </Link>
 
-                {/* Follow Button */}
+                {/* Follow Button - Outside Link to completely prevent artist opening */}
                 <button
+                  type="button"
                   onClick={(e) => toggleFollow(artist, e)}
-                  className={`mt-3 px-4 py-1.5 rounded-full text-xs font-bold transition-all flex items-center space-x-1.5 border active:scale-95 ${
+                  className={`mt-3 px-4 py-1.5 rounded-full text-xs font-bold transition-all flex items-center space-x-1.5 border active:scale-95 cursor-pointer z-10 ${
                     artist.isFollowing
                       ? isOcean
                         ? 'bg-blue-600/20 text-blue-300 border-blue-500/40 hover:bg-rose-500/20 hover:text-rose-300 hover:border-rose-500/40'

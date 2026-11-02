@@ -7,6 +7,7 @@ import { Track } from '../types';
 import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
 import { useTheme } from '../context/ThemeContext';
+import { getTrackThumbnail } from '../utils/imageOptimizer';
 
 interface ExtendedHistoryTrack extends Track {
   playedAt?: string;
@@ -401,7 +402,7 @@ const History: React.FC<HistoryProps> = ({
 
                     <div className="relative w-12 h-12 flex-shrink-0 md:hidden rounded-lg overflow-hidden bg-stone-800">
                       <img
-                        src={track.album?.images?.[0]?.url || 'https://picsum.photos/60'}
+                        src={getTrackThumbnail(track, 'https://picsum.photos/60', '150')}
                         className="w-full h-full object-cover"
                         alt={track.name}
                         loading="lazy"
@@ -412,7 +413,7 @@ const History: React.FC<HistoryProps> = ({
                   {/* Title & Artist */}
                   <div className="flex items-center space-x-3 min-w-0 mr-2">
                     <img
-                      src={track.album?.images?.[0]?.url || 'https://picsum.photos/60'}
+                      src={getTrackThumbnail(track, 'https://picsum.photos/60', '150')}
                       className="hidden md:block w-11 h-11 rounded-lg object-cover shadow-sm flex-shrink-0"
                       alt={track.name}
                       loading="lazy"

@@ -25,7 +25,7 @@ interface CacheContextType {
     clearCache: () => void;
 }
 
-const STORAGE_KEY = 'slothify_browser_cache_v5';
+const STORAGE_KEY = 'slothify_browser_cache_v9';
 
 // Check if current session started from a browser reload/F5
 const checkIsReload = (): boolean => {
@@ -41,10 +41,30 @@ const checkIsReload = (): boolean => {
 const getInitialCache = (): CacheState => {
     const isReload = checkIsReload();
 
+    // Clean up deprecated cache versions that may contain old track cover avatars
+    try {
+        localStorage.removeItem('slothify_browser_cache_v5');
+        localStorage.removeItem('slothify_browser_cache_v6');
+        localStorage.removeItem('slothify_browser_cache_v7');
+        localStorage.removeItem('slothify_browser_cache_v8');
+    } catch (e) {}
+
     try {
         const stored = localStorage.getItem(STORAGE_KEY);
         if (stored) {
             const parsed = JSON.parse(stored);
+
+            // Invalidate stale artistsData if it has hardcoded 12.5M followers or dzcdn placeholder
+            if (Array.isArray(parsed.artistsData)) {
+                const hasStale = parsed.artistsData.some((a: any) => 
+                    a.followers?.total === 12500000 || 
+                    a.images?.[0]?.url?.includes('5b95c0c9aaefc8eb741369cfbb0498b5')
+                );
+                if (hasStale) {
+                    parsed.artistsData = null;
+                }
+            }
+
             // If the user refreshed the page, bust recommendations so they get new ones!
             if (isReload) {
                 return {

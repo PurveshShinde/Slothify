@@ -219,7 +219,7 @@ export async function getStreamUrl(videoId: string): Promise<string> {
     }
 }
 
-export async function searchYouTubeInnertube(query: string): Promise<AudioSearchResult | null> {
+export async function searchYouTubeInnertube(query: string, targetDuration?: number): Promise<AudioSearchResult | null> {
     try {
         const response = await fetch('https://www.youtube.com/youtubei/v1/search?prettyPrint=false', {
             method: 'POST',
@@ -245,6 +245,8 @@ export async function searchYouTubeInnertube(query: string): Promise<AudioSearch
         const contents = data.contents?.twoColumnSearchResultsRenderer?.primaryContents?.sectionListRenderer?.contents;
         if (!Array.isArray(contents)) return null;
 
+        const candidates: AudioSearchResult[] = [];
+
         for (const section of contents) {
             const items = section.itemSectionRenderer?.contents;
             if (!Array.isArray(items)) continue;
@@ -261,16 +263,34 @@ export async function searchYouTubeInnertube(query: string): Promise<AudioSearch
 
                 const thumbs = vr.thumbnail?.thumbnails;
                 const thumbnail = thumbs && thumbs.length > 0 ? thumbs[thumbs.length - 1].url : '';
+                const title = vr.title?.runs?.[0]?.text || '';
 
-                return {
+                candidates.push({
                     videoId: vr.videoId,
-                    title: vr.title?.runs?.[0]?.text || '',
+                    title,
                     duration,
                     thumbnail,
                     streamToken: 'direct-stream'
-                };
+                });
             }
         }
+
+        if (candidates.length === 0) return null;
+
+        // Filter out junk covers, 1-hour loops, sped up, slowed reverb
+        const junkPattern = /\b(8-?bit|16-?bit|karaoke|instrumental|tribute|cover|slowed|reverb|sped\s*up|speed\s*up|1-hour|1\s*hour|10\s*hours)\b/i;
+        const validCandidates = candidates.filter(c => !junkPattern.test(c.title));
+        const listToEvaluate = validCandidates.length > 0 ? validCandidates : candidates;
+
+        if (targetDuration && targetDuration > 0) {
+            listToEvaluate.sort((a, b) => Math.abs(a.duration - targetDuration) - Math.abs(b.duration - targetDuration));
+            const best = listToEvaluate[0];
+            if (Math.abs(best.duration - targetDuration) <= 15) {
+                return best;
+            }
+        }
+
+        return listToEvaluate[0] || null;
     } catch (err: any) {
         console.warn('[YouTubeAudioPlugin] Innertube search warning:', err.message);
     }
@@ -282,19 +302,19 @@ export class YouTubeAudioPlugin implements AudioPlugin {
 
     /**
      * Search YouTube with in-memory caching for instant repeated queries
-     * Uses resilient YouTube Innertube API first (works on cloud servers & Render without 429),
-     * followed by yts fallback.
+     * Uses resilient YouTube Innertube API first with timestamp matching,
+     * followed by yts fallback with duration filtering.
      */
-    async search(query: string): Promise<AudioSearchResult> {
-        const cleanQuery = query.trim().toLowerCase();
+    async search(query: string, titleHint?: string, artistHint?: string, targetDuration?: number): Promise<AudioSearchResult> {
+        const cleanQuery = `${query.trim().toLowerCase()}___${targetDuration || 0}`;
 
         const cached = searchCache.get(cleanQuery);
         if (cached) {
             return cached;
         }
 
-        // 1. Try Innertube API (Resilient against cloud datacenter blocks)
-        const innertubeResult = await searchYouTubeInnertube(query.trim());
+        // 1. Try Innertube API with timestamp / duration matching
+        const innertubeResult = await searchYouTubeInnertube(query.trim(), targetDuration);
         if (innertubeResult) {
             if (searchCache.size > 500) {
                 const firstKey = searchCache.keys().next().value;
@@ -304,13 +324,21 @@ export class YouTubeAudioPlugin implements AudioPlugin {
             return innertubeResult;
         }
 
-        // 2. Fallback to yts
+        // 2. Fallback to yts with timestamp matching
         try {
             const r = await yts(query.trim());
             const videos = r.videos;
 
             if (videos && videos.length > 0) {
-                const video = videos[0];
+                const junkPattern = /\b(8-?bit|16-?bit|karaoke|instrumental|tribute|cover|slowed|reverb|sped\s*up|speed\s*up|1-hour|1\s*hour|10\s*hours)\b/i;
+                let candidateVideos = videos.filter(v => !junkPattern.test(v.title));
+                if (candidateVideos.length === 0) candidateVideos = videos;
+
+                if (targetDuration && targetDuration > 0) {
+                    candidateVideos.sort((a, b) => Math.abs(a.seconds - targetDuration) - Math.abs(b.seconds - targetDuration));
+                }
+
+                const video = candidateVideos[0];
                 const result: AudioSearchResult = {
                     videoId: video.videoId,
                     title: video.title,

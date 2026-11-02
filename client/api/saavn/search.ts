@@ -15,18 +15,20 @@ export default async function handler(req: IncomingMessage & { query?: Record<st
 
     try {
         const url = new URL(req.url || '', `http://${req.headers.host || 'localhost'}`);
+        const link = (req.query?.link as string) || (req.query?.url as string) || url.searchParams.get('link') || url.searchParams.get('url') || '';
         const q = (req.query?.q as string) || url.searchParams.get('q') || '';
         const title = (req.query?.title as string) || url.searchParams.get('title') || '';
         const artist = (req.query?.artist as string) || url.searchParams.get('artist') || '';
 
-        if (!q && !title) {
+        const target = link || q || title;
+        if (!target) {
             res.statusCode = 400;
             res.setHeader('Content-Type', 'application/json');
-            res.end(JSON.stringify({ error: 'Search query parameter (q or title) is required' }));
+            res.end(JSON.stringify({ error: 'Search query parameter (link, q, or title) is required' }));
             return;
         }
 
-        const result = await searchJioSaavn(q || title, title, artist);
+        const result = await searchJioSaavn(target, title, artist);
 
         res.statusCode = 200;
         res.setHeader('Content-Type', 'application/json');

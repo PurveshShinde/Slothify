@@ -213,7 +213,7 @@ export const AlbumDetail: React.FC<AlbumDetailProps> = ({
 
             <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2 text-xs sm:text-sm text-slate-300 mt-2">
               <span
-                onClick={() => album?.artists?.[0]?.name && navigate(`/search?q=${encodeURIComponent(album.artists[0].name)}`)}
+                onClick={() => album?.artists?.[0]?.name && navigate(`/artist/sp_art_${encodeURIComponent(album.artists[0].name)}`)}
                 className="font-bold text-white hover:underline cursor-pointer"
               >
                 {album?.artists?.map(a => a.name).join(', ') || 'Various Artists'}

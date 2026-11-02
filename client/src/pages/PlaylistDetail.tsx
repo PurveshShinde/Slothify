@@ -9,6 +9,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { useCache } from '../context/CacheContext';
 import { useTheme } from '../context/ThemeContext';
 import PlaylistCover from '../components/PlaylistCover';
+import { getTrackThumbnail } from '../utils/imageOptimizer';
 
 const KNOWN_PLAYLIST_META: Record<string, { name: string; description: string; image: string }> = {
   'late-night-drive': {
@@ -625,11 +626,11 @@ const PlaylistDetail: React.FC<PlaylistDetailProps> = ({
                           </span>
                           <span className="hidden group-hover:block text-white">{isPlayingRow ? <Pause size={14} fill="currentColor" /> : <Play size={14} fill="currentColor" />}</span>
                         </div>
-                        <div className="md:hidden relative w-12 h-12 flex-shrink-0"><img src={track.album?.images?.[0]?.url || 'https://picsum.photos/40'} className="w-full h-full rounded-md object-cover" alt="" /></div>
+                        <div className="md:hidden relative w-12 h-12 flex-shrink-0"><img src={getTrackThumbnail(track, 'https://picsum.photos/40', '150')} loading="lazy" className="w-full h-full rounded-md object-cover" alt="" /></div>
                       </div>
                       <div className="flex flex-col min-w-0 mr-2">
                         <div className="flex md:items-center md:space-x-4">
-                          <img src={track.album?.images?.[0]?.url || 'https://picsum.photos/40'} className="hidden md:block w-10 h-10 rounded-lg shadow-sm object-cover" alt="" />
+                          <img src={getTrackThumbnail(track, 'https://picsum.photos/40', '150')} loading="lazy" className="hidden md:block w-10 h-10 rounded-lg shadow-sm object-cover" alt="" />
                           <div className="flex flex-col min-w-0">
                             <span className={`text-base md:text-sm font-semibold truncate ${isCurrent ? (isOcean ? 'text-blue-400' : 'text-[#f5d0b5]') : 'text-white'}`}>{track.name}</span>
                             <div className="flex items-center text-xs text-slate-400 mt-0.5">

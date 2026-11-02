@@ -9,6 +9,15 @@ import { EncryptedLikedTrack } from '../models/EncryptedLikedTrack.js';
 import { ListeningHistory } from '../models/ListeningHistory.js';
 import { encryptPayload, decryptPayload } from '../utils/crypto.js';
 import type { Playlist, Track } from '../plugins/interfaces.js';
+import { isArtistNameMatch, calculateArtistRelevanceScore } from '../plugins/metadata/SpotifyScraperPlugin.js';
+import {
+    searchCacheMiddleware,
+    artistSearchCacheMiddleware,
+    albumSearchCacheMiddleware,
+    artistProfileCacheMiddleware,
+    artistTracksCacheMiddleware,
+    albumDetailsCacheMiddleware
+} from '../middleware/cache.js';
 
 const router = express.Router();
 
@@ -155,8 +164,8 @@ router.get('/featured-playlists', async (req, res) => {
     }
 });
 
-// Search tracks
-router.get('/search', async (req, res) => {
+// Search tracks (Cached in Redis for 2 hours)
+router.get('/search', searchCacheMiddleware, async (req, res) => {
     const q = req.query.q;
     if (!q || typeof q !== 'string') {
         return res.json([]);
@@ -594,8 +603,8 @@ router.get('/browse/new-releases', async (req, res) => {
     }
 });
 
-// Real-time Albums Search (Spotify + Apple Music)
-router.get(['/albums/search', '/browse/albums/search'], async (req, res) => {
+// Real-time Albums Search (Spotify + Apple Music - Cached for 2 hours)
+router.get(['/albums/search', '/browse/albums/search'], albumSearchCacheMiddleware, async (req, res) => {
     const q = req.query.q;
     if (!q || typeof q !== 'string' || !q.trim()) {
         return res.json([]);
@@ -613,8 +622,8 @@ router.get(['/albums/search', '/browse/albums/search'], async (req, res) => {
     }
 });
 
-// Album Details & Songs View (Spotify + YouTube metadata)
-router.get(['/albums/:id', '/browse/albums/:id'], async (req, res) => {
+// Album Details & Songs View (Spotify + YouTube metadata - Cached for 24 hours)
+router.get(['/albums/:id', '/browse/albums/:id'], albumDetailsCacheMiddleware, async (req, res) => {
     try {
         const { id } = req.params;
         const albumNameHint = (req.query.name as string) || '';
@@ -653,45 +662,7 @@ router.get(['/albums/:id', '/browse/albums/:id'], async (req, res) => {
             }
         }
 
-        // 1. If numeric iTunes album ID
-        if (/^\d+$/.test(id)) {
-            try {
-                const itunesRes = await axios.get(`https://itunes.apple.com/lookup?id=${id}&entity=song`, { timeout: 6000 });
-                const results = itunesRes.data?.results;
-                if (Array.isArray(results) && results.length > 0) {
-                    const collection = results.find((r: any) => r.wrapperType === 'collection') || results[0];
-                    const rawImg = collection.artworkUrl100 || '';
-                    const hdImg = rawImg ? rawImg.replace(/\d+x\d+bb/, '600x600bb') : '';
-                    const tracks = results
-                        .filter((r: any) => r.wrapperType === 'track')
-                        .map((t: any) => ({
-                            id: `it_${t.trackId}`,
-                            uri: `spotify:track:it_${t.trackId}`,
-                            name: t.trackName,
-                            artists: [{ name: t.artistName }],
-                            album: {
-                                name: t.collectionName || collection.collectionName,
-                                images: hdImg ? [{ url: hdImg }] : []
-                            },
-                            duration_ms: t.trackTimeMillis || 180000,
-                            preview_url: t.previewUrl || null
-                        }));
 
-                    return res.json({
-                        id,
-                        name: collection.collectionName || albumNameHint || 'Album',
-                        artists: [{ name: collection.artistName || artistHint || 'Artist' }],
-                        images: hdImg ? [{ url: hdImg }] : [{ url: `https://ui-avatars.com/api/?name=${encodeURIComponent(albumNameHint || 'Album')}&background=181824&color=f5d0b5&size=500&bold=true` }],
-                        release_date: collection.releaseDate ? collection.releaseDate.substring(0, 10) : '2024',
-                        total_tracks: collection.trackCount || tracks.length,
-                        genres: collection.primaryGenreName ? [collection.primaryGenreName] : ['Music'],
-                        tracks
-                    });
-                }
-            } catch (err: any) {
-                console.warn('[Albums API] iTunes lookup notice:', err.message);
-            }
-        }
 
         // 2. Search Spotify & YouTube for album tracks
         const queryTerm = (albumNameHint && artistHint)
@@ -723,14 +694,19 @@ router.get(['/me/top/artists', '/artists/top'], async (req, res) => {
         const limit = parseInt(req.query.limit as string) || 50;
         const metadataPlugin = pluginRegistry.getMetadataPlugin();
         const artists = await metadataPlugin.getTopArtists(limit);
-        res.json(artists);
+        const sorted = (artists || []).slice().sort((a: any, b: any) => {
+            const fA = typeof a.followers === 'object' && a.followers !== null ? a.followers.total : (Number(a.followers) || 0);
+            const fB = typeof b.followers === 'object' && b.followers !== null ? b.followers.total : (Number(b.followers) || 0);
+            return fB - fA;
+        });
+        res.json(sorted);
     } catch (err: any) {
         res.status(500).json({ error: 'Failed to get top artists', details: err.message });
     }
 });
 
-// Live Worldwide Artist Search (Spotify + YouTube real-time catalog)
-router.get('/artists/search', async (req, res) => {
+// Live Worldwide Artist Search (Spotify + YouTube real-time catalog - Cached for 2 hours)
+router.get('/artists/search', artistSearchCacheMiddleware, async (req, res) => {
     try {
         const query = (req.query.q as string) || '';
         const limit = parseInt(req.query.limit as string) || 30;
@@ -743,7 +719,14 @@ router.get('/artists/search', async (req, res) => {
 
         if (metadataPlugin.searchArtists) {
             const artists = await metadataPlugin.searchArtists(query, limit);
-            return res.json(artists);
+            const filtered = (artists || []).filter((a: any) => isArtistNameMatch(a.name, query));
+            filtered.sort((a: any, b: any) => {
+                const fA = typeof a.followers === 'object' && a.followers !== null ? a.followers.total : (Number(a.followers) || 0);
+                const fB = typeof b.followers === 'object' && b.followers !== null ? b.followers.total : (Number(b.followers) || 0);
+                if (fB !== fA) return fB - fA;
+                return calculateArtistRelevanceScore(b, query) - calculateArtistRelevanceScore(a, query);
+            });
+            return res.json(filtered.slice(0, limit));
         }
 
         return res.json([]);
@@ -752,22 +735,86 @@ router.get('/artists/search', async (req, res) => {
     }
 });
 
-// Artist playable top tracks
-router.get('/artists/:id/tracks', async (req, res) => {
-    try {
-        const artistId = req.params.id;
-        const artistName = (req.query.name as string) || artistId;
-        const metadataPlugin = pluginRegistry.getMetadataPlugin();
+// Security validator: ensure artistId only contains safe characters and blocks SQL / Script injection
+function validateArtistId(id: string): boolean {
+    if (!id || typeof id !== 'string') return false;
+    if (id.length > 150) return false;
+    // Reject dangerous characters that could be SQL/command/script injection
+    if (/[<>'"`\\;{}()|]/.test(id)) return false;
+    // Explicit defense against SQL / Script injection signatures (e.g. DROP TABLE, DROP-TABLE, SELECT, <script>)
+    if (/(drop[\s\-_]+table|select\b|insert\b|delete\b|update\b|union\b|exec\b|--|<script)/i.test(id)) {
+        return false;
+    }
+    return true;
+}
 
-        if (metadataPlugin.getArtistTracks) {
-            const tracks = await metadataPlugin.getArtistTracks(artistId, artistName);
-            return res.json(tracks);
+// Artist profile endpoint with parameter validation (Cached for 24 hours)
+router.get('/artists/:id', artistProfileCacheMiddleware, async (req, res) => {
+    try {
+        const { id } = req.params;
+        if (!validateArtistId(id)) {
+            return res.status(400).json({ error: 'Invalid artist ID format' });
         }
 
-        const tracks = await metadataPlugin.searchTracks(artistName, 25);
+        const metadataPlugin = pluginRegistry.getMetadataPlugin();
+        if (metadataPlugin.getArtistDetails) {
+            const profile = await metadataPlugin.getArtistDetails(id);
+            if (profile) {
+                return res.json(profile);
+            }
+        }
+
+        return res.status(404).json({ error: 'Artist not found' });
+    } catch (err: any) {
+        return res.status(500).json({ error: 'Failed to get artist profile', details: err.message });
+    }
+});
+
+// Artist playable top tracks (supports /artists/:id/top-tracks and legacy /artists/:id/tracks - Cached for 24 hours)
+router.get(['/artists/:id/top-tracks', '/artists/:id/tracks'], artistTracksCacheMiddleware, async (req, res) => {
+    try {
+        const { id } = req.params;
+        if (!validateArtistId(id)) {
+            return res.status(400).json({ error: 'Invalid artist ID format' });
+        }
+
+        const decoded = decodeURIComponent(id);
+        const cleanName = (req.query.name as string) || decoded
+            .replace(/^(sp_art_|yt_art_|dz_|it_|artist-)/i, '')
+            .replace(/[-_]/g, ' ')
+            .trim();
+
+        const metadataPlugin = pluginRegistry.getMetadataPlugin();
+        let rawTracks: Track[] = [];
+
+        if (metadataPlugin.getArtistTracks) {
+            rawTracks = await metadataPlugin.getArtistTracks(id, cleanName);
+        } else {
+            rawTracks = await metadataPlugin.searchTracks(cleanName, 25);
+        }
+
+        const formatDuration = (ms: number = 210000) => {
+            const totalSec = Math.floor(ms / 1000);
+            const min = Math.floor(totalSec / 60);
+            const sec = totalSec % 60;
+            return `${min}:${sec < 10 ? '0' : ''}${sec}`;
+        };
+
+        const tracks = (rawTracks || []).map((t, idx) => {
+            const thumb = t.album?.images?.[0]?.url || 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=300';
+            const dur = formatDuration(t.duration_ms || 210000);
+            return {
+                ...t,
+                title: t.name,
+                thumbnail: thumb,
+                duration: dur,
+                position: idx + 1
+            };
+        });
+
         return res.json(tracks);
     } catch (err: any) {
-        res.status(500).json({ error: 'Failed to get artist tracks', details: err.message });
+        res.status(500).json({ error: 'Failed to get artist top tracks', details: err.message });
     }
 });
 

@@ -6,11 +6,12 @@ import {
   Search, Bell, Sparkles, RefreshCw, ArrowDown, Settings,
   Music2, Compass, Radio, Shuffle
 } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { useCache } from '../context/CacheContext';
 import { useTheme } from '../context/ThemeContext';
 import VinylRecord from '../components/VinylRecord';
 import AudioWaveform from '../components/AudioWaveform';
+import { getOptimizedImageUrl, getTrackThumbnail } from '../utils/imageOptimizer';
 
 interface HomeProps {
   isAuthenticated: boolean;
@@ -1306,7 +1307,7 @@ const Home: React.FC<HomeProps> = ({
             onChange={(e) => setSearchQuery(e.target.value)}
             onKeyDown={(e) => {
               if (e.key === 'Enter' && searchQuery.trim()) {
-                navigate(`/search?q=${encodeURIComponent(searchQuery.trim())}`);
+                navigate('/search', { state: { q: searchQuery.trim() } });
               }
             }}
             className="w-full bg-black/25 hover:bg-black/35 focus:bg-black/50 text-xs text-white placeholder-slate-400 pl-9 pr-4 py-2 rounded-full border border-white/10 outline-none transition-all backdrop-blur-xl shadow-inner focus:border-white/25"
@@ -1478,7 +1479,7 @@ const Home: React.FC<HomeProps> = ({
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
-                          navigate(`/search?q=${encodeURIComponent(track.name)}`);
+                          navigate('/search', { state: { q: track.name } });
                         }}
                         className="w-10 h-10 rounded-full border border-white/15 hover:border-white/30 text-slate-300 hover:text-white flex items-center justify-center transition-colors bg-white/[0.04] hover:bg-white/[0.08]"
                         title="More Options"
@@ -1680,7 +1681,7 @@ const Home: React.FC<HomeProps> = ({
                   if (card.isPlaylist) {
                     navigate(`/playlist/${card.id}`);
                   } else {
-                    navigate(`/search?q=${encodeURIComponent(card.query || card.name)}`);
+                    navigate('/search', { state: { q: card.query || card.name } });
                   }
                 }}
                 className="group relative rounded-2xl overflow-hidden aspect-[16/10] bg-black/25 border border-white/[0.08] cursor-pointer hover:border-white/20 transition-all shadow-md select-none backdrop-blur-xl"
@@ -1865,10 +1866,11 @@ const Home: React.FC<HomeProps> = ({
                         {String(idx + 1).padStart(2, '0')}
                       </span>
                       <img
-                        src={track.album?.images?.[0]?.url || 'https://images.unsplash.com/photo-1518199266791-5375a83190b7?w=100'}
+                        src={getTrackThumbnail(track, 'https://images.unsplash.com/photo-1518199266791-5375a83190b7?w=150', '150')}
                         alt=""
                         onError={(e) => handleImageError(e)}
                         className="w-10 h-10 rounded-lg object-cover flex-shrink-0"
+                        loading="lazy"
                       />
                       <div className="flex flex-col min-w-0">
                         <span className={`text-xs font-semibold truncate group-hover:text-[#e6c8a2] transition-colors leading-tight ${isCurrent ? 'text-[#e6c8a2]' : 'text-white'
@@ -1930,17 +1932,18 @@ const Home: React.FC<HomeProps> = ({
 
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3.5">
           {activeFeaturedArtists.map((artist, idx) => (
-            <div
+            <Link
               key={artist.name || idx}
-              onClick={() => navigate(`/search?q=${encodeURIComponent(artist.query)}`)}
-              className="p-3.5 rounded-2xl bg-black/20 hover:bg-black/35 border border-white/[0.08] hover:border-white/20 transition-all cursor-pointer group flex flex-col items-center text-center space-y-2.5 backdrop-blur-xl shadow-md select-none"
+              to={`/artist/sp_art_${encodeURIComponent(artist.name || artist.query)}`}
+              className="artist-card p-3.5 rounded-2xl bg-black/20 hover:bg-black/35 border border-white/[0.08] hover:border-white/20 transition-all cursor-pointer group flex flex-col items-center text-center space-y-2.5 backdrop-blur-xl shadow-md select-none"
             >
               <div className="relative w-20 h-20 sm:w-24 sm:h-24 rounded-full overflow-hidden shadow-lg ring-2 ring-white/10 group-hover:ring-[#e6c8a2]/50 transition-all flex-shrink-0">
                 <img
-                  src={artist.avatar}
+                  src={getOptimizedImageUrl(artist.avatar, '150')}
                   alt={artist.name}
-                  onError={(e) => handleImageError(e, 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=500')}
+                  onError={(e) => handleImageError(e, 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=150')}
                   className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                  loading="lazy"
                 />
                 <div className="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
                   <div className="w-8 h-8 rounded-full bg-white text-black flex items-center justify-center shadow-lg">
@@ -1960,7 +1963,7 @@ const Home: React.FC<HomeProps> = ({
                   {artist.listeners}
                 </span>
               </div>
-            </div>
+            </Link>
           ))}
         </div>
       </div>
@@ -1988,10 +1991,11 @@ const Home: React.FC<HomeProps> = ({
             >
               <div className="relative w-12 h-12 rounded-xl overflow-hidden flex-shrink-0 shadow-md">
                 <img
-                  src={track.album?.images?.[0]?.url || 'https://images.unsplash.com/photo-1518199266791-5375a83190b7?w=200'}
+                  src={getTrackThumbnail(track, 'https://images.unsplash.com/photo-1518199266791-5375a83190b7?w=150', '150')}
                   alt={track.name}
-                  onError={(e) => handleImageError(e, 'https://images.unsplash.com/photo-1518199266791-5375a83190b7?w=200')}
+                  onError={(e) => handleImageError(e, 'https://images.unsplash.com/photo-1518199266791-5375a83190b7?w=150')}
                   className="w-full h-full object-cover group-hover:scale-105 transition-transform"
+                  loading="lazy"
                 />
                 <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
                   <Play size={13} fill="currentColor" className="text-white ml-0.5" />

@@ -10,6 +10,7 @@ import PlaylistsPage from './pages/PlaylistsPage';
 import AlbumsPage from './pages/AlbumsPage';
 import AlbumDetail from './pages/AlbumDetail';
 import ArtistsPage from './pages/ArtistsPage';
+import ArtistProfile from './pages/ArtistProfile';
 import PlaylistDetail from './pages/PlaylistDetail';
 import Downloads from './pages/Downloads';
 import Settings from './pages/Settings';
@@ -552,6 +553,17 @@ const App: React.FC = () => {
                 } />
                 <Route path="/artists" element={
                   <ArtistsPage />
+                } />
+                <Route path="/artist/:artistId" element={
+                  <ArtistProfile
+                    onPlayTrack={handlePlayTrack}
+                    isPlaying={isPlaying}
+                    onPlayPause={handlePlayPause}
+                    currentTrackId={currentTrack?.id}
+                    likedTrackIds={likedTrackIds}
+                    onToggleLike={handleToggleLike}
+                    isAuthenticated={isAuthenticated}
+                  />
                 } />
                 {/* Downloads route commented out for future use
                 <Route path="/downloads" element={<Downloads />} />

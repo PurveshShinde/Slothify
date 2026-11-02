@@ -216,14 +216,42 @@ const Player: React.FC<PlayerProps> = ({
         const trackArtist = track.artists[0]?.name || '';
         const cleanTitle = trackTitle.replace(/\([^)]*\)/g, '').replace(/\[[^\]]*\]/g, '').replace(/["'’]/g, '').trim();
         const songQuery = `${cleanTitle} ${trackArtist}`.trim();
+        const targetDurationSec = track.duration_ms ? Math.round(track.duration_ms / 1000) : 0;
 
         // 1. If JioSaavn or Auto, pre-check JioSaavn first
         if (providerPref === 'jiosaavn' || providerPref === 'auto') {
             try {
                 let songId = track.id.startsWith('saavn_') ? track.id.replace('saavn_', '') : resolvedSaavnMap.current.get(track.id);
+                if (songId) {
+                    try {
+                        const songDetails = await AudioService.getSongDetails(songId);
+                        if (songDetails) {
+                            const songDur = songDetails.duration || 0;
+                            const durMismatch = targetDurationSec > 0 && songDur > 0 && Math.abs(songDur - targetDurationSec) > 5;
+                            const normArtist = trackArtist.toLowerCase().replace(/[^a-z0-9]/g, '');
+                            const primaryArtists = (songDetails.artists?.primary || []).map(a => (a.name || '').toLowerCase().replace(/[^a-z0-9]/g, ''));
+                            const artistMismatch = normArtist.length > 2 && primaryArtists.length > 0 && !primaryArtists.some(a => a.includes(normArtist) || normArtist.includes(a));
+                            const targetHasRemix = /\b(remix|mix)\b/i.test(trackTitle);
+                            const candHasRemix = /\b(remix|mix|hypertechno|techno|drum & bass|drum and bass|dnb|sped\s*up|speed\s*up|slowed|reverb)\b/i.test(songDetails.name || '');
+                            const remixMismatch = !targetHasRemix && candHasRemix;
+
+                            if (durMismatch || artistMismatch || remixMismatch) {
+                                resolvedSaavnMap.current.delete(track.id);
+                                persistSaavnCache();
+                                songId = undefined;
+                            }
+                        } else {
+                            resolvedSaavnMap.current.delete(track.id);
+                            persistSaavnCache();
+                            songId = undefined;
+                        }
+                    } catch { 
+                        songId = undefined;
+                    }
+                }
                 if (!songId) {
-                    // Try live Cloudflare AudioService first
-                    const match = await AudioService.findStreamForTrack(trackTitle, trackArtist);
+                    // Try live Cloudflare AudioService first with target duration
+                    const match = await AudioService.findStreamForTrack(trackTitle, trackArtist, targetDurationSec);
                     if (match?.songId) {
                         songId = match.songId;
                         resolvedSaavnMap.current.set(track.id, songId);
@@ -231,7 +259,7 @@ const Player: React.FC<PlayerProps> = ({
                     }
                 }
                 if (!songId) {
-                    const sRes = await fetchSaavnApi(`/api/saavn/search?q=${encodeURIComponent(songQuery)}&title=${encodeURIComponent(trackTitle)}&artist=${encodeURIComponent(trackArtist)}`);
+                    const sRes = await fetchSaavnApi(`/api/saavn/search?q=${encodeURIComponent(songQuery)}&title=${encodeURIComponent(trackTitle)}&artist=${encodeURIComponent(trackArtist)}&duration=${targetDurationSec}`);
                     if (sRes.ok) {
                         const sData = await sRes.json();
                         if (sData.videoId) {
@@ -256,7 +284,7 @@ const Player: React.FC<PlayerProps> = ({
                     return;
                 }
                 const ytQuery = `${cleanTitle} ${trackArtist} audio`.trim();
-                const res = await fetch(`${API_BASE}/api/youtube/search?q=${encodeURIComponent(ytQuery)}`);
+                const res = await fetch(`${API_BASE}/api/youtube/search?q=${encodeURIComponent(ytQuery)}&duration=${targetDurationSec}`);
                 if (res.ok) {
                     const data = await res.json();
                     if (data.videoId) {
@@ -329,26 +357,53 @@ const Player: React.FC<PlayerProps> = ({
                 const cleanTitle = trackTitle.replace(/\([^)]*\)/g, '').replace(/\[[^\]]*\]/g, '').replace(/["'’]/g, '').trim();
                 const songQuery = `${cleanTitle} ${trackArtist}`.trim();
                 const providerPref = localStorage.getItem('slothify_audio_provider') || 'auto';
+                const targetDurationSec = currentTrack.duration_ms ? Math.round(currentTrack.duration_ms / 1000) : 0;
 
                 let directUrl: string | null = null;
                 let resolvedEngine: 'youtube' | 'jiosaavn' = 'youtube';
 
-                // Helper: resolve via JioSaavn 320kbps
+                // Helper: resolve via JioSaavn 320kbps with timestamp/duration matching
                 const resolveSaavn = async (): Promise<string | null> => {
                     try {
                         let songId = trackId.startsWith('saavn_') ? trackId.replace('saavn_', '') : resolvedSaavnMap.current.get(trackId);
 
-                        // If songId is known from a previous resolve or saavn_ ID, fetch direct stream URL from worker
+                        // If songId is known from a previous resolve or saavn_ ID:
+                        // Validate its timestamp / duration against targetDurationSec to prevent wrong sped-up covers or stale IDs from playing
                         if (songId) {
                             try {
-                                const direct = await AudioService.getSongStreamUrl(songId, signal);
-                                if (direct) return direct;
-                            } catch { }
+                                const songDetails = await AudioService.getSongDetails(songId, signal);
+                                if (songDetails) {
+                                    const songDur = songDetails.duration || 0;
+                                    const durMismatch = targetDurationSec > 0 && songDur > 0 && Math.abs(songDur - targetDurationSec) > 5;
+                                    const normArtist = trackArtist.toLowerCase().replace(/[^a-z0-9]/g, '');
+                                    const primaryArtists = (songDetails.artists?.primary || []).map(a => (a.name || '').toLowerCase().replace(/[^a-z0-9]/g, ''));
+                                    const artistMismatch = normArtist.length > 2 && primaryArtists.length > 0 && !primaryArtists.some(a => a.includes(normArtist) || normArtist.includes(a));
+                                    const targetHasRemix = /\b(remix|mix)\b/i.test(trackTitle);
+                                    const candHasRemix = /\b(remix|mix|hypertechno|techno|drum & bass|drum and bass|dnb|sped\s*up|speed\s*up|slowed|reverb)\b/i.test(songDetails.name || '');
+                                    const remixMismatch = !targetHasRemix && candHasRemix;
+
+                                    if (durMismatch || artistMismatch || remixMismatch) {
+                                        console.warn(`[Player] Evicting stale/invalid cached songId "${songId}" for "${trackTitle}" (dur diff: ${Math.abs(songDur - targetDurationSec)}s, artist mismatch: ${artistMismatch}, remix mismatch: ${remixMismatch})`);
+                                        resolvedSaavnMap.current.delete(trackId);
+                                        persistSaavnCache();
+                                        songId = undefined; // Force clean re-resolution with timestamp matching
+                                    } else {
+                                        const direct = AudioService.extractBestStreamUrl(songDetails.downloadUrl);
+                                        if (direct) return direct;
+                                    }
+                                } else {
+                                    resolvedSaavnMap.current.delete(trackId);
+                                    persistSaavnCache();
+                                    songId = undefined;
+                                }
+                            } catch { 
+                                songId = undefined;
+                            }
                         }
 
-                        // Try finding stream directly via Cloudflare AudioService
+                        // Try finding stream directly via Cloudflare AudioService with timestamp matching
                         try {
-                            const match = await AudioService.findStreamForTrack(trackTitle, trackArtist, signal);
+                            const match = await AudioService.findStreamForTrack(trackTitle, trackArtist, targetDurationSec, signal);
                             if (match?.streamUrl) {
                                 resolvedSaavnMap.current.set(trackId, match.songId);
                                 persistSaavnCache();
@@ -356,9 +411,9 @@ const Player: React.FC<PlayerProps> = ({
                             }
                         } catch { }
 
-                        // Fallback to local serverless proxy route
+                        // Fallback to local serverless proxy route with timestamp matching
                         if (!songId) {
-                            const sRes = await fetchSaavnApi(`/api/saavn/search?q=${encodeURIComponent(songQuery)}&title=${encodeURIComponent(trackTitle)}&artist=${encodeURIComponent(trackArtist)}`, { signal });
+                            const sRes = await fetchSaavnApi(`/api/saavn/search?q=${encodeURIComponent(songQuery)}&title=${encodeURIComponent(trackTitle)}&artist=${encodeURIComponent(trackArtist)}&duration=${targetDurationSec}`, { signal });
                             if (!sRes.ok) return null;
                             const sData = await sRes.json();
                             // If search endpoint already decrypted the direct 320kbps streamUrl, play immediately!
@@ -385,13 +440,13 @@ const Player: React.FC<PlayerProps> = ({
                     }
                 };
 
-                // Helper: resolve via YouTube (Client-Side Piped Racing + Backend Fallback)
+                // Helper: resolve via YouTube (Client-Side Piped Racing + Backend Fallback) with timestamp matching
                 const resolveYouTube = async (): Promise<string | null> => {
                     try {
                         let videoId = resolvedVideoMap.current.get(trackId);
                         if (!videoId) {
                             const ytQuery = `${cleanTitle} ${trackArtist} audio`.trim();
-                            const res = await fetch(`${API_BASE}/api/youtube/search?q=${encodeURIComponent(ytQuery)}`, { signal });
+                            const res = await fetch(`${API_BASE}/api/youtube/search?q=${encodeURIComponent(ytQuery)}&duration=${targetDurationSec}`, { signal });
                             if (!res.ok) return null;
                             const data = await res.json();
                             videoId = data.videoId;

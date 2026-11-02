@@ -2,10 +2,12 @@ import React, { useState, useEffect } from 'react';
 import { Search as SearchIcon, Play, ArrowLeft, Plus, Loader2, Music2, CheckCircle2 } from 'lucide-react';
 import { Track, Playlist } from '../types';
 import axios from 'axios';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { useTheme } from '../context/ThemeContext';
 import PlaylistCover from '../components/PlaylistCover';
 import { AudioService } from '../services/audioService';
+import { useDebounce } from '../hooks/useDebounce';
+import { getOptimizedImageUrl, getTrackThumbnail } from '../utils/imageOptimizer';
 
 interface CategoryItem {
   name: string;
@@ -118,19 +120,133 @@ const AUTUMN_CATEGORIES: CategoryItem[] = [
   },
 ];
 
+function stringSimilarity(s1: string, s2: string): number {
+  let longer = s1.toLowerCase().trim();
+  let shorter = s2.toLowerCase().trim();
+  if (longer.length < shorter.length) {
+    const tmp = longer;
+    longer = shorter;
+    shorter = tmp;
+  }
+  const longerLength = longer.length;
+  if (longerLength === 0) return 1.0;
+
+  const costs: number[] = [];
+  for (let i = 0; i <= longer.length; i++) {
+    let lastValue = i;
+    for (let j = 0; j <= shorter.length; j++) {
+      if (i === 0) {
+        costs[j] = j;
+      } else if (j > 0) {
+        let newValue = costs[j - 1];
+        if (longer.charAt(i - 1) !== shorter.charAt(j - 1)) {
+          newValue = Math.min(Math.min(newValue, lastValue), costs[j]) + 1;
+        }
+        costs[j - 1] = lastValue;
+        lastValue = newValue;
+      }
+    }
+    if (i > 0) costs[shorter.length] = lastValue;
+  }
+  return (longerLength - costs[shorter.length]) / parseFloat(longerLength.toString());
+}
+
+function isArtistNameMatch(artistName: string, query: string): boolean {
+  if (!artistName || !query) return false;
+
+  const normName = artistName
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .trim();
+
+  const normQuery = query
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .trim();
+
+  if (!normName || !normQuery) return false;
+
+  if (normName.includes(normQuery) || normQuery.includes(normName)) {
+    return true;
+  }
+
+  const queryTokens = normQuery.split(/\s+/).filter(Boolean);
+  const nameTokens = normName.split(/\s+/).filter(Boolean);
+
+  if (queryTokens.length > 0 && queryTokens.every(qTok => 
+    nameTokens.some(nTok => nTok.startsWith(qTok) || nTok === qTok)
+  )) {
+    return true;
+  }
+
+  const condensedName = normName.replace(/\s+/g, '');
+  const condensedQuery = normQuery.replace(/\s+/g, '');
+  if (condensedName.startsWith(condensedQuery) || condensedQuery.startsWith(condensedName)) {
+    return true;
+  }
+
+  // Typo tolerance: Levenshtein distance check for query length >= 3
+  if (normQuery.length >= 3) {
+    if (stringSimilarity(normName, normQuery) >= 0.72) return true;
+    if (stringSimilarity(condensedName, condensedQuery) >= 0.72) return true;
+    if (queryTokens.length === nameTokens.length) {
+      if (queryTokens.every((qTok, i) => {
+        const nTok = nameTokens[i];
+        return nTok && (nTok.startsWith(qTok) || stringSimilarity(nTok, qTok) >= 0.7);
+      })) return true;
+    }
+  }
+
+  return false;
+}
+
 interface SearchProps {
   isAuthenticated: boolean;
-  onPlayTrack: (track: Track, queue: Track[]) => void;
+  onPlayTrack: (track: Track, playlist?: Track[]) => void;
 }
+
+const formatFollowers = (count?: number | { total: number }) => {
+  const num = typeof count === 'object' && count !== null ? (count as any).total : typeof count === 'number' ? count : 0;
+  if (!num || num <= 0) return 'Artist';
+  if (num >= 1000000) return `${(num / 1000000).toFixed(1)}M followers`;
+  if (num >= 10000) return `${(num / 1000).toFixed(0)}K followers`;
+  if (num >= 1000) return `${(num / 1000).toFixed(1)}K followers`;
+  return `${num} followers`;
+};
+
+// In-memory client search cache for instant return navigations (< 1ms)
+const clientSearchCache = new Map<string, { results: Track[]; artists: any[] }>();
 
 const Search: React.FC<SearchProps> = ({ isAuthenticated, onPlayTrack }) => {
   const navigate = useNavigate();
+  const location = useLocation();
   const { isOcean } = useTheme();
-  const [searchParams, setSearchParams] = useSearchParams();
-  const initialQuery = searchParams.get('q') || '';
-  const [query, setQuery] = useState(initialQuery);
-  const [results, setResults] = useState<Track[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
+
+  // Keep search query strictly in local state (hidden from URL)
+  const [query, setQuery] = useState<string>(() => {
+    const stateQuery = (location.state as { q?: string } | null)?.q;
+    const urlQuery = new URLSearchParams(location.search).get('q');
+    return stateQuery || urlQuery || '';
+  });
+
+  const initialCached = query.trim() ? clientSearchCache.get(query.trim()) : null;
+  const [results, setResults] = useState<Track[]>(() => initialCached?.results || []);
+  const [artists, setArtists] = useState<any[]>(() => initialCached?.artists || []);
+  const [isLoading, setIsLoading] = useState<boolean>(() => !initialCached && !!query.trim());
+
+  // Debounce the query by 300ms for optimal responsive typing without hammering API
+  const debouncedQuery = useDebounce(query, 300);
+
+  // Clean URL if navigated with query parameter so the address bar stays clean (/search)
+  useEffect(() => {
+    if (location.search) {
+      navigate('/search', { replace: true, state: location.state });
+    }
+  }, [location.search, navigate, location.state]);
 
   // Playlist Management State
   const [showPlaylistModal, setShowPlaylistModal] = useState(false);
@@ -145,63 +261,113 @@ const Search: React.FC<SearchProps> = ({ isAuthenticated, onPlayTrack }) => {
   const [newPlaylistName, setNewPlaylistName] = useState('');
   const [isCreatingPlaylist, setIsCreatingPlaylist] = useState(false);
 
-  useEffect(() => {
-    setQuery(initialQuery);
-  }, [initialQuery]);
-
   const updateQuery = (newQuery: string) => {
     setQuery(newQuery);
   };
 
+  // Instantly clear results when search input is empty
   useEffect(() => {
-    const trimmed = query.trim();
+    if (!query.trim()) {
+      setResults([]);
+      setArtists([]);
+      setIsLoading(false);
+    }
+  }, [query]);
+
+  // Execute search when debounced query changes
+  useEffect(() => {
+    const trimmed = debouncedQuery.trim();
     if (!trimmed) {
       setResults([]);
-      setSearchParams({}, { replace: true });
+      setIsLoading(false);
       return;
+    }
+
+    const cached = clientSearchCache.get(trimmed);
+    if (cached) {
+      setResults(cached.results);
+      setArtists(cached.artists);
+      setIsLoading(false);
+    } else {
+      setIsLoading(true);
     }
 
     const abortController = new AbortController();
 
-    const timer = setTimeout(async () => {
-      setSearchParams({ q: trimmed }, { replace: true });
-      setIsLoading(true);
-
-      // 1. First search directly via Cloudflare AudioService (JioSaavn)
-      try {
-        const saavnRes = await AudioService.searchSongs(trimmed);
-        if (saavnRes?.data?.results && saavnRes.data.results.length > 0) {
-          const mappedTracks = saavnRes.data.results.map(AudioService.toSlothifyTrack);
-          setResults(mappedTracks);
-          setIsLoading(false);
-          return;
+    const performSearch = async () => {
+      // 0. Search for artists matching query in parallel and sort by popularity / followers descending
+      axios.get(`/api/artists/search?q=${encodeURIComponent(trimmed)}&limit=20`, {
+        signal: abortController.signal
+      }).then(res => {
+        if (!abortController.signal.aborted && Array.isArray(res.data)) {
+          const matched = res.data.filter((a: any) => isArtistNameMatch(a.name, trimmed));
+          matched.sort((a: any, b: any) => {
+            const fA = typeof a.followers === 'object' && a.followers !== null ? a.followers.total : (Number(a.followers) || 0);
+            const fB = typeof b.followers === 'object' && b.followers !== null ? b.followers.total : (Number(b.followers) || 0);
+            return fB - fA;
+          });
+          const topArtists = matched.slice(0, 6);
+          setArtists(topArtists);
+          const currentEntry = clientSearchCache.get(trimmed);
+          clientSearchCache.set(trimmed, {
+            results: currentEntry?.results || results,
+            artists: topArtists
+          });
         }
-      } catch (saavnErr) {
-        console.warn('AudioService search failed, falling back to local search:', saavnErr);
-      }
+      }).catch(() => {});
 
-      // 2. Fallback to local API search
+      // 1. Primary: Search Slothify global catalog (Spotify + JioSaavn)
       try {
         const res = await axios.get(`/api/search?q=${encodeURIComponent(trimmed)}`, {
           signal: abortController.signal
         });
-        if (Array.isArray(res.data)) {
+        if (abortController.signal.aborted) return;
+        if (Array.isArray(res.data) && res.data.length > 0) {
           setResults(res.data);
+          setIsLoading(false);
+          const currentEntry = clientSearchCache.get(trimmed);
+          clientSearchCache.set(trimmed, {
+            results: res.data,
+            artists: currentEntry?.artists || artists
+          });
+          return;
         }
       } catch (err: any) {
-        if (err.name !== 'CanceledError' && !axios.isCancel(err)) {
-          console.error('Search request failed:', err);
+        if (!abortController.signal.aborted && err.name !== 'CanceledError' && !axios.isCancel(err)) {
+          console.warn('Backend search notice, falling back:', err.message);
+        }
+      }
+
+      // 2. Secondary fallback: Cloudflare AudioService (JioSaavn)
+      try {
+        const saavnRes = await AudioService.searchSongs(trimmed);
+        if (abortController.signal.aborted) return;
+        if (saavnRes?.data?.results && saavnRes.data.results.length > 0) {
+          const mappedTracks = saavnRes.data.results.map(AudioService.toSlothifyTrack);
+          setResults(mappedTracks);
+          const currentEntry = clientSearchCache.get(trimmed);
+          clientSearchCache.set(trimmed, {
+            results: mappedTracks,
+            artists: currentEntry?.artists || artists
+          });
+        }
+      } catch (saavnErr) {
+        if (!abortController.signal.aborted) {
+          console.warn('AudioService fallback notice:', saavnErr);
         }
       } finally {
-        setIsLoading(false);
+        if (!abortController.signal.aborted) {
+          setIsLoading(false);
+        }
       }
-    }, 350);
+    };
+
+    performSearch();
 
     return () => {
-      clearTimeout(timer);
       abortController.abort();
     };
-  }, [query, setSearchParams]);
+  }, [debouncedQuery]);
 
   const openPlaylistModal = async (track: Track, e: React.MouseEvent) => {
     e.stopPropagation();
@@ -511,34 +677,91 @@ const Search: React.FC<SearchProps> = ({ isAuthenticated, onPlayTrack }) => {
 
       {/* Results */}
       {query.trim() ? (
-        <div className="space-y-2">
-          {results.map((track) => (
-            <div
-              key={track.id}
-              onClick={() => onPlayTrack(track, results)}
-              className="flex items-center space-x-3.5 p-2.5 bg-white/[0.02] hover:bg-white/[0.05] border border-white/[0.04] rounded-2xl cursor-pointer transition-all group"
-            >
-              <div className="relative w-11 h-11 flex-shrink-0 rounded-xl overflow-hidden bg-[#18151c]">
-                <img
-                  src={track.album?.images?.[0]?.url || 'https://images.unsplash.com/photo-1518199266791-5375a83190b7?w=100'}
-                  className="w-full h-full object-cover"
-                  alt=""
-                />
-                <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                  <Play size={16} fill="white" className="text-white ml-0.5" />
-                </div>
+        <div className="space-y-6">
+          {/* Artists Matches */}
+          {artists.length > 0 && (
+            <div className="space-y-3">
+              <h2 className="text-sm font-bold tracking-wider text-[#8a8489] uppercase">Artists</h2>
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
+                {artists.map((artist) => {
+                  const imgUrl = getOptimizedImageUrl(artist.images?.[0]?.url || artist.imageUrl, '150') || `https://ui-avatars.com/api/?name=${encodeURIComponent(artist.name)}&background=181824&color=f5d0b5&size=150&bold=true`;
+                  return (
+                    <Link
+                      key={artist.id}
+                      to={`/artist/${artist.id}`}
+                      className="artist-card group p-3.5 rounded-2xl bg-white/[0.02] hover:bg-white/[0.06] border border-white/[0.04] hover:border-white/15 transition-all flex flex-col items-center text-center cursor-pointer shadow-sm hover:scale-[1.02]"
+                    >
+                      <div className="relative w-20 h-20 sm:w-24 sm:h-24 rounded-full overflow-hidden shadow-md ring-2 ring-white/10 group-hover:ring-cyan-400/40 mb-2.5 bg-[#18151c] flex-shrink-0">
+                        <img
+                          src={imgUrl}
+                          loading="lazy"
+                          alt={artist.name}
+                          className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
+                        />
+                      </div>
+                      <h3 className="text-xs sm:text-sm font-bold text-white truncate w-full group-hover:text-cyan-300 transition-colors">
+                        {artist.name}
+                      </h3>
+                      <span className="text-[10px] text-cyan-300/80 font-medium mt-0.5">
+                        Artist • {formatFollowers(artist.followers?.total || artist.followers)}
+                      </span>
+                    </Link>
+                  );
+                })}
               </div>
+            </div>
+          )}
 
-              <div className="flex-1 min-w-0">
-                <h3 className={`font-semibold text-xs md:text-sm text-white truncate transition-colors leading-tight ${
-                  isOcean ? 'group-hover:text-blue-400' : 'group-hover:text-[#f5d0b5]'
-                }`}>
-                  {track.name}
-                </h3>
-                <p className="text-[11px] text-[#8a8489] truncate mt-0.5 leading-tight">
-                  {track.artists?.map(a => a.name).join(', ') || 'Artist'}
-                </p>
-              </div>
+          {/* Songs List */}
+          <div className="space-y-2">
+            {results.length > 0 && (
+              <h2 className="text-sm font-bold tracking-wider text-[#8a8489] uppercase mb-1">Songs</h2>
+            )}
+            {results.map((track) => {
+              const thumbUrl = getTrackThumbnail(track, 'https://images.unsplash.com/photo-1518199266791-5375a83190b7?w=150', '150');
+              return (
+              <div
+                key={track.id}
+                onClick={() => onPlayTrack(track, results)}
+                className="flex items-center space-x-3.5 p-2.5 bg-white/[0.02] hover:bg-white/[0.05] border border-white/[0.04] rounded-2xl cursor-pointer transition-all group"
+              >
+                <div className="relative w-11 h-11 flex-shrink-0 rounded-xl overflow-hidden bg-[#18151c]">
+                  <img
+                    src={thumbUrl}
+                    loading="lazy"
+                    className="w-full h-full object-cover"
+                    alt=""
+                  />
+                  <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                    <Play size={16} fill="white" className="text-white ml-0.5" />
+                  </div>
+                </div>
+
+                <div className="flex-1 min-w-0">
+                  <h3 className={`font-semibold text-xs md:text-sm text-white truncate transition-colors leading-tight ${
+                    isOcean ? 'group-hover:text-blue-400' : 'group-hover:text-[#f5d0b5]'
+                  }`}>
+                    {track.name}
+                  </h3>
+                  <p className="text-[11px] text-[#8a8489] truncate mt-0.5 leading-tight">
+                    {track.artists && track.artists.length > 0 ? (
+                      track.artists.map((a, i) => (
+                        <React.Fragment key={a.name || i}>
+                          {i > 0 && ', '}
+                          <Link
+                            to={`/artist/sp_art_${encodeURIComponent(a.name)}`}
+                            onClick={(e) => e.stopPropagation()}
+                            className="hover:underline hover:text-white transition-colors"
+                          >
+                            {a.name}
+                          </Link>
+                        </React.Fragment>
+                      ))
+                    ) : (
+                      'Artist'
+                    )}
+                  </p>
+                </div>
 
               <button
                 onClick={(e) => openPlaylistModal(track, e)}
@@ -550,12 +773,14 @@ const Search: React.FC<SearchProps> = ({ isAuthenticated, onPlayTrack }) => {
                 <Plus size={18} />
               </button>
             </div>
-          ))}
-          {!isLoading && results.length === 0 && (
+              );
+            })}
+          {!isLoading && results.length === 0 && artists.length === 0 && (
             <div className="text-center text-[#8a8489] py-16 text-xs">
               No results found for &ldquo;{query}&rdquo;
             </div>
           )}
+          </div>
         </div>
       ) : (
         <div className="space-y-4 pt-2">

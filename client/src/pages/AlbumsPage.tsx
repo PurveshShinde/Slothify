@@ -5,6 +5,7 @@ import { Disc, Play, Heart, Search, Loader2, X } from 'lucide-react';
 import axios from 'axios';
 import { useTheme } from '../context/ThemeContext';
 import { useCache } from '../context/CacheContext';
+import { getOptimizedImageUrl } from '../utils/imageOptimizer';
 
 interface AlbumItem {
   id: string;
@@ -385,7 +386,7 @@ export const AlbumsPage: React.FC<AlbumsPageProps> = () => {
       ) : displayedAlbums.length > 0 ? (
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4 sm:gap-5">
           {displayedAlbums.map((album) => {
-            const coverImage = album.images?.[0]?.url || `https://ui-avatars.com/api/?name=${encodeURIComponent(album.name)}&background=181824&color=f5d0b5&size=500&bold=true`;
+            const coverImage = getOptimizedImageUrl(album.images?.[0]?.url, '300') || `https://ui-avatars.com/api/?name=${encodeURIComponent(album.name)}&background=181824&color=f5d0b5&size=300&bold=true`;
 
             return (
               <div
@@ -401,6 +402,7 @@ export const AlbumsPage: React.FC<AlbumsPageProps> = () => {
                 <div className="relative aspect-square w-full rounded-xl overflow-hidden mb-3 bg-black/40 shadow-md">
                   <img
                     src={coverImage}
+                    loading="lazy"
                     alt={album.name}
                     className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
                   />

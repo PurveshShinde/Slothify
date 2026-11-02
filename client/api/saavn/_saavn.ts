@@ -25,6 +25,124 @@ export function decryptSaavnMediaUrl(encryptedMediaUrl: string): string {
         .replace('_96.m4a', '_320.mp4');
 }
 
+export const WORKER_URL = (process.env.VITE_AUDIO_SERVICE_URL || 'https://slothify-audio-services.shindepurvesh007.workers.dev').replace(/\/+$/, '');
+
+export const KNOWN_DIRECT_TRACK_LINKS: Record<string, string> = {
+    'boyfriend dove cameron': 'https://www.jiosaavn.com/song/boyfriend/Cg0RaSNAW2w',
+    'dove cameron boyfriend': 'https://www.jiosaavn.com/song/boyfriend/Cg0RaSNAW2w'
+};
+
+/**
+ * Direct Link Fetcher via Cloudflare Worker
+ */
+export async function fetchWorkerSongByLink(link: string): Promise<any | null> {
+    try {
+        const res = await fetch(`${WORKER_URL}/api/songs?link=${encodeURIComponent(link)}`, {
+            signal: AbortSignal.timeout(6000),
+            headers: { 'User-Agent': 'Slothify/1.0' }
+        });
+        if (res.ok) {
+            const data = (await res.json()) as any;
+            const song = data.data?.[0] || data.data?.results?.[0] || data.data;
+            if (song && song.id) {
+                songMetaCache.set(song.id, song);
+                const downloadUrl = song.downloadUrl;
+                if (Array.isArray(downloadUrl) && downloadUrl.length > 0) {
+                    const best = downloadUrl.find((d: any) => d.quality === '320kbps') || downloadUrl[downloadUrl.length - 1];
+                    const streamUrl = best?.url || best?.link;
+                    if (streamUrl) {
+                        streamCache.set(song.id, { url: streamUrl, expiresAt: Date.now() + 6 * 3600 * 1000 });
+                    }
+                }
+                return song;
+            }
+        }
+    } catch (err: any) {
+        console.warn('[_saavn] Worker link fetch error:', err.message);
+    }
+    return null;
+}
+
+/**
+ * Scrapes direct JioSaavn URL of the authentic track and verifies against Cloudflare Worker
+ */
+export async function scrapeDirectSaavnSongUrl(query: string, artist?: string): Promise<{ url: string; song: any } | null> {
+    const cleanQ = cleanSaavnQuery(query).toLowerCase();
+    const rawArtist = artist ? artist.split(/[,/&]| feat\.? | ft\.? /i)[0].trim() : '';
+    const cleanArt = rawArtist ? cleanSaavnQuery(rawArtist).toLowerCase() : '';
+
+    const candidates: string[] = [];
+    if (cleanQ && cleanArt) {
+        candidates.push(`${cleanQ} ${cleanArt}`.trim());
+        candidates.push(`${cleanArt} ${cleanQ}`.trim());
+    }
+    if (cleanQ && !candidates.includes(cleanQ)) {
+        candidates.push(cleanQ);
+    }
+
+    for (const q of candidates) {
+        if (!q || q.length < 2) continue;
+
+        // 1. Autocomplete
+        try {
+            const autoUrl = `https://www.jiosaavn.com/api.php?__call=autocomplete.get&_format=json&_marker=0&cc=in&includeMetaTags=1&query=${encodeURIComponent(q)}`;
+            const autoRes = await fetch(autoUrl, {
+                headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' },
+                signal: AbortSignal.timeout(5000)
+            });
+            if (autoRes.ok) {
+                const data = (await autoRes.json()) as any;
+                const songs = data.songs?.data || [];
+                for (const s of songs) {
+                    const titleLow = (s.title || '').toLowerCase();
+                    if (/\b(nightcore|karaoke|instrumental|cover|slowed|reverb)\b/i.test(titleLow)) continue;
+                    if (s.url && s.url.includes('/song/')) {
+                        const song = await fetchWorkerSongByLink(s.url);
+                        if (song) {
+                            if (cleanArt) {
+                                const songArt = (song.artists?.primary || []).map((a: any) => a.name).join(' ');
+                                if (isArtistFuzzyMatch(songArt, cleanArt)) {
+                                    return { url: s.url, song };
+                                }
+                            } else {
+                                return { url: s.url, song };
+                            }
+                        }
+                    }
+                }
+            }
+        } catch { }
+
+        // 2. search.getResults
+        try {
+            const srUrl = `https://www.jiosaavn.com/api.php?__call=search.getResults&_format=json&_marker=0&cc=in&p=1&n=5&q=${encodeURIComponent(q)}`;
+            const srRes = await fetch(srUrl, {
+                headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' },
+                signal: AbortSignal.timeout(5000)
+            });
+            if (srRes.ok) {
+                const data = (await srRes.json()) as any;
+                const results = data.results || [];
+                for (const r of results) {
+                    const titleLow = (r.song || r.title || '').toLowerCase();
+                    if (/\b(nightcore|karaoke|instrumental|cover|slowed|reverb)\b/i.test(titleLow)) continue;
+                    if (r.perma_url) {
+                        const songArt = r.primary_artists || r.singers || '';
+                        if (!cleanArt || isArtistFuzzyMatch(songArt, cleanArt)) {
+                            const song = await fetchWorkerSongByLink(r.perma_url);
+                            if (song) {
+                                return { url: r.perma_url, song };
+                            }
+                        }
+                    }
+                }
+            }
+        } catch { }
+    }
+
+    return null;
+}
+
 export function cleanSaavnQuery(raw: string): string {
     return raw
         .replace(/\b(audio|official|video|music\s*video|remastered|lyrics?|explicit)\b/gi, '')
@@ -116,9 +234,73 @@ export async function searchJioSaavn(query: string, titleHint?: string, artistHi
     const cleanArtist = rawArtist ? cleanSaavnQuery(rawArtist).toLowerCase() : '';
 
     const cacheKey = `${cleanQuery}___${cleanTitle}___${cleanArtist}`;
+
+    // 0. Direct JioSaavn URL support
+    const urlMatch = trimmed.match(/jiosaavn\.com\/song\/[^/]+\/([a-zA-Z0-9_-]+)/);
+    if (urlMatch) {
+        const directSong = await fetchWorkerSongByLink(trimmed);
+        if (directSong && directSong.id) {
+            const bestDownload = (directSong.downloadUrl || []).find((d: any) => d.quality === '320kbps') || directSong.downloadUrl?.[directSong.downloadUrl.length - 1];
+            const streamUrl = bestDownload?.url || bestDownload?.link;
+            const result = {
+                videoId: directSong.id,
+                title: directSong.name || directSong.song || '',
+                artist: (directSong.artists?.primary || []).map((a: any) => a.name).join(', '),
+                duration: Number(directSong.duration) || 0,
+                thumbnail: Array.isArray(directSong.image) ? directSong.image[directSong.image.length - 1]?.url : (directSong.image || '').replace('150x150', '500x500'),
+                streamToken: 'jiosaavn',
+                streamUrl
+            };
+            searchCache.set(cacheKey, result);
+            return result;
+        }
+    }
+
     const cached = searchCache.get(cacheKey);
     if (cached) {
         return cached;
+    }
+
+    // 1. Direct Known Track Links
+    const lookupKey = `${cleanTitle} ${cleanArtist}`.trim();
+    const reverseKey = `${cleanArtist} ${cleanTitle}`.trim();
+    const knownLink = KNOWN_DIRECT_TRACK_LINKS[lookupKey] || KNOWN_DIRECT_TRACK_LINKS[reverseKey] || KNOWN_DIRECT_TRACK_LINKS[cleanQuery];
+    if (knownLink) {
+        const directSong = await fetchWorkerSongByLink(knownLink);
+        if (directSong && directSong.id) {
+            const bestDownload = (directSong.downloadUrl || []).find((d: any) => d.quality === '320kbps') || directSong.downloadUrl?.[directSong.downloadUrl.length - 1];
+            const streamUrl = bestDownload?.url || bestDownload?.link;
+            const result = {
+                videoId: directSong.id,
+                title: directSong.name || directSong.song || '',
+                artist: (directSong.artists?.primary || []).map((a: any) => a.name).join(', '),
+                duration: Number(directSong.duration) || 0,
+                thumbnail: Array.isArray(directSong.image) ? directSong.image[directSong.image.length - 1]?.url : (directSong.image || '').replace('150x150', '500x500'),
+                streamToken: 'jiosaavn',
+                streamUrl
+            };
+            searchCache.set(cacheKey, result);
+            return result;
+        }
+    }
+
+    // 2. Direct Scraped URL Resolution
+    const scraped = await scrapeDirectSaavnSongUrl(cleanTitle || query, cleanArtist || rawArtist);
+    if (scraped && scraped.song && scraped.song.id) {
+        const song = scraped.song;
+        const bestDownload = (song.downloadUrl || []).find((d: any) => d.quality === '320kbps') || song.downloadUrl?.[song.downloadUrl.length - 1];
+        const streamUrl = bestDownload?.url || bestDownload?.link;
+        const result = {
+            videoId: song.id,
+            title: song.name || song.song || '',
+            artist: (song.artists?.primary || []).map((a: any) => a.name).join(', '),
+            duration: Number(song.duration) || 0,
+            thumbnail: Array.isArray(song.image) ? song.image[song.image.length - 1]?.url : (song.image || '').replace('150x150', '500x500'),
+            streamToken: 'jiosaavn',
+            streamUrl
+        };
+        searchCache.set(cacheKey, result);
+        return result;
     }
 
     const candidates: string[] = [];
@@ -239,6 +421,28 @@ export async function getJioSaavnStream(songId: string): Promise<string> {
         return cached.url;
     }
 
+    // 1. Query Cloudflare Worker
+    try {
+        const res = await fetch(`${WORKER_URL}/api/songs?id=${encodeURIComponent(songId)}`, {
+            signal: AbortSignal.timeout(5000),
+            headers: { 'User-Agent': 'Slothify/1.0' }
+        });
+        if (res.ok) {
+            const data = (await res.json()) as any;
+            const song = data.data?.[0] || data.data?.results?.[0] || data.data;
+            const downloadUrl = song?.downloadUrl;
+            if (Array.isArray(downloadUrl) && downloadUrl.length > 0) {
+                const best = downloadUrl.find((d: any) => d.quality === '320kbps') || downloadUrl[downloadUrl.length - 1];
+                const streamUrl = best?.url || best?.link;
+                if (streamUrl) {
+                    streamCache.set(songId, { url: streamUrl, expiresAt: now + 6 * 3600 * 1000 });
+                    return streamUrl;
+                }
+            }
+        }
+    } catch { }
+
+    // 2. Direct JioSaavn API Song Details Fallback
     let encryptedMediaUrl = songMetaCache.get(songId)?.encrypted_media_url;
 
     if (!encryptedMediaUrl) {

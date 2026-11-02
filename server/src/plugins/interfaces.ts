@@ -49,6 +49,7 @@ export interface AudioSearchResult {
     duration: number;
     thumbnail: string;
     streamToken?: string;
+    streamUrl?: string;
 }
 
 export interface MetadataPlugin {
@@ -66,13 +67,14 @@ export interface MetadataPlugin {
     getSmartMoodSuggestions?(trackName: string, artistName: string): Promise<Track[]>;
     searchArtists?(query: string, limit?: number): Promise<Artist[]>;
     getArtistTracks?(artistId: string, artistName?: string): Promise<Track[]>;
+    getArtistDetails?(artistId: string, artistName?: string): Promise<any>;
     searchAlbums?(query: string, limit?: number): Promise<any[]>;
     getAlbum?(albumId: string): Promise<any>;
 }
 
 export interface AudioPlugin {
     readonly name: string;
-    search(query: string): Promise<AudioSearchResult>;
+    search(query: string, titleHint?: string, artistHint?: string, targetDuration?: number): Promise<AudioSearchResult>;
     stream(videoId: string, req: Request, res: Response): Promise<void>;
     preload?(videoId: string): Promise<void>;
 }

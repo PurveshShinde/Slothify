@@ -6,13 +6,14 @@ const router = express.Router();
 // Search YouTube/Audio for track
 router.get('/search', async (req, res) => {
     const q = req.query.q;
+    const duration = req.query.duration ? Number(req.query.duration) : undefined;
     if (!q || typeof q !== 'string') {
         return res.status(400).json({ error: 'Missing query' });
     }
 
     try {
         const ytPlugin = pluginRegistry.getAudioPluginByName('YouTubeAudio') || pluginRegistry.getAudioPlugin();
-        const result = await ytPlugin.search(q);
+        const result = await ytPlugin.search(q, undefined, undefined, duration);
         res.json(result);
     } catch (err: any) {
         console.error('[/api/youtube/search] Error:', err.message);
