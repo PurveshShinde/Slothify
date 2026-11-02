@@ -39,5 +39,7 @@ const EncryptedLikedTrackSchema = new Schema<IEncryptedLikedTrack>({
 
 // Composite unique index so a user cannot duplicate like the same track
 EncryptedLikedTrackSchema.index({ userId: 1, trackId: 1 }, { unique: true });
+// Index for fetching all liked tracks sorted by addedAt (used by /api/me/tracks)
+EncryptedLikedTrackSchema.index({ userId: 1, addedAt: -1 });
 
 export const EncryptedLikedTrack = mongoose.models.EncryptedLikedTrack || mongoose.model<IEncryptedLikedTrack>('EncryptedLikedTrack', EncryptedLikedTrackSchema);

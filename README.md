@@ -14,7 +14,7 @@
   <b>A modern, ad-free, high-fidelity music streaming application with modular audio engine routing, real-time metadata discovery, zero-knowledge privacy, and dynamic visual theming.</b>
 </p>
 
-[Overview](#overview) • [Key Features](#key-features) • [Audio Engines](#audio-engines) • [Open Source Credits](#open-source-credits) • [Legal Disclaimer & Terms of Use](#legal-disclaimer--terms-of-use) • [Android Roadmap](#android-roadmap) • [Author](#author) • [Support](#support) • [License](#license)
+[Overview](#overview) • [Key Features](#key-features) • [Audio Engines](#audio-engines) • [Open Source Credits](#open-source-credits) • [Legal Disclaimer & Terms of Use](#legal-disclaimer--terms-of-use) • [Android Roadmap](#android-roadmap) • [Contributors](#contributors) • [Support](#support) • [License](#license)
 
 </div>
 
@@ -90,12 +90,12 @@ Planned capabilities for the native mobile application:
 
 ---
 
-## Author
+## Contributors
 
 <div align="center">
 
 <a href="https://github.com/PurveshShinde">
-  <img src="https://github.com/PurveshShinde.png" width="120" height="120" alt="Purvesh Shinde" style="border-radius: 50%; object-fit: cover; border: 3px solid #007ACC; box-shadow: 0 4px 18px rgba(0, 122, 204, 0.3);" />
+  <img src="https://avatars.githubusercontent.com/PurveshShinde?s=120" width="120" height="120" alt="Purvesh Shinde" style="border-radius: 50%;" />
 </a>
 
 ### **[Purvesh Shinde](https://github.com/PurveshShinde)**

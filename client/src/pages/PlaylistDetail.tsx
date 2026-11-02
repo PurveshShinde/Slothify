@@ -78,6 +78,7 @@ const PlaylistDetail: React.FC<PlaylistDetailProps> = ({
   const [filterQuery, setFilterQuery] = useState('');
   const [sortBy, setSortBy] = useState<SortOption>('az');
   const [showSortMenu, setShowSortMenu] = useState(false);
+  // Only show loading spinner if we have NO cached data at all
   const [isLoading, setIsLoading] = useState(!cachedData);
   const [isDeleting, setIsDeleting] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -107,9 +108,13 @@ const PlaylistDetail: React.FC<PlaylistDetailProps> = ({
 
   const fetchData = async (isRefresh = false) => {
     if (!id) return;
-    if (!isRefresh && cachedData && !isLikedView) return;
+    // Use cache for ALL views including liked - skip fetch if cached and not refreshing
+    if (!isRefresh && cachedData) return;
 
-    setIsLoading(!isRefresh);
+    // Only show full loading spinner if there's no cached data to display
+    // This prevents the "no songs" flash when refreshing in the background
+    const hasCachedContent = cachedData || tracks.length > 0;
+    setIsLoading(!isRefresh && !hasCachedContent);
 
     try {
       if (!isLikedView) {
@@ -182,20 +187,26 @@ const PlaylistDetail: React.FC<PlaylistDetailProps> = ({
   };
 
   useEffect(() => {
-    if (isLikedView) {
-      fetchData(true);
-    } else if (id) {
+    if (id) {
       if (cachedData) {
+        // Show cached data instantly for ALL views (including liked)
         setPlaylist(cachedData.playlist);
         setTracks(cachedData.tracks);
         setIsLoading(false);
+        // For liked view, do a background refresh to pick up any changes
+        // but don't show loading state since we already have data
+        if (isLikedView) {
+          fetchData(true);
+        }
       } else {
         fetchData();
       }
     } else {
       setIsLoading(false);
     }
-  }, [id, isLikedView, likedTrackIds.size]);
+    // Only re-fetch liked view when likedTrackIds size actually changes
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id, isLikedView]);
 
   // Pull-to-Refresh Handlers
   const handleTouchStart = (e: React.TouchEvent) => {
