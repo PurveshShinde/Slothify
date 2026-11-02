@@ -44,6 +44,8 @@ interface ArtistProfileProps {
   likedTrackIds?: Set<string>;
   onToggleLike?: (track: Track) => void;
   isAuthenticated?: boolean;
+  followedArtistIds?: Set<string>;
+  onToggleFollow?: (artist: any) => void;
 }
 
 const swrFetcher = async (url: string) => {
@@ -61,7 +63,9 @@ export default function ArtistProfile({
   currentTrackId,
   likedTrackIds,
   onToggleLike,
-  isAuthenticated
+  isAuthenticated,
+  followedArtistIds,
+  onToggleFollow
 }: ArtistProfileProps) {
   // 1. Extract the artist ID from the URL (/artist/:artistId)
   const { artistId } = useParams<{ artistId: string }>();
@@ -103,7 +107,7 @@ export default function ArtistProfile({
   const tracksLoading = isDangerous ? false : (tracks.length === 0 && isTracksLoading);
   const error = isDangerous ? "Invalid Artist ID" : (profileError ? profileError.message : null);
 
-  const [isFollowing, setIsFollowing] = useState(false);
+  const [localIsFollowing, setLocalIsFollowing] = useState(false);
   const [copiedShare, setCopiedShare] = useState(false);
 
   useEffect(() => {
@@ -112,14 +116,28 @@ export default function ArtistProfile({
       const saved = localStorage.getItem('slothify_user_followed_artist_ids');
       if (saved) {
         const set = new Set(JSON.parse(saved));
-        setIsFollowing(set.has(artistId));
+        setLocalIsFollowing(set.has(artistId));
       }
     } catch (e) {}
   }, [artistId]);
 
+  const isFollowing = (followedArtistIds && artistId)
+    ? followedArtistIds.has(artistId)
+    : localIsFollowing;
+
   const toggleFollow = () => {
     if (!artistId) return;
-    setIsFollowing(prev => {
+    if (onToggleFollow && artist) {
+      onToggleFollow({
+        id: artist.id,
+        name: artist.name,
+        images: artist.images || (artist.coverImage ? [{ url: artist.coverImage }] : []),
+        followers: { total: artist.monthlyListeners || 0 }
+      });
+      return;
+    }
+
+    setLocalIsFollowing(prev => {
       const next = !prev;
       try {
         const saved = localStorage.getItem('slothify_user_followed_artist_ids');

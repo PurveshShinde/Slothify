@@ -99,13 +99,25 @@ function isArtistNameMatch(artistName: string, query: string): boolean {
   return false;
 }
 
-export const ArtistsPage: React.FC = () => {
+export interface ArtistsPageProps {
+  isAuthenticated?: boolean;
+  followedArtistIds?: Set<string>;
+  onToggleFollow?: (artist: ArtistItem) => void;
+  followedArtistsList?: ArtistItem[];
+}
+
+export const ArtistsPage: React.FC<ArtistsPageProps> = ({
+  isAuthenticated,
+  followedArtistIds: propFollowedIds,
+  onToggleFollow: propToggleFollow,
+  followedArtistsList: propFollowedList
+}) => {
   const navigate = useNavigate();
   const { isOcean } = useTheme();
   const { cache, setArtistsData } = useCache();
 
-  // Clean followed artist IDs (strictly user-driven, 0 by default)
-  const [followedIds, setFollowedIds] = useState<Set<string>>(() => {
+  // Local fallback followed artist IDs if not passed via props
+  const [localFollowedIds, setLocalFollowedIds] = useState<Set<string>>(() => {
     try {
       localStorage.removeItem('slothify_followed_artists');
       const saved = localStorage.getItem('slothify_user_followed_artist_ids');
@@ -114,13 +126,24 @@ export const ArtistsPage: React.FC = () => {
     return new Set<string>();
   });
 
-  const [followedProfiles, setFollowedProfiles] = useState<Record<string, ArtistItem>>(() => {
+  const followedIds = propFollowedIds || localFollowedIds;
+
+  const [localFollowedProfiles, setLocalFollowedProfiles] = useState<Record<string, ArtistItem>>(() => {
     try {
       const saved = localStorage.getItem('slothify_followed_artist_profiles');
       if (saved) return JSON.parse(saved);
     } catch (e) {}
     return {};
   });
+
+  const followedProfiles = React.useMemo(() => {
+    if (propFollowedList && propFollowedList.length > 0) {
+      const map: Record<string, ArtistItem> = {};
+      propFollowedList.forEach(a => { if (a && a.id) map[a.id] = a; });
+      return map;
+    }
+    return localFollowedProfiles;
+  }, [propFollowedList, localFollowedProfiles]);
 
   // Authentic artists from API or cache (instant, zero loading delay if visited before)
   const [topArtists, setTopArtists] = useState<ArtistItem[]>(() => {
@@ -229,8 +252,14 @@ export const ArtistsPage: React.FC = () => {
   const toggleFollow = (artist: ArtistItem, e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
+
+    if (propToggleFollow) {
+      propToggleFollow(artist);
+      return;
+    }
+
     const id = artist.id;
-    setFollowedIds(prev => {
+    setLocalFollowedIds(prev => {
       const next = new Set(prev);
       if (next.has(id)) {
         next.delete(id);
@@ -243,7 +272,7 @@ export const ArtistsPage: React.FC = () => {
       return next;
     });
 
-    setFollowedProfiles(prev => {
+    setLocalFollowedProfiles(prev => {
       const next = { ...prev };
       if (next[id]) {
         delete next[id];

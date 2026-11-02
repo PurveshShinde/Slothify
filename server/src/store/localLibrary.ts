@@ -10,6 +10,7 @@ const DATA_FILE = path.resolve(__dirname, '../../local_library.json');
 interface LibraryData {
     playlists: Playlist[];
     likedTracks: Track[];
+    followedArtists?: any[];
 }
 
 const CURATED_DEFAULT_PLAYLISTS: Playlist[] = [
@@ -185,7 +186,8 @@ class LocalLibraryStore {
                 tracks: { total: 0, items: [] }
             }
         ],
-        likedTracks: []
+        likedTracks: [],
+        followedArtists: []
     };
 
     constructor() {
@@ -197,6 +199,9 @@ class LocalLibraryStore {
             if (fs.existsSync(DATA_FILE)) {
                 const raw = fs.readFileSync(DATA_FILE, 'utf-8');
                 this.data = JSON.parse(raw);
+                if (!Array.isArray(this.data.followedArtists)) {
+                    this.data.followedArtists = [];
+                }
             }
         } catch (e) {
             console.warn('[LocalLibraryStore] Could not load local library file, using in-memory store:', e);
@@ -373,6 +378,52 @@ class LocalLibraryStore {
         }
         this.save();
         return { liked, total: this.data.likedTracks.length };
+    }
+
+    getFollowedArtists(): { items: any[]; total: number } {
+        const items = this.data.followedArtists || [];
+        return { items, total: items.length };
+    }
+
+    toggleFollowedArtist(artist: any): { following: boolean; total: number } {
+        if (!this.data.followedArtists) this.data.followedArtists = [];
+        const artistId = artist.id || artist.artistId;
+        const idx = this.data.followedArtists.findIndex((a: any) => (a.id || a.artistId) === artistId);
+        let following = false;
+        if (idx >= 0) {
+            this.data.followedArtists.splice(idx, 1);
+            following = false;
+        } else {
+            this.data.followedArtists.unshift({
+                id: artistId,
+                name: artist.name || artist.artistName,
+                images: artist.images || (artist.artistImage ? [{ url: artist.artistImage }] : []),
+                followers: artist.followers || { total: 0 }
+            });
+            following = true;
+        }
+        this.save();
+        return { following, total: this.data.followedArtists.length };
+    }
+
+    syncFollowedArtists(artists: any[]): number {
+        if (!this.data.followedArtists) this.data.followedArtists = [];
+        let count = 0;
+        for (const art of artists) {
+            const id = art.id || art.artistId;
+            if (!id) continue;
+            if (!this.data.followedArtists.some((a: any) => (a.id || a.artistId) === id)) {
+                this.data.followedArtists.unshift({
+                    id,
+                    name: art.name || art.artistName,
+                    images: art.images || (art.artistImage ? [{ url: art.artistImage }] : []),
+                    followers: art.followers || { total: 0 }
+                });
+                count++;
+            }
+        }
+        if (count > 0) this.save();
+        return this.data.followedArtists.length;
     }
 }
 

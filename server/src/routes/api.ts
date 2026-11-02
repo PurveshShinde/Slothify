@@ -7,6 +7,7 @@ import { isDbConnected } from '../db/connection.js';
 import { EncryptedPlaylist } from '../models/EncryptedPlaylist.js';
 import { EncryptedLikedTrack } from '../models/EncryptedLikedTrack.js';
 import { ListeningHistory } from '../models/ListeningHistory.js';
+import { FollowedArtist } from '../models/FollowedArtist.js';
 import { encryptPayload, decryptPayload } from '../utils/crypto.js';
 import type { Playlist, Track } from '../plugins/interfaces.js';
 import { isArtistNameMatch, calculateArtistRelevanceScore } from '../plugins/metadata/SpotifyScraperPlugin.js';
@@ -1159,11 +1160,168 @@ router.delete('/me/tracks', async (req, res) => {
     }
 });
 
-// Recommendations - Personalized per account based on liked songs and listening history!
-// Only active when account is logged in!
+// -------------------------------------------------------------
+// Followed Artists Endpoints (Personalized Database Sync)
+// -------------------------------------------------------------
+
+// Get all followed artists
+router.get(['/me/artists', '/me/following'], async (req, res) => {
+    try {
+        if (req.user && isDbConnected()) {
+            const records = await FollowedArtist.find({ userId: req.user.userId }).sort({ followedAt: -1 });
+            const items = records.map((r: any) => ({
+                id: r.artistId,
+                name: r.artistName,
+                images: r.artistImage ? [{ url: r.artistImage }] : [],
+                followers: { total: r.followers || 0 },
+                isFollowing: true,
+                followedAt: r.followedAt
+            }));
+            return res.json({ items, total: items.length });
+        }
+
+        if (isDbConnected() && !req.user) {
+            return res.json({ items: [], total: 0 });
+        }
+
+        const result = localLibrary.getFollowedArtists();
+        res.json(result);
+    } catch (err: any) {
+        console.error('[/api/me/artists GET] Error:', err);
+        res.status(500).json({ error: 'Failed to get followed artists', details: err.message });
+    }
+});
+
+// Toggle follow artist (POST)
+router.post(['/me/artists', '/me/following'], async (req, res) => {
+    try {
+        const body = req.body || {};
+        const artist = body.artist || {};
+        const artistId = body.artistId || artist.id;
+        const artistName = body.artistName || body.name || artist.name;
+        const artistImage = body.artistImage || body.image || artist.images?.[0]?.url || '';
+        const followers = body.followers !== undefined
+            ? (typeof body.followers === 'object' ? body.followers.total : Number(body.followers))
+            : (artist.followers?.total || 0);
+
+        if (!artistId) {
+            return res.status(400).json({ error: 'Missing artistId' });
+        }
+
+        if (req.user && isDbConnected()) {
+            const userId = req.user.userId;
+            const existing = await FollowedArtist.findOne({ userId, artistId });
+            if (existing) {
+                await FollowedArtist.deleteOne({ _id: existing._id });
+                const total = await FollowedArtist.countDocuments({ userId });
+                return res.json({ following: false, total, artistId });
+            } else {
+                await FollowedArtist.create({
+                    userId,
+                    artistId,
+                    artistName: artistName || 'Unknown Artist',
+                    artistImage,
+                    followers: followers || 0,
+                    followedAt: new Date()
+                });
+                const total = await FollowedArtist.countDocuments({ userId });
+                return res.json({ following: true, total, artistId });
+            }
+        }
+
+        const result = localLibrary.toggleFollowedArtist({
+            id: artistId,
+            name: artistName,
+            artistImage,
+            followers
+        });
+        res.json(result);
+    } catch (err: any) {
+        console.error('[/api/me/artists POST] Error:', err);
+        res.status(500).json({ error: 'Failed to toggle followed artist', details: err.message });
+    }
+});
+
+// Batch sync guest followed artists when user logs in / registers
+router.post('/me/artists/sync', async (req, res) => {
+    try {
+        const artists = Array.isArray(req.body.artists) ? req.body.artists : [];
+        if (!req.user || !isDbConnected()) {
+            if (!isDbConnected()) {
+                const count = localLibrary.syncFollowedArtists(artists);
+                return res.json({ success: true, count });
+            }
+            return res.json({ success: false, message: 'Not authenticated' });
+        }
+
+        const userId = req.user.userId;
+        let synced = 0;
+        for (const art of artists) {
+            const artistId = art.id || art.artistId;
+            const artistName = art.name || art.artistName;
+            if (!artistId || !artistName) continue;
+            const artistImage = art.images?.[0]?.url || art.image || art.artistImage || '';
+            const followers = typeof art.followers === 'object'
+                ? (art.followers?.total || 0)
+                : (Number(art.followers) || 0);
+
+            await FollowedArtist.updateOne(
+                { userId, artistId },
+                {
+                    $setOnInsert: {
+                        userId,
+                        artistId,
+                        artistName,
+                        artistImage,
+                        followers,
+                        followedAt: new Date()
+                    }
+                },
+                { upsert: true }
+            );
+            synced++;
+        }
+
+        const total = await FollowedArtist.countDocuments({ userId });
+        res.json({ success: true, synced, total });
+    } catch (err: any) {
+        console.error('[/api/me/artists/sync] Error:', err);
+        res.status(500).json({ error: 'Failed to sync followed artists', details: err.message });
+    }
+});
+
+// -------------------------------------------------------------
+// Recommendations - Comprehensive Multi-Signal Personalization
+// Blends:
+// 1. Followed Artists (explicit user devotion, weight 4)
+// 2. Liked Songs (curated favorites, weight 3)
+// 3. User Playlists (deep catalog affinity, weight 2)
+// 4. Listening History (recent plays, weight 2)
+// 5. Guest seed fallback (zero DB writes)
+// -------------------------------------------------------------
 router.get('/recommendations', async (req, res) => {
     try {
-        // Recommendation system only starts working when account is logged in
+        const metadataPlugin = pluginRegistry.getMetadataPlugin();
+        const guestSeedParam = (req.query.seed_artists as string) || '';
+
+        // Guest personalization path (zero database writes)
+        if (!req.user && guestSeedParam) {
+            const guestSeeds = guestSeedParam.split(',').map(s => s.trim()).filter(Boolean);
+            if (guestSeeds.length > 0) {
+                const chosenSeed = guestSeeds[Math.floor(Math.random() * Math.min(guestSeeds.length, 4))];
+                const tracks = await metadataPlugin.searchTracks(chosenSeed, 25);
+                if (tracks && tracks.length > 0) {
+                    return res.json({
+                        authenticated: false,
+                        tracks,
+                        personalizedFor: chosenSeed,
+                        source: 'guest_likes',
+                        sources: ['guest_likes']
+                    });
+                }
+            }
+        }
+
         if (!req.user) {
             return res.json({
                 authenticated: false,
@@ -1172,58 +1330,133 @@ router.get('/recommendations', async (req, res) => {
             });
         }
 
-        const metadataPlugin = pluginRegistry.getMetadataPlugin();
-
-        // If authenticated user, personalize based on their likes and history!
         if (isDbConnected()) {
             const userId = req.user.userId;
-            const likedRecords = await EncryptedLikedTrack.find({ userId }).sort({ addedAt: -1 }).limit(10);
-            const historyRecords = await ListeningHistory.find({ userId }).sort({ playedAt: -1 }).limit(10);
 
-            const historyArtists: string[] = [];
-            historyRecords.forEach(h => {
-                if (h.artistName && !historyArtists.includes(h.artistName) && h.artistName !== 'Unknown Artist') {
-                    historyArtists.push(h.artistName);
-                }
-            });
+            // 1. Fetch Followed Artists (explicit user follow, weight 4)
+            const followedRecords = await FollowedArtist.find({ userId }).sort({ followedAt: -1 }).limit(15);
+            const followedArtists = followedRecords.map((r: any) => r.artistName).filter(Boolean);
 
+            // 2. Fetch Liked Songs (weight 3)
+            const likedRecords = await EncryptedLikedTrack.find({ userId }).sort({ addedAt: -1 }).limit(20);
             const likedArtists: string[] = [];
             for (const rec of likedRecords) {
                 const dec = decryptPayload<Track>(rec.ciphertext, rec.iv, rec.tag, userId);
-                if (dec && dec.artists?.[0]?.name && !likedArtists.includes(dec.artists[0].name) && dec.artists[0].name !== 'Unknown Artist') {
+                if (dec && dec.artists?.[0]?.name && dec.artists[0].name !== 'Unknown Artist') {
                     likedArtists.push(dec.artists[0].name);
                 }
             }
 
-            // Combine with recent listening history prioritized
-            const favoriteArtists = Array.from(new Set([...historyArtists, ...likedArtists]));
+            // 3. Fetch User Playlists (weight 2)
+            const playlistRecords = await EncryptedPlaylist.find({ userId }).sort({ updatedAt: -1 }).limit(10);
+            const playlistArtists: string[] = [];
+            for (const pRec of playlistRecords) {
+                const decPlaylist = decryptPayload<Playlist>(pRec.ciphertext, pRec.iv, pRec.tag, userId);
+                if (decPlaylist && Array.isArray(decPlaylist.tracks?.items)) {
+                    for (const item of decPlaylist.tracks.items) {
+                        const aName = item.track?.artists?.[0]?.name;
+                        if (aName && aName !== 'Unknown Artist' && !playlistArtists.includes(aName)) {
+                            playlistArtists.push(aName);
+                        }
+                    }
+                }
+            }
 
-            if (favoriteArtists.length > 0) {
-                // Prefer history artist if available
-                const targetArtist = historyArtists.length > 0
-                    ? historyArtists[Math.floor(Math.random() * Math.min(historyArtists.length, 3))]
-                    : favoriteArtists[Math.floor(Math.random() * favoriteArtists.length)];
+            // 4. Fetch Listening History (weight 2)
+            const historyRecords = await ListeningHistory.find({ userId }).sort({ playedAt: -1 }).limit(15);
+            const historyArtists = historyRecords.map((h: any) => h.artistName).filter((a: any) => a && a !== 'Unknown Artist');
 
-                const personalized = await metadataPlugin.searchTracks(targetArtist, 25);
-                if (personalized && personalized.length > 0) {
+            // Build weighted affinity map across all signals
+            const affinityScores = new Map<string, number>();
+            const recordScore = (artist: string, weight: number) => {
+                const clean = artist.trim();
+                if (!clean) return;
+                affinityScores.set(clean, (affinityScores.get(clean) || 0) + weight);
+            };
+
+            followedArtists.forEach((a: string) => recordScore(a, 4));
+            likedArtists.forEach((a: string) => recordScore(a, 3));
+            playlistArtists.forEach((a: string) => recordScore(a, 2));
+            historyArtists.forEach((a: string) => recordScore(a, 2));
+
+            const sortedSeeds = Array.from(affinityScores.entries())
+                .sort((a, b) => b[1] - a[1])
+                .map(e => e[0]);
+
+            const activeSources: string[] = [];
+            if (followedArtists.length > 0) activeSources.push('followed_artists');
+            if (likedArtists.length > 0) activeSources.push('liked_songs');
+            if (playlistArtists.length > 0) activeSources.push('playlists');
+            if (historyArtists.length > 0) activeSources.push('listening_history');
+
+            if (sortedSeeds.length > 0) {
+                // Select up to 3 distinct seed artists to query for diverse, rich recommendations
+                const topPicks = sortedSeeds.slice(0, 3);
+                const targetSeed = topPicks[Math.floor(Math.random() * topPicks.length)];
+
+                // Search tracks from top affinity seeds in parallel
+                const searchResults = await Promise.allSettled(
+                    topPicks.map(seed => metadataPlugin.searchTracks(seed, 12))
+                );
+
+                const candidateTracks: Track[] = [];
+                for (const r of searchResults) {
+                    if (r.status === 'fulfilled' && Array.isArray(r.value)) {
+                        candidateTracks.push(...r.value);
+                    }
+                }
+
+                // Interleave and deduplicate results
+                const seenIds = new Set<string>();
+                const seenTitles = new Set<string>();
+                const finalTracks: Track[] = [];
+
+                for (const t of candidateTracks) {
+                    if (!t || !t.id || !t.name) continue;
+                    const cleanKey = `${t.name.toLowerCase().trim()}_${(t.artists?.[0]?.name || '').toLowerCase().trim()}`;
+                    if (seenIds.has(t.id) || seenTitles.has(cleanKey)) continue;
+                    seenIds.add(t.id);
+                    seenTitles.add(cleanKey);
+                    finalTracks.push(t);
+                    if (finalTracks.length >= 25) break;
+                }
+
+                if (finalTracks.length > 0) {
+                    let desc = targetSeed;
+                    if (followedArtists.includes(targetSeed)) {
+                        desc = `${targetSeed} (Followed Artist)`;
+                    } else if (likedArtists.includes(targetSeed)) {
+                        desc = `${targetSeed} (Liked Songs)`;
+                    } else if (playlistArtists.includes(targetSeed)) {
+                        desc = `${targetSeed} (Your Playlists)`;
+                    }
+
                     return res.json({
                         authenticated: true,
-                        tracks: personalized,
-                        personalizedFor: targetArtist,
-                        source: historyArtists.includes(targetArtist) ? 'history' : 'likes'
+                        tracks: finalTracks,
+                        personalizedFor: desc,
+                        source: activeSources[0] || 'history',
+                        sources: activeSources,
+                        stats: {
+                            followedArtists: followedArtists.length,
+                            likedSongs: likedRecords.length,
+                            playlists: playlistRecords.length,
+                            historyPlays: historyRecords.length
+                        }
                     });
                 }
             }
         }
 
-        // Fallback for new authenticated account with no history yet
+        // Fallback for new authenticated account with no history or follows yet
         const tracks = await metadataPlugin.searchTracks('Global Pop Hits', 25);
         if (tracks && tracks.length > 0) {
-            return res.json({ authenticated: true, tracks, personalizedFor: 'New Member Mix' });
+            return res.json({ authenticated: true, tracks, personalizedFor: 'New Member Mix', sources: ['charts'] });
         }
         const fallback = await metadataPlugin.getTopTracks();
-        res.json({ authenticated: true, tracks: fallback, personalizedFor: 'Top Charts' });
+        res.json({ authenticated: true, tracks: fallback, personalizedFor: 'Top Charts', sources: ['charts'] });
     } catch (err: any) {
+        console.error('[/api/recommendations] Error:', err);
         res.status(500).json({ error: 'Failed to get recommendations', details: err.message });
     }
 });

@@ -111,6 +111,22 @@ const App: React.FC = () => {
   const [likedTrackIds, setLikedTrackIds] = useState<Set<string>>(new Set());
   const [likedSongsTotal, setLikedSongsTotal] = useState<number>(0);
 
+  // Global followed artists state (synchronized with MongoDB for authenticated accounts)
+  const [followedArtistIds, setFollowedArtistIds] = useState<Set<string>>(() => {
+    try {
+      const saved = localStorage.getItem('slothify_user_followed_artist_ids');
+      if (saved) return new Set(JSON.parse(saved));
+    } catch (e) {}
+    return new Set();
+  });
+  const [followedArtistsList, setFollowedArtistsList] = useState<any[]>(() => {
+    try {
+      const saved = localStorage.getItem('slothify_followed_artist_profiles');
+      if (saved) return Object.values(JSON.parse(saved));
+    } catch (e) {}
+    return [];
+  });
+
   // Check for #player on mount (in case of refresh)
   useEffect(() => {
     if (window.location.hash === '#player') {
@@ -274,6 +290,87 @@ const App: React.FC = () => {
       });
   }, []);
 
+  const fetchFollowedArtists = useCallback(() => {
+    axios.get('/api/me/artists')
+      .then(res => {
+        const items = Array.isArray(res.data?.items) ? res.data.items : [];
+        const ids = new Set<string>();
+        const profilesMap: Record<string, any> = {};
+        items.forEach((a: any) => {
+          if (a && a.id) {
+            ids.add(a.id);
+            profilesMap[a.id] = a;
+          }
+        });
+
+        // For unauthenticated guests only, preserve locally cached followed artists
+        if (!isAuthenticated && ids.size === 0) {
+          try {
+            const saved = localStorage.getItem('slothify_user_followed_artist_ids');
+            if (saved) setFollowedArtistIds(new Set(JSON.parse(saved)));
+            const savedProfiles = localStorage.getItem('slothify_followed_artist_profiles');
+            if (savedProfiles) setFollowedArtistsList(Object.values(JSON.parse(savedProfiles)));
+          } catch (e) {}
+          return;
+        }
+
+        setFollowedArtistIds(ids);
+        setFollowedArtistsList(items);
+        try {
+          localStorage.setItem('slothify_user_followed_artist_ids', JSON.stringify(Array.from(ids)));
+          localStorage.setItem('slothify_followed_artist_profiles', JSON.stringify(profilesMap));
+        } catch (e) {}
+      })
+      .catch(err => {
+        console.warn("Could not fetch followed artists from backend, using local cache:", err);
+      });
+  }, [isAuthenticated]);
+
+  const handleToggleFollowArtist = useCallback((artist: any) => {
+    const artistId = artist.id || artist.artistId;
+    if (!artistId) return;
+
+    const willFollow = !followedArtistIds.has(artistId);
+
+    // 1. Optimistic UI update
+    setFollowedArtistIds(prev => {
+      const next = new Set(prev);
+      if (willFollow) next.add(artistId);
+      else next.delete(artistId);
+      try {
+        localStorage.setItem('slothify_user_followed_artist_ids', JSON.stringify(Array.from(next)));
+      } catch (e) {}
+      return next;
+    });
+
+    setFollowedArtistsList(prev => {
+      let next: any[];
+      if (willFollow) {
+        next = [artist, ...prev.filter(a => (a.id || a.artistId) !== artistId)];
+      } else {
+        next = prev.filter(a => (a.id || a.artistId) !== artistId);
+      }
+      try {
+        const map: Record<string, any> = {};
+        next.forEach(a => { map[a.id || a.artistId] = a; });
+        localStorage.setItem('slothify_followed_artist_profiles', JSON.stringify(map));
+      } catch (e) {}
+      return next;
+    });
+
+    // 2. Persist to MongoDB if authenticated
+    if (isAuthenticated) {
+      axios.post('/api/me/artists', {
+        artistId,
+        artistName: artist.name,
+        artistImage: artist.images?.[0]?.url || artist.image || '',
+        followers: artist.followers?.total || artist.followers || 0
+      }).catch(err => {
+        console.error("Failed to sync followed artist to database:", err);
+      });
+    }
+  }, [followedArtistIds, isAuthenticated]);
+
   // Check stored auth token on mount
   useEffect(() => {
     const token = localStorage.getItem('slothify_auth_token');
@@ -303,12 +400,14 @@ const App: React.FC = () => {
         .finally(() => {
           setIsCheckingAuth(false);
           fetchLikedSongs();
+          fetchFollowedArtists();
         });
     } else {
       setIsCheckingAuth(false);
       fetchLikedSongs();
+      fetchFollowedArtists();
     }
-  }, [fetchLikedSongs]);
+  }, [fetchLikedSongs, fetchFollowedArtists]);
 
   // Ping backend every 8 minutes while browser tab is open to prevent Render free-tier spin-down
   useEffect(() => {
@@ -358,6 +457,22 @@ const App: React.FC = () => {
     } catch (e) { }
 
     fetchLikedSongs();
+
+    // Sync guest followed artists to newly authenticated account in background
+    try {
+      const savedProfiles = localStorage.getItem('slothify_followed_artist_profiles');
+      if (savedProfiles) {
+        const profilesMap = JSON.parse(savedProfiles);
+        const list = Object.values(profilesMap);
+        if (list.length > 0) {
+          axios.post('/api/me/artists/sync', { artists: list })
+            .then(() => fetchFollowedArtists())
+            .catch(e => console.warn('Could not sync guest followed artists:', e));
+        }
+      }
+    } catch (e) {}
+
+    fetchFollowedArtists();
     window.dispatchEvent(new Event('slothify_playlists_updated'));
   };
 
@@ -373,8 +488,12 @@ const App: React.FC = () => {
     });
     setLikedTrackIds(new Set());
     setLikedSongsTotal(0);
+    setFollowedArtistIds(new Set());
+    setFollowedArtistsList([]);
     try {
       localStorage.removeItem('slothify_guest_likes');
+      localStorage.removeItem('slothify_user_followed_artist_ids');
+      localStorage.removeItem('slothify_followed_artist_profiles');
       localStorage.removeItem('slothify_browser_cache_v2');
       localStorage.removeItem('slothify_browser_cache_v1');
     } catch (e) { }
@@ -510,6 +629,9 @@ const App: React.FC = () => {
                     onToggleLike={handleToggleLike}
                     likedTrackIds={likedTrackIds}
                     onOpenTurntable={() => setIsTurntableOpen(true)}
+                    followedArtistIds={followedArtistIds}
+                    followedArtists={followedArtistsList}
+                    onToggleFollow={handleToggleFollowArtist}
                   />
                 } />
                 <Route path="/search" element={
@@ -552,7 +674,12 @@ const App: React.FC = () => {
                   />
                 } />
                 <Route path="/artists" element={
-                  <ArtistsPage />
+                  <ArtistsPage
+                    isAuthenticated={isAuthenticated}
+                    followedArtistIds={followedArtistIds}
+                    onToggleFollow={handleToggleFollowArtist}
+                    followedArtistsList={followedArtistsList}
+                  />
                 } />
                 <Route path="/artist/:artistId" element={
                   <ArtistProfile
@@ -563,6 +690,8 @@ const App: React.FC = () => {
                     likedTrackIds={likedTrackIds}
                     onToggleLike={handleToggleLike}
                     isAuthenticated={isAuthenticated}
+                    followedArtistIds={followedArtistIds}
+                    onToggleFollow={handleToggleFollowArtist}
                   />
                 } />
                 {/* Downloads route commented out for future use

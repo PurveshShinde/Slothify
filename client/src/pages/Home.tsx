@@ -22,6 +22,9 @@ interface HomeProps {
   onToggleLike?: (id: string, track?: Track) => void;
   likedTrackIds?: Set<string>;
   onOpenTurntable?: () => void;
+  followedArtistIds?: Set<string>;
+  followedArtists?: any[];
+  onToggleFollow?: (artist: any) => void;
 }
 
 export interface HeroShowcaseTrack extends Track {
@@ -967,7 +970,10 @@ const Home: React.FC<HomeProps> = ({
   onPlayPause,
   onToggleLike,
   likedTrackIds,
-  onOpenTurntable
+  onOpenTurntable,
+  followedArtistIds,
+  followedArtists = [],
+  onToggleFollow
 }) => {
   const navigate = useNavigate();
   const { cache, setHomeData, setRecommendations } = useCache();
@@ -1005,12 +1011,59 @@ const Home: React.FC<HomeProps> = ({
   const containerRef = useRef<HTMLDivElement>(null);
 
   const fetchAllData = async (isRefresh = false) => {
-    // When NOT logged in: randomize guest feed with International, Hindi, and Other sort songs.
+    // When NOT logged in: check if guest has local likes/follows for instant personalization
     if (!isAuthenticated) {
       randomizeGuestFeed();
       setIsRefreshing(false);
-      setIsLoadingPersonalized(false);
       setPullMoveY(0);
+
+      // Extract guest liked/followed artist names to tailor recommendations without saving anything to server
+      const guestSeedArtists: string[] = [];
+      try {
+        const guestLikes = localStorage.getItem('slothify_guest_likes');
+        if (guestLikes) {
+          const parsed = JSON.parse(guestLikes);
+          if (Array.isArray(parsed)) {
+            parsed.forEach((t: any) => {
+              const aName = t.artists?.[0]?.name;
+              if (aName && aName !== 'Unknown Artist' && !guestSeedArtists.includes(aName)) {
+                guestSeedArtists.push(aName);
+              }
+            });
+          }
+        }
+        const guestFollows = localStorage.getItem('slothify_followed_artist_profiles');
+        if (guestFollows) {
+          const parsed = JSON.parse(guestFollows);
+          Object.values(parsed).forEach((a: any) => {
+            if (a.name && !guestSeedArtists.includes(a.name)) {
+              guestSeedArtists.unshift(a.name);
+            }
+          });
+        }
+      } catch (e) {}
+
+      if (guestSeedArtists.length > 0 && (isRefresh || !cache.recommendations || cache.recommendations.length === 0)) {
+        setIsLoadingPersonalized(true);
+        axios.get(`/api/recommendations?seed_artists=${encodeURIComponent(guestSeedArtists.slice(0, 5).join(','))}`)
+          .then(res => {
+            if (Array.isArray(res.data?.tracks) && res.data.tracks.length > 0) {
+              const info = {
+                personalizedFor: res.data.personalizedFor || guestSeedArtists[0],
+                source: 'guest_likes'
+              };
+              setRecommendedTracks(res.data.tracks);
+              setRecommendationInfo(info);
+              setRecommendations(res.data.tracks, info);
+            }
+          })
+          .catch(() => {})
+          .finally(() => {
+            setIsLoadingPersonalized(false);
+          });
+      } else {
+        setIsLoadingPersonalized(false);
+      }
       return;
     }
 
@@ -1576,6 +1629,58 @@ const Home: React.FC<HomeProps> = ({
             >
               Sign In
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* 2.5 FOLLOWED ARTISTS QUICK ROW (Active whenever user follows artists) */}
+      {followedArtists && followedArtists.length > 0 && (
+        <div className="space-y-3.5 animate-in fade-in duration-300">
+          <div className="flex items-center justify-between px-0.5">
+            <div className="flex items-center space-x-2">
+              <h2 className="text-base md:text-lg font-bold text-white tracking-tight flex items-center gap-2">
+                <span>Artists You Follow</span>
+                <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-cyan-500/15 text-cyan-300 border border-cyan-500/30">
+                  {followedArtists.length}
+                </span>
+              </h2>
+            </div>
+            <button
+              onClick={() => navigate('/artists')}
+              className="text-xs font-medium text-[#8a8489] hover:text-white transition-colors cursor-pointer"
+            >
+              See all
+            </button>
+          </div>
+
+          <div className="flex items-center gap-4 overflow-x-auto pb-2 scrollbar-hide pt-1">
+            {followedArtists.map((artist: any) => {
+              const artistId = artist.id || artist.artistId;
+              const imgUrl = artist.images?.[0]?.url || artist.image || artist.artistImage;
+              return (
+                <div
+                  key={artistId}
+                  onClick={() => navigate(`/artist/${encodeURIComponent(artistId)}`, { state: { artist } })}
+                  className="flex flex-col items-center flex-shrink-0 group cursor-pointer w-20 md:w-24 text-center select-none"
+                >
+                  <div className="relative w-16 h-16 md:w-20 md:h-20 rounded-full overflow-hidden bg-black/40 border border-white/10 group-hover:border-cyan-400/60 transition-all p-0.5 shadow-lg group-hover:scale-105">
+                    <img
+                      src={getOptimizedImageUrl(imgUrl, '150')}
+                      alt={artist.name || artist.artistName}
+                      onError={(e) => handleImageError(e, 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=200')}
+                      className="w-full h-full rounded-full object-cover"
+                      loading="lazy"
+                    />
+                  </div>
+                  <span className="mt-2 text-xs font-medium text-white group-hover:text-cyan-300 truncate w-full transition-colors">
+                    {artist.name || artist.artistName}
+                  </span>
+                  <span className="text-[10px] text-slate-400 font-light truncate w-full">
+                    Artist
+                  </span>
+                </div>
+              );
+            })}
           </div>
         </div>
       )}
