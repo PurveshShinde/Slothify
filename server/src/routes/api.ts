@@ -1044,21 +1044,32 @@ router.get('/browse/categories/:id/playlists', async (req, res) => {
 router.get('/me/tracks', async (req, res) => {
     try {
         if (req.user && isDbConnected()) {
+            const { idsOnly } = req.query;
+            if (idsOnly === 'true' || idsOnly === '1') {
+                const records = await EncryptedLikedTrack.find(
+                    { userId: req.user.userId },
+                    { trackId: 1, addedAt: 1 }
+                ).sort({ addedAt: -1 }).lean();
+                const ids = records.map((r: any) => r.trackId).filter(Boolean);
+                return res.json({ ids, total: ids.length, items: [] });
+            }
+
             const records = await EncryptedLikedTrack.find({ userId: req.user.userId }).sort({ addedAt: -1 });
             const tracks: Track[] = [];
             for (const rec of records) {
                 const decrypted = decryptPayload<Track>(rec.ciphertext, rec.iv, rec.tag, req.user.userId);
                 if (decrypted) tracks.push(decrypted);
             }
-            return res.json({ items: tracks, total: tracks.length });
+            return res.json({ items: tracks, total: tracks.length, ids: records.map((r: any) => r.trackId) });
         }
 
         if (isDbConnected()) {
-            return res.json({ items: [], total: 0 });
+            return res.json({ items: [], total: 0, ids: [] });
         }
 
         const result = localLibrary.getLikedTracks();
-        res.json(result);
+        const ids = (result.items || []).map((t: any) => t.id).filter(Boolean);
+        res.json({ ...result, ids });
     } catch (err: any) {
         res.status(500).json({ error: 'Failed to get saved tracks', details: err.message });
     }

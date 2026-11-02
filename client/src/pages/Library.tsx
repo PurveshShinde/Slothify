@@ -23,9 +23,23 @@ const Library: React.FC<LibraryProps> = ({ isAuthenticated, user, likedTrackIds,
   const { isOcean } = useTheme();
   const { cache, setLibraryPlaylists, removePlaylistFromCache } = useCache();
   const [playlists, setPlaylists] = useState<Playlist[]>(() => {
-    return isAuthenticated ? (cache.libraryPlaylists || []) : [];
+    if (!isAuthenticated) return [];
+    if (cache.libraryPlaylists && cache.libraryPlaylists.length > 0) return cache.libraryPlaylists;
+    try {
+      const stored = localStorage.getItem('slothify_user_playlists_cache');
+      if (stored) return JSON.parse(stored);
+    } catch (e) {}
+    return [];
   });
-  const [isLoading, setIsLoading] = useState(isAuthenticated && !cache.libraryPlaylists);
+  const [isLoading, setIsLoading] = useState(() => {
+    if (!isAuthenticated) return false;
+    if (cache.libraryPlaylists && cache.libraryPlaylists.length > 0) return false;
+    try {
+      const stored = localStorage.getItem('slothify_user_playlists_cache');
+      if (stored) return false;
+    } catch (e) {}
+    return true;
+  });
   const [activeFilter, setActiveFilter] = useState<FilterType | null>(initialFilter || null);
   const [playlistToDelete, setPlaylistToDelete] = useState<any | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -39,7 +53,11 @@ const Library: React.FC<LibraryProps> = ({ isAuthenticated, user, likedTrackIds,
       console.error('Failed to delete playlist on server:', err);
     } finally {
       removePlaylistFromCache(playlistToDelete.id);
-      setPlaylists(prev => prev.filter(p => p.id !== playlistToDelete.id));
+      setPlaylists(prev => {
+        const next = prev.filter(p => p.id !== playlistToDelete.id);
+        try { localStorage.setItem('slothify_user_playlists_cache', JSON.stringify(next)); } catch (e) {}
+        return next;
+      });
       window.dispatchEvent(new Event('slothify_playlists_updated'));
       setIsDeleting(false);
       setPlaylistToDelete(null);
@@ -107,19 +125,21 @@ const Library: React.FC<LibraryProps> = ({ isAuthenticated, user, likedTrackIds,
     }
     if (!isRefresh && cache.libraryPlaylists) return;
 
-    setIsLoading(!isRefresh);
+    if (!playlists.length) {
+      setIsLoading(!isRefresh);
+    }
     axios.get('/api/me/playlists')
       .then(res => {
         if (Array.isArray(res.data)) {
           setPlaylists(res.data);
           setLibraryPlaylists(res.data);
-        } else {
-          setPlaylists([]);
+          try {
+            localStorage.setItem('slothify_user_playlists_cache', JSON.stringify(res.data));
+          } catch (e) {}
         }
       })
       .catch(err => {
-        console.error(err);
-        setPlaylists([]);
+        console.error('Failed to fetch library playlists:', err);
       })
       .finally(() => {
         setIsLoading(false);
@@ -332,6 +352,13 @@ const Library: React.FC<LibraryProps> = ({ isAuthenticated, user, likedTrackIds,
     </div>
   );
 
+  // Robust liked songs count resolution: prevents "0 songs" glitch on hard refresh
+  const cachedLikedTracks = cache.playlistDetails?.['liked']?.tracks;
+  const cachedLikedCount = Array.isArray(cachedLikedTracks)
+    ? cachedLikedTracks.length
+    : (cache.playlistDetails?.['liked']?.playlist?.tracks?.total || 0);
+  const displayLikedCount = likedSongsTotal || likedTrackIds.size || cachedLikedCount || 0;
+
   return (
     <div
       ref={containerRef}
@@ -368,7 +395,7 @@ const Library: React.FC<LibraryProps> = ({ isAuthenticated, user, likedTrackIds,
             <h3 className="font-bold text-white text-base truncate group-hover:text-blue-400 transition-colors">Liked Songs</h3>
             <div className="flex items-center text-sm text-slate-400 mt-0.5 space-x-1.5">
               <Pin size={12} className={`${isOcean ? 'text-blue-400 fill-blue-400' : 'text-[#f5d0b5] fill-[#f5d0b5]'} rotate-45`} />
-              <span className="truncate">Playlist • {likedSongsTotal} songs</span>
+              <span className="truncate">Playlist • {displayLikedCount} {displayLikedCount === 1 ? 'song' : 'songs'}</span>
             </div>
           </div>
         </div>
@@ -403,7 +430,7 @@ const Library: React.FC<LibraryProps> = ({ isAuthenticated, user, likedTrackIds,
                 <div className="flex-1 min-w-0 flex flex-col justify-center">
                   <h3 className="font-semibold text-white text-sm truncate group-hover:text-blue-400 transition-colors">{playlist.name}</h3>
                   <p className="text-xs text-[#8a8489] truncate mt-0.5">
-                    Playlist • {playlist.owner?.display_name || 'Slothify'}
+                    Playlist • {playlist.tracks?.total !== undefined ? `${playlist.tracks.total} ${playlist.tracks.total === 1 ? 'song' : 'songs'} • ` : ''}{playlist.owner?.display_name || 'Slothify'}
                   </p>
                 </div>
               </div>

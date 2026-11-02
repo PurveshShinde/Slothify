@@ -176,6 +176,11 @@ const PlaylistDetail: React.FC<PlaylistDetailProps> = ({
         setPlaylist(fetchedPlaylist);
         setTracks(fetchedTracks);
         setPlaylistDetail(id, { playlist: fetchedPlaylist, tracks: fetchedTracks });
+        try {
+          localStorage.setItem('slothify_liked_songs_total', String(fetchedTracks.length));
+          localStorage.setItem('slothify_liked_track_ids', JSON.stringify(fetchedTracks.map((t: any) => t.id)));
+          window.dispatchEvent(new Event('slothify_likes_updated'));
+        } catch (e) {}
       }
     } catch (err) {
       console.error(err);

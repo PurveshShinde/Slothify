@@ -108,8 +108,59 @@ const App: React.FC = () => {
   }, [isPlayerExpanded]);
 
   const [isQueueVisible, setIsQueueVisible] = useState(false);
-  const [likedTrackIds, setLikedTrackIds] = useState<Set<string>>(new Set());
-  const [likedSongsTotal, setLikedSongsTotal] = useState<number>(0);
+  const [likedTrackIds, setLikedTrackIds] = useState<Set<string>>(() => {
+    try {
+      const saved = localStorage.getItem('slothify_liked_track_ids');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return new Set(parsed);
+      }
+      const guestSaved = localStorage.getItem('slothify_guest_likes');
+      if (guestSaved) {
+        const guestParsed = JSON.parse(guestSaved);
+        if (Array.isArray(guestParsed) && guestParsed.length > 0) {
+          return new Set(guestParsed.map((t: any) => t?.id).filter(Boolean));
+        }
+      }
+      const cacheSaved = localStorage.getItem('slothify_browser_cache_v11');
+      if (cacheSaved) {
+        const cacheParsed = JSON.parse(cacheSaved);
+        const likedTracks = cacheParsed?.playlistDetails?.['liked']?.tracks;
+        if (Array.isArray(likedTracks) && likedTracks.length > 0) {
+          return new Set(likedTracks.map((t: any) => t?.id).filter(Boolean));
+        }
+      }
+    } catch (e) {}
+    return new Set();
+  });
+  const [likedSongsTotal, setLikedSongsTotal] = useState<number>(() => {
+    try {
+      const saved = localStorage.getItem('slothify_liked_songs_total');
+      if (saved !== null && saved !== undefined && saved !== '') {
+        const val = parseInt(saved, 10);
+        if (!isNaN(val) && val > 0) return val;
+      }
+      const idsSaved = localStorage.getItem('slothify_liked_track_ids');
+      if (idsSaved) {
+        const parsed = JSON.parse(idsSaved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed.length;
+      }
+      const guestSaved = localStorage.getItem('slothify_guest_likes');
+      if (guestSaved) {
+        const guestParsed = JSON.parse(guestSaved);
+        if (Array.isArray(guestParsed) && guestParsed.length > 0) return guestParsed.length;
+      }
+      const cacheSaved = localStorage.getItem('slothify_browser_cache_v11');
+      if (cacheSaved) {
+        const cacheParsed = JSON.parse(cacheSaved);
+        const likedTracks = cacheParsed?.playlistDetails?.['liked']?.tracks;
+        if (Array.isArray(likedTracks) && likedTracks.length > 0) return likedTracks.length;
+        const total = cacheParsed?.playlistDetails?.['liked']?.playlist?.tracks?.total;
+        if (typeof total === 'number' && total > 0) return total;
+      }
+    } catch (e) {}
+    return 0;
+  });
 
   // Global followed artists state (synchronized with MongoDB for authenticated accounts)
   const [followedArtistIds, setFollowedArtistIds] = useState<Set<string>>(() => {
@@ -222,11 +273,20 @@ const App: React.FC = () => {
       const next = new Set(prev);
       if (wasLiked) {
         next.delete(trackId);
-        setLikedSongsTotal(t => Math.max(0, t - 1));
+        setLikedSongsTotal(t => {
+          const newTotal = Math.max(0, t - 1);
+          try { localStorage.setItem('slothify_liked_songs_total', String(newTotal)); } catch (e) {}
+          return newTotal;
+        });
       } else {
         next.add(trackId);
-        setLikedSongsTotal(t => t + 1);
+        setLikedSongsTotal(t => {
+          const newTotal = t + 1;
+          try { localStorage.setItem('slothify_liked_songs_total', String(newTotal)); } catch (e) {}
+          return newTotal;
+        });
       }
+      try { localStorage.setItem('slothify_liked_track_ids', JSON.stringify(Array.from(next))); } catch (e) {}
       return next;
     });
 
@@ -253,12 +313,14 @@ const App: React.FC = () => {
       .then(response => {
         if (response.data.total !== undefined) {
           setLikedSongsTotal(response.data.total);
+          try { localStorage.setItem('slothify_liked_songs_total', String(response.data.total)); } catch (e) {}
         }
         if (response.data.liked !== undefined) {
           setLikedTrackIds(prev => {
             const next = new Set(prev);
             if (response.data.liked) next.add(trackId);
             else next.delete(trackId);
+            try { localStorage.setItem('slothify_liked_track_ids', JSON.stringify(Array.from(next))); } catch (e) {}
             return next;
           });
         }
@@ -269,11 +331,14 @@ const App: React.FC = () => {
   }, [currentTrack, queue, likedTrackIds]);
 
   const fetchLikedSongs = useCallback(() => {
-    axios.get('/api/me/tracks')
+    // Ultra-fast query using idsOnly=true: zero decryption overhead on the server, instant response!
+    axios.get('/api/me/tracks?idsOnly=true')
       .then(response => {
-        const { items, total } = response.data;
+        const { ids: returnedIds, items, total } = response.data;
         const ids = new Set<string>();
-        if (Array.isArray(items)) {
+        if (Array.isArray(returnedIds)) {
+          returnedIds.forEach((id: string) => { if (id) ids.add(id); });
+        } else if (Array.isArray(items)) {
           items.forEach((track: any) => {
             if (track && track.id) ids.add(track.id);
           });
@@ -288,13 +353,24 @@ const App: React.FC = () => {
               localLikes.forEach(t => ids.add(t.id));
               setLikedTrackIds(ids);
               setLikedSongsTotal(localLikes.length);
+              try {
+                localStorage.setItem('slothify_liked_track_ids', JSON.stringify(Array.from(ids)));
+                localStorage.setItem('slothify_liked_songs_total', String(localLikes.length));
+              } catch (e) {}
               return;
             }
           } catch (e) { }
         }
 
+        const finalTotal = total !== undefined ? total : ids.size;
         setLikedTrackIds(ids);
-        setLikedSongsTotal(total !== undefined ? total : ids.size);
+        setLikedSongsTotal(finalTotal);
+
+        // Persist to localStorage so data survives hard refresh instantly
+        try {
+          localStorage.setItem('slothify_liked_track_ids', JSON.stringify(Array.from(ids)));
+          localStorage.setItem('slothify_liked_songs_total', String(finalTotal));
+        } catch (e) {}
       })
       .catch(err => {
         console.error("Failed to fetch liked songs from backend, checking browser cache:", err);
@@ -305,10 +381,14 @@ const App: React.FC = () => {
             const ids = new Set<string>(localLikes.map(t => t.id));
             setLikedTrackIds(ids);
             setLikedSongsTotal(ids.size);
+            try {
+              localStorage.setItem('slothify_liked_track_ids', JSON.stringify(Array.from(ids)));
+              localStorage.setItem('slothify_liked_songs_total', String(ids.size));
+            } catch (e) {}
           }
         } catch (e) { }
       });
-  }, []);
+  }, [isAuthenticated]);
 
   const fetchFollowedArtists = useCallback(() => {
     axios.get('/api/me/artists')
@@ -434,11 +514,15 @@ const App: React.FC = () => {
     }
   }, [followedArtistIds, followedArtistsList, isAuthenticated]);
 
-  // Check stored auth token on mount
+  // Check stored auth token on mount & fetch user library state in parallel
   useEffect(() => {
     const token = localStorage.getItem('slothify_auth_token');
     if (token) {
       axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+      // Fetch liked songs & artists immediately in parallel — no waiting for /api/auth/me!
+      fetchLikedSongs();
+      fetchFollowedArtists();
+
       axios.get('/api/auth/me')
         .then(res => {
           if (res.data.authenticated) {
@@ -459,11 +543,11 @@ const App: React.FC = () => {
           localStorage.removeItem('slothify_user_profile');
           delete axios.defaults.headers.common['Authorization'];
           setIsAuthenticated(false);
+          setLikedTrackIds(new Set());
+          setLikedSongsTotal(0);
         })
         .finally(() => {
           setIsCheckingAuth(false);
-          fetchLikedSongs();
-          fetchFollowedArtists();
         });
     } else {
       setIsCheckingAuth(false);
@@ -471,6 +555,15 @@ const App: React.FC = () => {
       fetchFollowedArtists();
     }
   }, [fetchLikedSongs, fetchFollowedArtists]);
+
+  // Synchronize liked songs count/IDs when any component modifies likes
+  useEffect(() => {
+    const handleLikesUpdated = () => {
+      fetchLikedSongs();
+    };
+    window.addEventListener('slothify_likes_updated', handleLikesUpdated);
+    return () => window.removeEventListener('slothify_likes_updated', handleLikesUpdated);
+  }, [fetchLikedSongs]);
 
   // Ping backend every 8 minutes while browser tab is open to prevent Render free-tier spin-down
   useEffect(() => {

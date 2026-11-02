@@ -95,13 +95,11 @@ Planned capabilities for the native mobile application:
 <div align="center">
 
 <a href="https://github.com/PurveshShinde">
-  <img src="https://avatars.githubusercontent.com/PurveshShinde?s=120" width="120" height="120" alt="Purvesh Shinde" style="border-radius: 50%;" />
+  <img src="https://wsrv.nl/?url=github.com/PurveshShinde.png&w=240&h=240&mask=circle&fit=cover" width="120" height="120" alt="Purvesh Shinde" />
 </a>
 
 ### **[Purvesh Shinde](https://github.com/PurveshShinde)**
 *Lead Developer*
-
-[![GitHub](https://img.shields.io/badge/GitHub-PurveshShinde-181717?style=flat-square&logo=github)](https://github.com/PurveshShinde)
 
 </div>
 

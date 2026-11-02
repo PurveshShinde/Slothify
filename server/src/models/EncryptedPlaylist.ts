@@ -39,4 +39,7 @@ const EncryptedPlaylistSchema = new Schema<IEncryptedPlaylist>({
     }
 });
 
+// Index for fetching all playlists sorted by updatedAt (used by /api/me/playlists)
+EncryptedPlaylistSchema.index({ userId: 1, updatedAt: -1 });
+
 export const EncryptedPlaylist = mongoose.models.EncryptedPlaylist || mongoose.model<IEncryptedPlaylist>('EncryptedPlaylist', EncryptedPlaylistSchema);
