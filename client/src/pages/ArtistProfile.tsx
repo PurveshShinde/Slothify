@@ -22,6 +22,7 @@ interface ArtistData {
   id: string;
   name: string;
   coverImage: string;
+  headerImage?: string;
   images?: { url: string }[];
   monthlyListeners: number;
   followers?: number | { total: number };
@@ -265,21 +266,37 @@ export default function ArtistProfile({
       </div>
 
       {/* Artist Profile Header Hero */}
-      <div className={`relative rounded-3xl overflow-hidden p-6 md:p-10 border border-white/10 shadow-2xl backdrop-blur-xl transition-all ${
-        isOcean 
+      <div className={`relative rounded-3xl overflow-hidden p-6 md:p-10 border border-white/10 shadow-2xl backdrop-blur-xl transition-all min-h-[260px] md:min-h-[300px] flex flex-col justify-end ${
+        !artist.headerImage ? (isOcean 
           ? 'bg-gradient-to-br from-[#0c1d3f]/90 via-[#0a152d]/80 to-[#040e1a]/95' 
-          : 'bg-gradient-to-br from-[#2a170f]/90 via-[#180f0a]/80 to-[#0f0704]/95'
+          : 'bg-gradient-to-br from-[#2a170f]/90 via-[#180f0a]/80 to-[#0f0704]/95') : ''
       }`}>
+        {/* Authentic Spotify Widescreen Header Background */}
+        {artist.headerImage && (
+          <div className="absolute inset-0 z-0 overflow-hidden pointer-events-none">
+            <img
+              src={artist.headerImage}
+              alt=""
+              className="w-full h-full object-cover object-top filter brightness-[0.70] transform scale-105"
+            />
+            {/* Ambient vignette and smooth fade overlay matching Spotify */}
+            <div className="absolute inset-0 bg-gradient-to-t from-black/95 via-black/40 to-black/20" />
+            <div className={`absolute inset-0 opacity-30 mix-blend-multiply ${
+              isOcean ? 'bg-blue-950' : 'bg-[#180f0a]'
+            }`} />
+          </div>
+        )}
+
         {/* Ambient Glow */}
         <div 
-          className={`absolute -top-24 -left-24 w-80 h-80 rounded-full blur-3xl pointer-events-none opacity-40 ${
+          className={`absolute -top-24 -left-24 w-80 h-80 rounded-full blur-3xl pointer-events-none opacity-40 z-0 ${
             isOcean ? 'bg-blue-600' : 'bg-[#c87d46]'
           }`} 
         />
 
-        <div className="relative z-10 flex flex-col md:flex-row items-center md:items-end gap-6 md:gap-10">
+        <div className="relative z-10 flex flex-col md:flex-row items-center md:items-end gap-6 md:gap-8">
           {/* Artist Portrait */}
-          <div className="relative group w-40 h-40 md:w-56 md:h-56 rounded-full overflow-hidden shadow-2xl ring-4 ring-white/15 flex-shrink-0 bg-black/40">
+          <div className="relative group w-36 h-36 md:w-48 md:h-48 rounded-full overflow-hidden shadow-2xl ring-4 ring-white/20 flex-shrink-0 bg-black/40">
             <img
               src={getOptimizedImageUrl(artist.coverImage || artist.images?.[0]?.url, '500') || `https://ui-avatars.com/api/?name=${encodeURIComponent(artist.name)}&background=181824&color=f5d0b5&size=500&bold=true`}
               alt={artist.name}
@@ -407,11 +424,11 @@ export default function ArtistProfile({
               const isLiked = likedTrackIds?.has(track.id);
               const artistAvatar = artist.coverImage || artist.images?.[0]?.url;
               let rawThumb = track.thumbnail || track.album?.images?.[0]?.url;
-              if (rawThumb && artistAvatar && (rawThumb === artistAvatar || rawThumb.includes('ab676161'))) {
-                rawThumb = track.album?.images?.find(i => i.url && i.url !== artistAvatar && !i.url.includes('ab676161'))?.url || '';
+              if (rawThumb && (rawThumb.includes('unsplash.com') || (artistAvatar && (rawThumb === artistAvatar || rawThumb.includes('ab676161'))))) {
+                rawThumb = track.album?.images?.find(i => i.url && i.url !== artistAvatar && !i.url.includes('ab676161') && !i.url.includes('unsplash.com'))?.url || '';
               }
-              const thumbUrl = getOptimizedImageUrl(rawThumb, '150') || 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=150';
               const displayTitle = track.title || track.name;
+              const thumbUrl = getOptimizedImageUrl(rawThumb, '150') || `https://ui-avatars.com/api/?name=${encodeURIComponent(displayTitle)}&background=181824&color=f5d0b5&size=150&bold=true`;
               const displayDuration = track.duration || '3:30';
 
               return (
@@ -451,7 +468,7 @@ export default function ArtistProfile({
                       loading="lazy"
                       alt={displayTitle}
                       onError={(e) => {
-                        (e.target as HTMLImageElement).src = 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=150';
+                        (e.target as HTMLImageElement).src = `https://ui-avatars.com/api/?name=${encodeURIComponent(displayTitle)}&background=181824&color=f5d0b5&size=150&bold=true`;
                       }}
                       className="w-full h-full object-cover"
                     />

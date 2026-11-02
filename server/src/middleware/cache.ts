@@ -101,7 +101,7 @@ export const artistTracksCacheMiddleware = createCacheMiddleware(
     86400, // 24 hours
     (req: Request) => {
         const id = (req.params.id || '').toLowerCase().trim();
-        return id ? `artist:tracks:${id}` : null;
+        return id ? `artist:tracks:v2:${id}` : null;
     }
 );
 

@@ -306,13 +306,24 @@ export async function searchSpotifyArtists(cleanQuery: string, limit: number = 2
     }
 }
 
-const ARTIST_OVERVIEW_CACHE = new Map<string, { id: string; name: string; followers: number; monthlyListeners: number; avatarUrl: string; headerUrl: string; verified: boolean }>();
+export interface SpotifyArtistOverviewData {
+    id: string;
+    name: string;
+    followers: number;
+    monthlyListeners: number;
+    avatarUrl: string;
+    headerUrl: string;
+    verified: boolean;
+    topTracks?: Track[];
+}
+
+const ARTIST_OVERVIEW_CACHE = new Map<string, SpotifyArtistOverviewData>();
 const PENDING_OVERVIEWS = new Map<string, Promise<any>>();
 
 /**
  * Fetch official Spotify Artist Overview (authentic follower counts, monthly listeners, and ultra-res portraits)
  */
-export async function fetchSpotifyArtistOverview(artistId: string): Promise<{ id: string; name: string; followers: number; monthlyListeners: number; avatarUrl: string; headerUrl: string; verified: boolean } | null> {
+export async function fetchSpotifyArtistOverview(artistId: string): Promise<SpotifyArtistOverviewData | null> {
     if (!artistId) return null;
     if (ARTIST_OVERVIEW_CACHE.has(artistId)) {
         return ARTIST_OVERVIEW_CACHE.get(artistId)!;
@@ -360,6 +371,28 @@ export async function fetchSpotifyArtistOverview(artistId: string): Promise<{ id
             const headerSources = union.visuals?.headerImage?.sources || [];
             const headerUrl = headerSources[0]?.url || '';
 
+            const topTracks: Track[] = (union.discography?.topTracks?.items || []).map((i: any) => {
+                const tr = i.track;
+                if (!tr) return null;
+                const coverSources = tr.albumOfTrack?.coverArt?.sources || [];
+                // Upgrade to crystal clear 640x640 (b273)
+                const cover = coverSources.find((s: any) => s.url?.includes('b273'))?.url
+                    || coverSources[0]?.url?.replace('ab67616d00001e02', 'ab67616d0000b273')
+                    || coverSources[0]?.url || '';
+                return {
+                    id: tr.id || tr.uri?.replace('spotify:track:', '') || '',
+                    uri: tr.uri || `spotify:track:${tr.id}`,
+                    name: tr.name || 'Unknown Track',
+                    artists: (tr.artists?.items || []).map((a: any) => ({ name: a.profile?.name || '' })).filter((a: any) => a.name),
+                    album: {
+                        name: tr.albumOfTrack?.name || tr.name,
+                        images: cover ? [{ url: cover }] : []
+                    },
+                    duration_ms: tr.duration?.totalMilliseconds || 180000,
+                    preview_url: null
+                };
+            }).filter(Boolean) as Track[];
+
             const result = {
                 id: union.id || artistId,
                 name: union.profile?.name || '',
@@ -367,7 +400,8 @@ export async function fetchSpotifyArtistOverview(artistId: string): Promise<{ id
                 monthlyListeners: typeof union.stats?.monthlyListeners === 'number' ? union.stats.monthlyListeners : 0,
                 avatarUrl,
                 headerUrl,
-                verified: !!union.profile?.verified
+                verified: !!union.profile?.verified,
+                topTracks
             };
 
             ARTIST_OVERVIEW_CACHE.set(artistId, result);
@@ -759,11 +793,13 @@ const TOP_ARTIST_SPOTIFY_IDS: Record<string, string> = {
 
 interface ArtistMeta {
     imageUrl: string;
+    headerUrl?: string;
     followers: number;
     monthlyListeners?: number;
     genres: string[];
     bio?: string;
     verified?: boolean;
+    topTracks?: Track[];
 }
 
 const ARTIST_META_CACHE = new Map<string, ArtistMeta>();
@@ -910,11 +946,13 @@ async function resolveArtistMetadata(artistName: string): Promise<ArtistMeta> {
 
     const normalizedClean = norm.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
     let imageUrl = TOP_ARTIST_PROFILES[norm] || TOP_ARTIST_PROFILES[normalizedClean] || '';
+    let headerUrl = '';
     let followers = 0;
     let monthlyListeners = 0;
     let bio: string | undefined = undefined;
     let verified = false;
     let genres = ['Pop', 'Top Hits'];
+    let topTracks: Track[] = [];
 
     // 1. Resolve official Spotify Artist ID if not known
     let spotifyId = TOP_ARTIST_SPOTIFY_IDS[norm] || TOP_ARTIST_SPOTIFY_IDS[normalizedClean];
@@ -945,10 +983,14 @@ async function resolveArtistMetadata(artistName: string): Promise<ArtistMeta> {
                 }
                 if (overview.avatarUrl) {
                     imageUrl = overview.avatarUrl;
-                } else if (overview.headerUrl && !imageUrl) {
-                    imageUrl = overview.headerUrl;
+                }
+                if (overview.headerUrl) {
+                    headerUrl = overview.headerUrl;
                 }
                 verified = overview.verified;
+                if (overview.topTracks && overview.topTracks.length > 0) {
+                    topTracks = overview.topTracks;
+                }
             }
         } catch (e) {}
     }
@@ -957,7 +999,7 @@ async function resolveArtistMetadata(artistName: string): Promise<ArtistMeta> {
         imageUrl = `https://ui-avatars.com/api/?name=${encodeURIComponent(artistName)}&background=181824&color=f5d0b5&size=500&bold=true`;
     }
 
-    const meta: ArtistMeta = { imageUrl, followers, monthlyListeners, genres, bio, verified };
+    const meta: ArtistMeta = { imageUrl, headerUrl: headerUrl || imageUrl, followers, monthlyListeners, genres, bio, verified, topTracks };
     ARTIST_META_CACHE.set(norm, meta);
     return meta;
 }
@@ -1963,44 +2005,15 @@ export class SpotifyScraperPlugin implements MetadataPlugin {
 
         const candidateTracks: Track[] = [];
 
-        // 0. Official Spotify embed popular tracks
-        const targetLower = cleanTarget.toLowerCase();
-        let spId = TOP_ARTIST_SPOTIFY_IDS[targetLower] || (artistId.length === 22 && !artistId.includes('_') ? artistId : null);
-        if (!spId) {
-            spId = await resolveSpotifyArtistId(cleanTarget);
+        // 0. Authentic Spotify Pathfinder Top Tracks (authentic 640x640 artwork directly from Spotify CDN)
+        const meta = await resolveArtistMetadata(cleanTarget);
+        if (meta.topTracks && meta.topTracks.length > 0) {
+            candidateTracks.push(...meta.topTracks);
         }
 
-        if (spId) {
-            try {
-                const spData = await withTimeout(scrapeSpotifyArtistEmbed(spId), 1200).catch(() => null);
-                if (spData?.trackList && spData.trackList.length > 0) {
-                    const tracksWithCovers = await Promise.all(spData.trackList.map(async (t: any) => {
-                        const trackId = t.uri ? t.uri.replace('spotify:track:', '') : '';
-                        let coverUrl = trackId ? await withTimeout(resolveSpotifyTrackCover(trackId), 600).catch(() => null) : null;
-                        if (!coverUrl) {
-                            coverUrl = 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=300';
-                        }
-                        return {
-                            id: trackId || String(Math.random()),
-                            uri: t.uri || `spotify:track:${trackId}`,
-                            name: t.title || 'Unknown Track',
-                            artists: [{ name: t.subtitle || cleanTarget }],
-                            album: {
-                                name: t.title || 'Popular Release',
-                                images: [{ url: coverUrl }]
-                            },
-                            duration_ms: t.duration || 180000,
-                            preview_url: t.audioPreview?.url || null
-                        };
-                    }));
-                    candidateTracks.push(...tracksWithCovers);
-                }
-            } catch (err: any) {}
-        }
-
-        // 1. First priority: Spotube Spotify search with artist prefix to get official catalog tracks
+        // 1. Supplement with Spotube Spotify search with artist prefix to get additional official catalog tracks
         try {
-            const spotubeArtistTracks = await searchSpotubeSpotifyTracks(`artist:${cleanTarget}`, 40);
+            const spotubeArtistTracks = await searchSpotubeSpotifyTracks(`artist:${cleanTarget}`, 35);
             if (Array.isArray(spotubeArtistTracks)) {
                 candidateTracks.push(...spotubeArtistTracks);
             }
@@ -2008,14 +2021,16 @@ export class SpotifyScraperPlugin implements MetadataPlugin {
             console.warn('[SpotifyScraper] Spotube artist query notice:', err.message);
         }
 
-        // 2. Also search YouTube Innertube for official audio
-        try {
-            const ytTracks = await searchYouTubeInnertubeTracks(`${cleanTarget} official audio`, 30);
-            if (Array.isArray(ytTracks)) {
-                candidateTracks.push(...ytTracks);
+        // 2. Also search YouTube Innertube for official audio if catalog needs more tracks
+        if (candidateTracks.length < 15) {
+            try {
+                const ytTracks = await searchYouTubeInnertubeTracks(`${cleanTarget} official audio`, 20);
+                if (Array.isArray(ytTracks)) {
+                    candidateTracks.push(...ytTracks);
+                }
+            } catch (err: any) {
+                console.warn('[SpotifyScraper] YouTube artist search notice:', err.message);
             }
-        } catch (err: any) {
-            console.warn('[SpotifyScraper] YouTube artist search notice:', err.message);
         }
 
         const junkRegex = /\b(tribute|karaoke|instrumental\s*version|backing\s*track|8-?bit|16-?bit|type\s*beat|string\s*quartet|in\s*the\s*style\s*of|behind\s*the\s*scenes|vevo\s*footnotes|fashion\s*show|lollapalooza|interview|documentary|full\s*set|festival\s*performance)\b/i;
@@ -2076,12 +2091,11 @@ export class SpotifyScraperPlugin implements MetadataPlugin {
                 .replace(/\s*[-–—]\s*(closed-captioned|official\s*video|official\s*audio|official|lyric\s*video)\s*$/i, '')
                 .trim();
 
-            // Guard: ensure track cover is authentic Spotify album artwork and NEVER the artist profile picture
+            // Guard: ensure track cover is authentic Spotify album artwork and NEVER the artist profile picture or Unsplash
             let trackCover = track.album?.images?.[0]?.url;
-            if (trackCover && trackCover.includes('ab676161')) {
-                // ab676161 is Spotify's avatar/profile photo CDN prefix! Replace it with true album art!
+            if (trackCover && (trackCover.includes('ab676161') || trackCover.includes('unsplash.com'))) {
                 const realCover = track.id && track.id.length === 22 ? await resolveSpotifyTrackCover(track.id) : null;
-                trackCover = realCover || 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=300';
+                trackCover = realCover || '';
             }
 
             results.push({
@@ -2090,7 +2104,7 @@ export class SpotifyScraperPlugin implements MetadataPlugin {
                 album: {
                     ...track.album,
                     name: track.album?.name || track.name,
-                    images: [{ url: trackCover || 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=300' }]
+                    images: trackCover ? [{ url: trackCover }] : []
                 }
             });
 
@@ -2127,6 +2141,7 @@ export class SpotifyScraperPlugin implements MetadataPlugin {
             id: artistId,
             name: displayName,
             coverImage: meta.imageUrl,
+            headerImage: meta.headerUrl || meta.imageUrl,
             images: [{ url: meta.imageUrl }],
             monthlyListeners: meta.monthlyListeners || meta.followers || 0,
             followers: meta.followers || 0,

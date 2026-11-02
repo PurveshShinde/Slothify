@@ -44,12 +44,16 @@ export function getOptimizedImageUrl(
  * For hero headers and player bars, requests 500px/600px.
  */
 export function getTrackThumbnail(
-  track: { album?: { images?: { url: string }[] } } | null | undefined,
-  fallback = 'https://images.unsplash.com/photo-1518199266791-5375a83190b7?w=150',
+  track: { album?: { images?: { url: string }[] }; name?: string } | null | undefined,
+  fallback = '',
   size: '150' | '300' | '500' | '600' = '150'
 ): string {
   const images = track?.album?.images;
-  if (!images || images.length === 0) return fallback;
+  if (!images || images.length === 0 || !images[0]?.url || images[0].url.includes('unsplash.com')) {
+    if (fallback) return fallback;
+    const name = track?.name || 'Track';
+    return `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=181824&color=f5d0b5&size=150&bold=true`;
+  }
 
   // If Spotify or multi-size array provided (e.g. [640x640, 300x300, 64x64])
   if (size === '150') {

@@ -718,7 +718,7 @@ const Search: React.FC<SearchProps> = ({ isAuthenticated, onPlayTrack }) => {
               <h2 className="text-sm font-bold tracking-wider text-[#8a8489] uppercase mb-1">Songs</h2>
             )}
             {results.map((track) => {
-              const thumbUrl = getTrackThumbnail(track, 'https://images.unsplash.com/photo-1518199266791-5375a83190b7?w=150', '150');
+              const thumbUrl = getTrackThumbnail(track, '', '150');
               return (
               <div
                 key={track.id}

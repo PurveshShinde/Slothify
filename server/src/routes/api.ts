@@ -802,7 +802,9 @@ router.get(['/artists/:id/top-tracks', '/artists/:id/tracks'], artistTracksCache
         };
 
         const tracks = (rawTracks || []).map((t, idx) => {
-            const thumb = t.album?.images?.[0]?.url || 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=300';
+            const thumb = (t.album?.images?.[0]?.url && !t.album.images[0].url.includes('unsplash.com'))
+                ? t.album.images[0].url
+                : '';
             const dur = formatDuration(t.duration_ms || 210000);
             return {
                 ...t,
