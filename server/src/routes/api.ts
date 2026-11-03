@@ -623,12 +623,13 @@ router.get(['/albums/search', '/browse/albums/search'], albumSearchCacheMiddlewa
     }
 });
 
-// Album Details & Songs View (Spotify + YouTube metadata - Cached for 24 hours)
+// Album Details & Songs View (Spotify + Apple Music + JioSaavn metadata - Cached for 24 hours)
 router.get(['/albums/:id', '/browse/albums/:id'], albumDetailsCacheMiddleware, async (req, res) => {
     try {
         const { id } = req.params;
         const albumNameHint = (req.query.name as string) || '';
         const artistHint = (req.query.artist as string) || '';
+        const coverHint = (req.query.cover as string) || (req.query.coverUrl as string) || (req.query.image as string) || '';
         const metadataPlugin = pluginRegistry.getMetadataPlugin();
 
         // 0. If Spotify Playlist or Album ID (e.g. '37i9dQZF1DX4JAvHpjipBk' for New Music Friday, or 22-char Spotify album ID)
@@ -638,6 +639,9 @@ router.get(['/albums/:id', '/browse/albums/:id'], albumDetailsCacheMiddleware, a
                 if (metadataPlugin.getAlbum && !id.startsWith('37i9dQZF')) {
                     const albumData = await metadataPlugin.getAlbum(id);
                     if (albumData && albumData.tracks?.length) {
+                        if (coverHint) {
+                            albumData.images = [{ url: coverHint }];
+                        }
                         return res.json(albumData);
                     }
                 }
@@ -646,7 +650,7 @@ router.get(['/albums/:id', '/browse/albums/:id'], albumDetailsCacheMiddleware, a
                 const playlist = await metadataPlugin.getPlaylist(id);
                 if (playlist && playlist.tracks?.items?.length) {
                     const tracks = playlist.tracks.items.map((i: any) => i.track).filter(Boolean);
-                    const coverUrl = playlist.images?.[0]?.url || 'https://i.scdn.co/image/ab67706f00000002b299b91ee0cfcac7d8c15f1c';
+                    const coverUrl = coverHint || playlist.images?.[0]?.url || 'https://i.scdn.co/image/ab67706f00000002b299b91ee0cfcac7d8c15f1c';
                     return res.json({
                         id,
                         name: playlist.name || albumNameHint || 'New Music Friday',
@@ -655,7 +659,13 @@ router.get(['/albums/:id', '/browse/albums/:id'], albumDetailsCacheMiddleware, a
                         release_date: '2024',
                         total_tracks: playlist.tracks.total || tracks.length,
                         genres: ['Pop', 'New Releases'],
-                        tracks
+                        tracks: tracks.map((t: Track) => ({
+                            ...t,
+                            album: {
+                                ...t.album,
+                                images: t.album?.images?.[0]?.url ? t.album.images : [{ url: coverUrl }]
+                            }
+                        }))
                     });
                 }
             } catch (pErr: any) {
@@ -663,25 +673,133 @@ router.get(['/albums/:id', '/browse/albums/:id'], albumDetailsCacheMiddleware, a
             }
         }
 
+        // 1. JioSaavn Album Lookup for authentic tracklists
+        if (id.startsWith('saavn_')) {
+            const saavnId = id.replace(/^saavn_(alb_)?/, '');
+            if (/^\d+$/.test(saavnId)) {
+                try {
+                    const saavnRes = await axios.get('https://www.jiosaavn.com/api.php', {
+                        params: {
+                            __call: 'content.getAlbumDetails',
+                            _format: 'json',
+                            cc: 'in',
+                            _marker: '0',
+                            albumid: saavnId
+                        },
+                        headers: { 'User-Agent': 'Mozilla/5.0' },
+                        timeout: 5000
+                    });
+                    const sData = saavnRes.data;
+                    const songList = Array.isArray(sData?.list) ? sData.list : (Array.isArray(sData?.songs) ? sData.songs : []);
+                    if (songList.length > 0) {
+                        const rawImg = sData.image || '';
+                        const imgUrl = coverHint || (rawImg ? rawImg.replace(/150x150|50x50/, '500x500') : '');
+                        const albumTracks: Track[] = songList.map((s: any) => {
+                            const trackTitle = s.title || s.song || 'Track';
+                            const trackArtist = s.primary_artists || s.singers || artistHint || 'Artist';
+                            return {
+                                id: s.id ? `saavn_${s.id}` : `saavn_tr_${Math.random().toString(36).substring(2, 8)}`,
+                                uri: `spotify:track:${s.id || Math.random()}`,
+                                name: trackTitle,
+                                artists: [{ name: trackArtist }],
+                                album: {
+                                    name: sData.title || sData.name || albumNameHint || 'Album',
+                                    images: imgUrl ? [{ url: imgUrl }] : []
+                                },
+                                duration_ms: (Number(s.more_info?.duration || s.duration) || 180) * 1000,
+                                preview_url: s.more_info?.vlink || null
+                            };
+                        });
 
+                        return res.json({
+                            id,
+                            name: sData.title || sData.name || albumNameHint || 'Album',
+                            artists: [{ name: sData.primary_artists || artistHint || 'Various Artists' }],
+                            images: imgUrl ? [{ url: imgUrl }] : [{ url: `https://ui-avatars.com/api/?name=${encodeURIComponent(albumNameHint || 'Album')}&background=181824&color=f5d0b5&size=500&bold=true` }],
+                            release_date: sData.year || '2024',
+                            total_tracks: albumTracks.length,
+                            genres: ['Bollywood', 'Music'],
+                            tracks: albumTracks
+                        });
+                    }
+                } catch (saavnErr: any) {
+                    console.warn('[Albums API] JioSaavn album lookup notice:', saavnErr.message);
+                }
+            }
+        }
 
-        // 2. Search Spotify & YouTube for album tracks
+        // 2. iTunes / Apple Music Album Lookup for authentic tracklists
+        const cleanItunesId = id.replace(/^it_/, '');
+        if (/^\d+$/.test(cleanItunesId)) {
+            try {
+                const itunesRes = await axios.get(`https://itunes.apple.com/lookup?id=${cleanItunesId}&entity=song`, {
+                    headers: { 'User-Agent': 'Mozilla/5.0' },
+                    timeout: 5000
+                });
+                const results = itunesRes.data?.results || [];
+                if (results.length > 1) {
+                    const collection = results[0];
+                    const rawImg = collection.artworkUrl100 || '';
+                    const imgUrl = coverHint || (rawImg ? rawImg.replace(/\/\d+x\d+bb\./, '/600x600bb.') : '');
+                    const songs = results.slice(1);
+                    const albumTracks: Track[] = songs.map((s: any) => ({
+                        id: String(s.trackId),
+                        uri: `spotify:track:${s.trackId}`,
+                        name: s.trackName,
+                        artists: [{ name: s.artistName || artistHint || 'Artist' }],
+                        album: {
+                            name: s.collectionName || albumNameHint || 'Album',
+                            images: imgUrl ? [{ url: imgUrl }] : []
+                        },
+                        duration_ms: s.trackTimeMillis || 180000,
+                        preview_url: s.previewUrl || null
+                    }));
+
+                    return res.json({
+                        id,
+                        name: collection.collectionName || albumNameHint || 'Album',
+                        artists: [{ name: collection.artistName || artistHint || 'Artist' }],
+                        images: imgUrl ? [{ url: imgUrl }] : [{ url: `https://ui-avatars.com/api/?name=${encodeURIComponent(albumNameHint || 'Album')}&background=181824&color=f5d0b5&size=500&bold=true` }],
+                        release_date: collection.releaseDate?.substring(0, 4) || '2024',
+                        total_tracks: albumTracks.length,
+                        genres: [collection.primaryGenreName || 'Music'],
+                        tracks: albumTracks
+                    });
+                }
+            } catch (itErr: any) {
+                console.warn('[Albums API] iTunes album lookup notice:', itErr.message);
+            }
+        }
+
+        // 3. Fallback: Search Spotify & YouTube for album tracks
         const queryTerm = (albumNameHint && artistHint)
             ? `${albumNameHint} ${artistHint}`
-            : (albumNameHint || artistHint || id.replace(/^(sp_|album-|it_)/, '').replace(/-/g, ' '));
+            : (albumNameHint || artistHint || id.replace(/^(sp_|album-|it_|saavn_)/, '').replace(/[-_]/g, ' '));
 
-        const tracks = await metadataPlugin.searchTracks(queryTerm, 20);
-        const coverImg = tracks[0]?.album?.images?.[0]?.url || `https://ui-avatars.com/api/?name=${encodeURIComponent(albumNameHint || 'Album')}&background=181824&color=f5d0b5&size=500&bold=true`;
+        const rawTracks = await metadataPlugin.searchTracks(queryTerm, 20);
+        // Strictly preserve the same poster image passed from the album card
+        const coverImg = coverHint || rawTracks[0]?.album?.images?.[0]?.url || `https://ui-avatars.com/api/?name=${encodeURIComponent(albumNameHint || 'Album')}&background=181824&color=f5d0b5&size=500&bold=true`;
+
+        const unifiedTracks: Track[] = (rawTracks || []).map(t => ({
+            ...t,
+            album: {
+                ...t.album,
+                name: t.album?.name || albumNameHint || 'Album',
+                images: (t.album?.images?.[0]?.url && !t.album.images[0].url.includes('ui-avatars.com'))
+                    ? t.album.images
+                    : [{ url: coverImg }]
+            }
+        }));
 
         return res.json({
             id,
-            name: albumNameHint || (tracks[0]?.album?.name || 'Album'),
-            artists: artistHint ? [{ name: artistHint }] : (tracks[0]?.artists || [{ name: 'Various Artists' }]),
+            name: albumNameHint || (rawTracks[0]?.album?.name || 'Album'),
+            artists: artistHint ? [{ name: artistHint }] : (rawTracks[0]?.artists || [{ name: 'Various Artists' }]),
             images: [{ url: coverImg }],
             release_date: '2024',
-            total_tracks: tracks.length,
+            total_tracks: unifiedTracks.length,
             genres: ['Pop', 'Music'],
-            tracks
+            tracks: unifiedTracks
         });
     } catch (err: any) {
         console.error('[/api/albums/:id] Error:', err);

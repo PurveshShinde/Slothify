@@ -70,6 +70,16 @@ const getInitialCache = (): CacheState => {
                 }
             }
 
+            // Invalidate stale albumsData if it has <= 3 items or legacy mock playlist items (e.g., 37i9dQZF)
+            if (Array.isArray(parsed.albumsData)) {
+                const hasStaleAlbums = parsed.albumsData.length <= 3 || parsed.albumsData.some((a: any) =>
+                    !a || !a.name || String(a.id || '').startsWith('37i9dQZF') || a.name === 'New Music Friday' || a.name === "Today's Top Hits"
+                );
+                if (hasStaleAlbums || isReload) {
+                    parsed.albumsData = null;
+                }
+            }
+
             // If the user refreshed the page, bust recommendations so they get new ones!
             if (isReload) {
                 return {

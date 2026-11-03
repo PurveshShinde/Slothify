@@ -91,21 +91,44 @@ export const AlbumDetail: React.FC<AlbumDetailProps> = ({
 
     const nameHint = passedAlbum?.name || '';
     const artistHint = passedAlbum?.artists?.[0]?.name || '';
+    const coverHint = passedAlbum?.images?.[0]?.url || '';
 
     axios.get(`/api/albums/${id}`, {
-      params: { name: nameHint, artist: artistHint }
+      params: { name: nameHint, artist: artistHint, cover: coverHint }
     })
       .then(res => {
         if (res.data) {
+          // Guaranteed poster consistency: prioritize the exact poster URL passed from the albums page
+          const resolvedImages = (passedAlbum?.images && passedAlbum.images.length > 0 && passedAlbum.images[0]?.url)
+            ? passedAlbum.images
+            : (res.data.images && res.data.images.length > 0 && res.data.images[0]?.url)
+            ? res.data.images
+            : coverHint ? [{ url: coverHint }] : [];
+
+          const primaryCover = resolvedImages[0]?.url || coverHint || '';
+
+          // Ensure tracks without authentic artwork inherit the album's unified artwork
+          const normalizedTracks: Track[] = (res.data.tracks || []).map((t: Track) => {
+            const hasTrackCover = t.album?.images?.[0]?.url && !t.album.images[0].url.includes('ui-avatars.com');
+            return {
+              ...t,
+              album: {
+                ...t.album,
+                name: t.album?.name || res.data.name || nameHint || 'Album',
+                images: hasTrackCover ? t.album.images : (primaryCover ? [{ url: primaryCover }] : (t.album?.images || []))
+              }
+            };
+          });
+
           const albumObj: AlbumData = {
             id: res.data.id || id,
             name: res.data.name || nameHint || 'Album',
             artists: res.data.artists || (artistHint ? [{ name: artistHint }] : [{ name: 'Artist' }]),
-            images: res.data.images || passedAlbum?.images || [],
+            images: resolvedImages,
             release_date: res.data.release_date || passedAlbum?.release_date || '2024',
-            total_tracks: res.data.total_tracks || res.data.tracks?.length || 10,
+            total_tracks: res.data.total_tracks || normalizedTracks.length || 10,
             genres: res.data.genres || ['Music'],
-            tracks: res.data.tracks || []
+            tracks: normalizedTracks
           };
           setAlbum(albumObj);
           setTracks(albumObj.tracks);

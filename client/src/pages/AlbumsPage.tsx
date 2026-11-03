@@ -85,15 +85,19 @@ export const AlbumsPage: React.FC<AlbumsPageProps> = () => {
   const searchDebounceRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
-    if (cache.albumsData && cache.albumsData.length > 0) {
+    // If cached data is available, populate it immediately for instant rendering without a blank screen
+    if (cache.albumsData && cache.albumsData.length > 3) {
       setAlbums(deduplicateAlbums(cache.albumsData));
       setIsLoading(false);
-      return;
+    } else {
+      setIsLoading(true);
     }
 
-    setIsLoading(true);
+    // Always fetch live real-time releases from the API
+    let isSubscribed = true;
     axios.get('/api/browse/new-releases')
       .then(res => {
+        if (!isSubscribed) return;
         if (Array.isArray(res.data) && res.data.length > 0) {
           const apiAlbums: AlbumItem[] = [];
           for (const item of res.data) {
@@ -116,17 +120,25 @@ export const AlbumsPage: React.FC<AlbumsPageProps> = () => {
           }
 
           const deduped = deduplicateAlbums(apiAlbums);
-          setAlbums(deduped);
-          setAlbumsData(deduped);
+          if (deduped.length > 0) {
+            setAlbums(deduped);
+            setAlbumsData(deduped);
+          }
         }
       })
       .catch(err => {
         console.error('Failed to load new releases:', err);
       })
       .finally(() => {
-        setIsLoading(false);
+        if (isSubscribed) {
+          setIsLoading(false);
+        }
       });
-  }, [cache.albumsData, setAlbumsData]);
+
+    return () => {
+      isSubscribed = false;
+    };
+  }, [setAlbumsData]);
 
   // Real-time Spotify Album Search
   useEffect(() => {

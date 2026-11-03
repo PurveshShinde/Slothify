@@ -49,3 +49,7 @@ Thumbs.db
 *.njsproj
 *.sln
 *.sw?
+
+# AI context documents
+AI_README.md
+AI_README*.md
