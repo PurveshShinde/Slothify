@@ -86,12 +86,12 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         }
 
         if (!agreedToFun) {
-            setError('Please tick the checkbox confirming you will not complain about free stuff.');
+            setError("Please tick the checkbox confirming you won't be an ungrateful bitch and complain about free stuff.");
             return;
         }
 
         if (!agreedToTerms) {
-            setError('Please tick the checkbox to agree to the Terms & Conditions and Privacy Policy.');
+            setError('Please tick the checkbox confirming you will not create multiple accounts and agree to follow the Terms & Privacy Policy.');
             return;
         }
 
@@ -173,52 +173,52 @@ IMPORTANT NOTICE:
     };
 
     return (
-        <div className="fixed inset-0 z-[200] bg-black/80 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in duration-200">
-            <div className="bg-[#121212] border border-white/10 rounded-3xl w-full max-w-md p-6 sm:p-8 shadow-2xl relative text-white">
+        <div className="fixed inset-0 z-[200] bg-black/80 backdrop-blur-md flex items-center justify-center p-3 sm:p-4 overflow-y-auto animate-in fade-in duration-200">
+            <div className="bg-[#121212] border border-white/10 rounded-2xl sm:rounded-3xl w-full max-w-md p-5 sm:p-6 shadow-2xl relative text-white my-auto max-h-[92vh] overflow-y-auto scrollbar-hide">
                 <button
                     onClick={onClose}
-                    className="absolute top-5 right-5 p-2 text-slate-400 hover:text-white rounded-full hover:bg-white/5 transition-colors"
+                    className="absolute top-4 right-4 p-2 text-slate-400 hover:text-white rounded-full hover:bg-white/5 transition-colors z-10"
                 >
-                    <X size={20} />
+                    <X size={18} />
                 </button>
 
                 {/* 1. LOGIN TAB */}
                 {tab === 'login' && (
-                    <form onSubmit={handleLogin} className="space-y-5">
-                        <div className="text-center space-y-2 pt-1">
+                    <form onSubmit={handleLogin} className="space-y-4">
+                        <div className="text-center space-y-1 pt-1">
                             <div className="flex justify-center mb-1">
-                                <BrandLogo size="lg" />
+                                <BrandLogo size="md" />
                             </div>
                             <h2 className="text-xl font-bold tracking-tight text-white">Sign In to Slothify</h2>
                             <p className="text-xs text-slate-400">Access and sync your private encrypted music library</p>
                         </div>
 
                         {error && (
-                            <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-xl text-red-400 text-xs flex items-center space-x-2">
-                                <AlertTriangle size={16} className="flex-shrink-0" />
+                            <div className="p-2.5 bg-red-500/10 border border-red-500/20 rounded-xl text-red-400 text-xs flex items-center space-x-2">
+                                <AlertTriangle size={15} className="flex-shrink-0" />
                                 <span>{error}</span>
                             </div>
                         )}
 
-                        <div className="space-y-4">
+                        <div className="space-y-3">
                             <div>
-                                <label className="block text-xs font-bold text-slate-300 uppercase tracking-wider mb-1.5">Username</label>
+                                <label className="block text-[11px] font-bold text-slate-300 uppercase tracking-wider mb-1">Username</label>
                                 <div className="relative">
-                                     <User size={18} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-stone-500" />
+                                    <User size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-500" />
                                     <input
                                         type="text"
                                         required
                                         value={username}
                                         onChange={(e) => setUsername(e.target.value)}
                                         placeholder="Enter your username"
-                                        className={`w-full bg-[#1e1e1e] border border-white/5 rounded-xl py-3 pl-10 pr-4 text-sm text-white focus:outline-none ${isOcean ? 'focus:border-blue-500 focus:ring-1 focus:ring-blue-500/30' : 'focus:border-[#c87d46]'}`}
+                                        className={`w-full bg-[#1e1e1e] border border-white/5 rounded-xl py-2.5 pl-9 pr-3 text-sm text-white focus:outline-none ${isOcean ? 'focus:border-blue-500 focus:ring-1 focus:ring-blue-500/30' : 'focus:border-[#c87d46]'}`}
                                     />
                                 </div>
                             </div>
 
                             <div>
-                                <div className="flex items-center justify-between mb-1.5">
-                                    <label className="block text-xs font-bold text-stone-300 uppercase tracking-wider">Password</label>
+                                <div className="flex items-center justify-between mb-1">
+                                    <label className="block text-[11px] font-bold text-stone-300 uppercase tracking-wider">Password</label>
                                     <button
                                         type="button"
                                         onClick={() => { setError(null); setTab('forgot_password'); }}
@@ -228,14 +228,14 @@ IMPORTANT NOTICE:
                                     </button>
                                 </div>
                                 <div className="relative">
-                                    <Lock size={18} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-stone-500" />
+                                    <Lock size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-500" />
                                     <input
                                         type="password"
                                         required
                                         value={password}
                                         onChange={(e) => setPassword(e.target.value)}
                                         placeholder="Enter your password"
-                                        className={`w-full bg-[#1e1e1e] border border-white/5 rounded-xl py-3 pl-10 pr-4 text-sm text-white focus:outline-none ${isOcean ? 'focus:border-blue-500 focus:ring-1 focus:ring-blue-500/30' : 'focus:border-[#c87d46]'}`}
+                                        className={`w-full bg-[#1e1e1e] border border-white/5 rounded-xl py-2.5 pl-9 pr-3 text-sm text-white focus:outline-none ${isOcean ? 'focus:border-blue-500 focus:ring-1 focus:ring-blue-500/30' : 'focus:border-[#c87d46]'}`}
                                     />
                                 </div>
                             </div>
@@ -244,12 +244,12 @@ IMPORTANT NOTICE:
                         <button
                             type="submit"
                             disabled={isLoading}
-                            className={`w-full py-3.5 font-bold rounded-xl transition-all shadow-lg flex items-center justify-center space-x-2 disabled:opacity-50 ${isOcean ? 'bg-blue-600 hover:bg-blue-500 text-white shadow-blue-500/25' : 'bg-[#f5d0b5] hover:bg-white text-[#140f0d] shadow-black/30'}`}
+                            className={`w-full py-2.5 sm:py-3 font-bold rounded-xl transition-all shadow-lg flex items-center justify-center space-x-2 text-sm disabled:opacity-50 ${isOcean ? 'bg-blue-600 hover:bg-blue-500 text-white shadow-blue-500/25' : 'bg-[#f5d0b5] hover:bg-white text-[#140f0d] shadow-black/30'}`}
                         >
-                            {isLoading ? <RefreshCw size={18} className="animate-spin" /> : <span>Log In</span>}
+                            {isLoading ? <RefreshCw size={16} className="animate-spin" /> : <span>Log In</span>}
                         </button>
 
-                        <div className="text-center pt-2">
+                        <div className="text-center pt-1">
                             <span className="text-xs text-stone-400">Don't have an account? </span>
                             <button
                                 type="button"
@@ -264,38 +264,35 @@ IMPORTANT NOTICE:
 
                 {/* 2. REGISTER TAB */}
                 {tab === 'register' && (
-                    <form onSubmit={handleRegister} className="space-y-5">
-                        <div className="text-center space-y-2">
-                            <div className={`w-12 h-12 rounded-2xl mx-auto flex items-center justify-center ${isOcean ? 'bg-blue-500/15 text-blue-400' : 'bg-[#c87d46]/15 text-[#f5d0b5]'}`}>
-                                <Lock size={24} />
+                    <form onSubmit={handleRegister} className="space-y-3.5">
+                        <div className="text-center space-y-1">
+                            <div className={`w-10 h-10 rounded-xl mx-auto flex items-center justify-center ${isOcean ? 'bg-blue-500/15 text-blue-400' : 'bg-[#c87d46]/15 text-[#f5d0b5]'}`}>
+                                <Lock size={20} />
                             </div>
-                            <h2 className="text-2xl font-black tracking-tight">Create Account</h2>
+                            <h2 className="text-xl font-black tracking-tight text-white">Create Account</h2>
                             <p className="text-xs text-stone-400">Access and sync your private playlists</p>
                         </div>
 
                         {/* No-Email Warning */}
-                        <div className="p-3.5 bg-amber-500/10 border border-amber-500/20 rounded-2xl text-xs text-amber-300 space-y-1">
-                            <div className="flex items-center space-x-2 font-bold">
-                                <AlertTriangle size={16} className="text-amber-400 flex-shrink-0" />
-                                <span>No Email Required</span>
-                            </div>
-                            <p className="text-[11px] text-amber-200/80 leading-relaxed">
-                                We never ask for your email address. Because of this, there is no email password reset. You will receive an emergency 12-word recovery passkey on the next step.
+                        <div className="p-2.5 bg-amber-500/10 border border-amber-500/20 rounded-xl text-xs text-amber-300 flex items-start space-x-2">
+                            <AlertTriangle size={15} className="text-amber-400 flex-shrink-0 mt-0.5" />
+                            <p className="text-[11px] text-amber-200/80 leading-snug">
+                                <strong className="text-amber-300">No email required:</strong> Save your 12-word recovery passphrase on the next step to recover your account if needed.
                             </p>
                         </div>
 
                         {error && (
-                            <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-xl text-red-400 text-xs flex items-center space-x-2">
-                                <AlertTriangle size={16} className="flex-shrink-0" />
+                            <div className="p-2.5 bg-red-500/10 border border-red-500/20 rounded-xl text-red-400 text-xs flex items-center space-x-2">
+                                <AlertTriangle size={15} className="flex-shrink-0" />
                                 <span>{error}</span>
                             </div>
                         )}
 
-                        <div className="space-y-4">
+                        <div className="space-y-2.5">
                             <div>
-                                <label className="block text-xs font-bold text-stone-300 uppercase tracking-wider mb-1.5">Username</label>
+                                <label className="block text-[11px] font-bold text-stone-300 uppercase tracking-wider mb-1">Username</label>
                                 <div className="relative">
-                                    <User size={18} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-stone-500" />
+                                    <User size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-500" />
                                     <input
                                         type="text"
                                         required
@@ -303,15 +300,15 @@ IMPORTANT NOTICE:
                                         value={username}
                                         onChange={(e) => setUsername(e.target.value)}
                                         placeholder="Enter your username"
-                                        className={`w-full bg-[#1e1e1e] border border-white/5 rounded-xl py-3 pl-10 pr-4 text-sm text-white focus:outline-none ${isOcean ? 'focus:border-blue-500 focus:ring-1 focus:ring-blue-500/30' : 'focus:border-[#c87d46]'}`}
+                                        className={`w-full bg-[#1e1e1e] border border-white/5 rounded-xl py-2 pl-9 pr-3 text-sm text-white focus:outline-none ${isOcean ? 'focus:border-blue-500 focus:ring-1 focus:ring-blue-500/30' : 'focus:border-[#c87d46]'}`}
                                     />
                                 </div>
                             </div>
 
                             <div>
-                                <label className="block text-xs font-bold text-stone-300 uppercase tracking-wider mb-1.5">Password</label>
+                                <label className="block text-[11px] font-bold text-stone-300 uppercase tracking-wider mb-1">Password</label>
                                 <div className="relative">
-                                    <Lock size={18} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-stone-500" />
+                                    <Lock size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-500" />
                                     <input
                                         type="password"
                                         required
@@ -319,15 +316,15 @@ IMPORTANT NOTICE:
                                         value={password}
                                         onChange={(e) => setPassword(e.target.value)}
                                         placeholder="Enter your password"
-                                        className={`w-full bg-[#1e1e1e] border border-white/5 rounded-xl py-3 pl-10 pr-4 text-sm text-white focus:outline-none ${isOcean ? 'focus:border-blue-500 focus:ring-1 focus:ring-blue-500/30' : 'focus:border-[#c87d46]'}`}
+                                        className={`w-full bg-[#1e1e1e] border border-white/5 rounded-xl py-2 pl-9 pr-3 text-sm text-white focus:outline-none ${isOcean ? 'focus:border-blue-500 focus:ring-1 focus:ring-blue-500/30' : 'focus:border-[#c87d46]'}`}
                                     />
                                 </div>
                             </div>
 
                             <div>
-                                <label className="block text-xs font-bold text-stone-300 uppercase tracking-wider mb-1.5">Confirm Password</label>
+                                <label className="block text-[11px] font-bold text-stone-300 uppercase tracking-wider mb-1">Confirm Password</label>
                                 <div className="relative">
-                                    <Lock size={18} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-stone-500" />
+                                    <Lock size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-500" />
                                     <input
                                         type="password"
                                         required
@@ -335,14 +332,14 @@ IMPORTANT NOTICE:
                                         value={confirmPassword}
                                         onChange={(e) => setConfirmPassword(e.target.value)}
                                         placeholder="Confirm your password"
-                                        className={`w-full bg-[#1e1e1e] border border-white/5 rounded-xl py-3 pl-10 pr-4 text-sm text-white focus:outline-none ${isOcean ? 'focus:border-blue-500 focus:ring-1 focus:ring-blue-500/30' : 'focus:border-[#c87d46]'}`}
+                                        className={`w-full bg-[#1e1e1e] border border-white/5 rounded-xl py-2 pl-9 pr-3 text-sm text-white focus:outline-none ${isOcean ? 'focus:border-blue-500 focus:ring-1 focus:ring-blue-500/30' : 'focus:border-[#c87d46]'}`}
                                     />
                                 </div>
                             </div>
                         </div>
 
                         {/* 1. Fun Part Tick */}
-                        <div className="flex items-start space-x-2.5 p-3 bg-white/[0.03] border border-white/5 rounded-xl">
+                        <div className="flex items-start space-x-2.5 p-2 bg-white/[0.03] border border-white/5 rounded-xl">
                             <input
                                 type="checkbox"
                                 id="funCheckbox"
@@ -353,13 +350,13 @@ IMPORTANT NOTICE:
                                 }}
                                 className={`mt-0.5 rounded border-white/20 bg-white/5 w-4 h-4 cursor-pointer flex-shrink-0 ${isOcean ? 'accent-blue-500 text-blue-500 focus:ring-blue-500' : 'accent-[#c87d46] text-[#c87d46] focus:ring-[#c87d46]'}`}
                             />
-                            <label htmlFor="funCheckbox" className="text-xs text-stone-300 select-none cursor-pointer leading-relaxed">
-                                I won't be a bitch and complain about free stuff
+                            <label htmlFor="funCheckbox" className="text-[11.5px] text-stone-300 select-none cursor-pointer leading-snug">
+                                I won't be an ungrateful bitch and complain about free stuff
                             </label>
                         </div>
 
                         {/* 2. Terms and Conditions Tick */}
-                        <div className="flex items-start space-x-2.5 p-3 bg-white/[0.03] border border-white/5 rounded-xl">
+                        <div className="flex items-start space-x-2.5 p-2 bg-white/[0.03] border border-white/5 rounded-xl">
                             <input
                                 type="checkbox"
                                 id="termsCheckbox"
@@ -370,8 +367,8 @@ IMPORTANT NOTICE:
                                 }}
                                 className={`mt-0.5 rounded border-white/20 bg-white/5 w-4 h-4 cursor-pointer flex-shrink-0 ${isOcean ? 'accent-blue-500 text-blue-500 focus:ring-blue-500' : 'accent-[#c87d46] text-[#c87d46] focus:ring-[#c87d46]'}`}
                             />
-                            <label htmlFor="termsCheckbox" className="text-xs text-stone-300 select-none cursor-pointer leading-relaxed">
-                                I agree to the{' '}
+                            <label htmlFor="termsCheckbox" className="text-[11.5px] text-stone-300 select-none cursor-pointer leading-snug">
+                                I won't create multiple accounts and agree to follow the{' '}
                                 <a
                                     href="/terms"
                                     target="_blank"
@@ -397,12 +394,12 @@ IMPORTANT NOTICE:
                         <button
                             type="submit"
                             disabled={isLoading || !agreedToFun || !agreedToTerms}
-                            className={`w-full py-3.5 font-bold rounded-xl transition-all shadow-lg flex items-center justify-center space-x-2 ${(!agreedToFun || !agreedToTerms || isLoading) ? 'opacity-50 cursor-not-allowed' : ''} ${isOcean ? 'bg-blue-600 hover:bg-blue-500 text-white shadow-blue-500/25' : 'bg-[#f5d0b5] hover:bg-white text-[#140f0d] shadow-black/30'}`}
+                            className={`w-full py-2.5 sm:py-3 font-bold rounded-xl transition-all shadow-lg flex items-center justify-center space-x-2 text-sm ${(!agreedToFun || !agreedToTerms || isLoading) ? 'opacity-50 cursor-not-allowed' : ''} ${isOcean ? 'bg-blue-600 hover:bg-blue-500 text-white shadow-blue-500/25' : 'bg-[#f5d0b5] hover:bg-white text-[#140f0d] shadow-black/30'}`}
                         >
-                            {isLoading ? <RefreshCw size={18} className="animate-spin" /> : <span>Create Account</span>}
+                            {isLoading ? <RefreshCw size={16} className="animate-spin" /> : <span>Create Account</span>}
                         </button>
 
-                        <div className="text-center pt-2">
+                        <div className="text-center pt-1">
                             <span className="text-xs text-stone-400">Already have an account? </span>
                             <button
                                 type="button"
@@ -417,47 +414,47 @@ IMPORTANT NOTICE:
 
                 {/* 3. RECOVERY KEY REVEAL TAB (CRUCIAL REQUIREMENT) */}
                 {tab === 'recovery_key_reveal' && (
-                    <div className="space-y-5 animate-in zoom-in-95 duration-200">
+                    <div className="space-y-3.5 animate-in zoom-in-95 duration-200">
                         <div className="text-center space-y-1">
-                            <div className="w-12 h-12 rounded-2xl bg-emerald-500/20 text-emerald-400 mx-auto flex items-center justify-center">
-                                <Key size={24} />
+                            <div className="w-10 h-10 rounded-xl bg-emerald-500/20 text-emerald-400 mx-auto flex items-center justify-center">
+                                <Key size={20} />
                             </div>
                             <h2 className="text-xl font-black tracking-tight">Your Emergency Recovery Passphrase</h2>
                             <p className="text-xs text-stone-400">Save these 12 words to recover your account if you ever forget your password.</p>
                         </div>
 
                         {/* Words Grid */}
-                        <div className="p-4 bg-black/60 border border-white/10 rounded-2xl grid grid-cols-3 gap-2 font-mono text-xs select-all">
+                        <div className="p-3 bg-black/60 border border-white/10 rounded-xl grid grid-cols-3 gap-1.5 font-mono text-xs select-all">
                             {generatedPassphrase.split(' ').map((word, idx) => (
-                                <div key={idx} className="bg-white/5 rounded-lg py-1.5 px-2.5 flex items-center space-x-2">
-                                    <span className="text-stone-500 text-[10px] w-4">{idx + 1}.</span>
-                                    <span className="text-emerald-300 font-bold">{word}</span>
+                                <div key={idx} className="bg-white/5 rounded-lg py-1 px-2 flex items-center space-x-1.5">
+                                    <span className="text-stone-500 text-[10px] w-3.5">{idx + 1}.</span>
+                                    <span className="text-emerald-300 font-bold truncate">{word}</span>
                                 </div>
                             ))}
                         </div>
 
                         {/* Action Buttons */}
-                        <div className="grid grid-cols-2 gap-3">
+                        <div className="grid grid-cols-2 gap-2.5">
                             <button
                                 type="button"
                                 onClick={handleDownloadKey}
-                                className="py-2.5 px-4 bg-white/10 hover:bg-white/15 text-white text-xs font-bold rounded-xl flex items-center justify-center space-x-2 transition-colors border border-white/10"
+                                className="py-2 px-3 bg-white/10 hover:bg-white/15 text-white text-xs font-bold rounded-xl flex items-center justify-center space-x-1.5 transition-colors border border-white/10"
                             >
-                                <Download size={16} />
+                                <Download size={15} />
                                 <span>Download (.txt)</span>
                             </button>
                             <button
                                 type="button"
                                 onClick={handleCopyPassphrase}
-                                className="py-2.5 px-4 bg-white/10 hover:bg-white/15 text-white text-xs font-bold rounded-xl flex items-center justify-center space-x-2 transition-colors border border-white/10"
+                                className="py-2 px-3 bg-white/10 hover:bg-white/15 text-white text-xs font-bold rounded-xl flex items-center justify-center space-x-1.5 transition-colors border border-white/10"
                             >
-                                {isCopied ? <Check size={16} className="text-emerald-400" /> : <Copy size={16} />}
+                                {isCopied ? <Check size={15} className="text-emerald-400" /> : <Copy size={15} />}
                                 <span>{isCopied ? 'Copied!' : 'Copy Words'}</span>
                             </button>
                         </div>
 
                         {/* Confirmation Checkbox */}
-                        <label className="flex items-start space-x-3 cursor-pointer p-3 bg-white/5 rounded-xl border border-white/5 text-xs text-stone-300">
+                        <label className="flex items-start space-x-2.5 cursor-pointer p-2.5 bg-white/5 rounded-xl border border-white/5 text-[11.5px] text-stone-300 leading-snug">
                             <input
                                 type="checkbox"
                                 checked={hasConfirmedSaved}
@@ -465,7 +462,7 @@ IMPORTANT NOTICE:
                                     setHasConfirmedSaved(e.target.checked);
                                     if (e.target.checked) setError(null);
                                 }}
-                                className={`mt-0.5 rounded w-4 h-4 cursor-pointer ${isOcean ? 'accent-blue-500' : 'accent-[#c87d46]'}`}
+                                className={`mt-0.5 rounded w-4 h-4 cursor-pointer flex-shrink-0 ${isOcean ? 'accent-blue-500' : 'accent-[#c87d46]'}`}
                             />
                             <span>I understand there is no email reset, and I have safely saved my 12-word passphrase.</span>
                         </label>
@@ -477,59 +474,59 @@ IMPORTANT NOTICE:
                         <button
                             type="button"
                             onClick={handleFinishRegistration}
-                            className={`w-full py-3.5 font-bold rounded-xl transition-all shadow-lg flex items-center justify-center space-x-2 ${!hasConfirmedSaved ? 'opacity-50 cursor-not-allowed' : ''} ${isOcean ? 'bg-blue-600 hover:bg-blue-500 text-white shadow-blue-500/25' : 'bg-[#f5d0b5] hover:bg-white text-[#140f0d] shadow-black/30'}`}
+                            className={`w-full py-2.5 sm:py-3 font-bold rounded-xl transition-all shadow-lg flex items-center justify-center space-x-2 text-sm ${!hasConfirmedSaved ? 'opacity-50 cursor-not-allowed' : ''} ${isOcean ? 'bg-blue-600 hover:bg-blue-500 text-white shadow-blue-500/25' : 'bg-[#f5d0b5] hover:bg-white text-[#140f0d] shadow-black/30'}`}
                         >
                             <span>Continue to Slothify</span>
-                            <ArrowRight size={18} />
+                            <ArrowRight size={16} />
                         </button>
                     </div>
                 )}
 
                 {/* 4. FORGOT PASSWORD / RECOVERY TAB */}
                 {tab === 'forgot_password' && (
-                    <form onSubmit={handleRecover} className="space-y-5">
-                        <div className="text-center space-y-2">
-                            <div className="w-12 h-12 rounded-2xl bg-amber-500/20 text-amber-400 mx-auto flex items-center justify-center">
-                                <Key size={24} />
+                    <form onSubmit={handleRecover} className="space-y-3.5">
+                        <div className="text-center space-y-1">
+                            <div className="w-10 h-10 rounded-xl bg-amber-500/20 text-amber-400 mx-auto flex items-center justify-center">
+                                <Key size={20} />
                             </div>
-                            <h2 className="text-2xl font-black tracking-tight">Account Recovery</h2>
+                            <h2 className="text-xl font-black tracking-tight text-white">Account Recovery</h2>
                             <p className="text-xs text-slate-400">Unlock your account using your 12-word emergency recovery passphrase</p>
                         </div>
 
                         {error && (
-                            <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-xl text-red-400 text-xs flex items-center space-x-2">
-                                <AlertTriangle size={16} className="flex-shrink-0" />
+                            <div className="p-2.5 bg-red-500/10 border border-red-500/20 rounded-xl text-red-400 text-xs flex items-center space-x-2">
+                                <AlertTriangle size={15} className="flex-shrink-0" />
                                 <span>{error}</span>
                             </div>
                         )}
 
-                        <div className="space-y-4">
+                        <div className="space-y-2.5">
                             <div>
-                                <label className="block text-xs font-bold text-slate-300 uppercase tracking-wider mb-1.5">Username</label>
+                                <label className="block text-[11px] font-bold text-slate-300 uppercase tracking-wider mb-1">Username</label>
                                 <input
                                     type="text"
                                     required
                                     value={username}
                                     onChange={(e) => setUsername(e.target.value)}
                                     placeholder="Enter your username"
-                                    className="w-full bg-[#1e1e1e] border border-white/5 rounded-xl py-3 px-4 text-sm text-white focus:outline-none focus:border-amber-500"
+                                    className="w-full bg-[#1e1e1e] border border-white/5 rounded-xl py-2.5 px-3 text-sm text-white focus:outline-none focus:border-amber-500"
                                 />
                             </div>
 
                             <div>
-                                <label className="block text-xs font-bold text-slate-300 uppercase tracking-wider mb-1.5">12-Word Recovery Passphrase</label>
+                                <label className="block text-[11px] font-bold text-slate-300 uppercase tracking-wider mb-1">12-Word Recovery Passphrase</label>
                                 <textarea
                                     required
-                                    rows={3}
+                                    rows={2}
                                     value={recoveryPassphrase}
                                     onChange={(e) => setRecoveryPassphrase(e.target.value)}
                                     placeholder="e.g. galaxy velvet frozen thunder whisper crystal forest shadow blossom velvet canyon breeze"
-                                    className="w-full bg-[#1e1e1e] border border-white/5 rounded-xl py-3 px-4 text-xs font-mono text-white focus:outline-none focus:border-amber-500 resize-none"
+                                    className="w-full bg-[#1e1e1e] border border-white/5 rounded-xl py-2 px-3 text-xs font-mono text-white focus:outline-none focus:border-amber-500 resize-none leading-relaxed"
                                 />
                             </div>
 
                             <div>
-                                <label className="block text-xs font-bold text-slate-300 uppercase tracking-wider mb-1.5">New Password</label>
+                                <label className="block text-[11px] font-bold text-slate-300 uppercase tracking-wider mb-1">New Password</label>
                                 <input
                                     type="password"
                                     required
@@ -537,7 +534,7 @@ IMPORTANT NOTICE:
                                     value={newPassword}
                                     onChange={(e) => setNewPassword(e.target.value)}
                                     placeholder="Enter at least 6 characters"
-                                    className="w-full bg-[#1e1e1e] border border-white/5 rounded-xl py-3 px-4 text-sm text-white focus:outline-none focus:border-amber-500"
+                                    className="w-full bg-[#1e1e1e] border border-white/5 rounded-xl py-2.5 px-3 text-sm text-white focus:outline-none focus:border-amber-500"
                                 />
                             </div>
                         </div>
@@ -545,12 +542,12 @@ IMPORTANT NOTICE:
                         <button
                             type="submit"
                             disabled={isLoading}
-                            className="w-full py-3.5 bg-amber-600 hover:bg-amber-500 text-white font-bold rounded-xl transition-all shadow-lg shadow-amber-600/20 flex items-center justify-center space-x-2 disabled:opacity-50"
+                            className="w-full py-2.5 sm:py-3 bg-amber-600 hover:bg-amber-500 text-white font-bold rounded-xl transition-all shadow-lg shadow-amber-600/20 flex items-center justify-center space-x-2 text-sm disabled:opacity-50"
                         >
-                            {isLoading ? <RefreshCw size={18} className="animate-spin" /> : <span>Reset Password & Log In</span>}
+                            {isLoading ? <RefreshCw size={16} className="animate-spin" /> : <span>Reset Password & Log In</span>}
                         </button>
 
-                        <div className="text-center pt-2">
+                        <div className="text-center pt-1">
                             <button
                                 type="button"
                                 onClick={() => { setError(null); setTab('login'); }}

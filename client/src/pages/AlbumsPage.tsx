@@ -15,31 +15,18 @@ interface AlbumItem {
   release_date?: string;
   total_tracks?: number;
   isLiked?: boolean;
+  genre?: string;
 }
 
 interface AlbumsPageProps {
   onPlayTrack?: (track: Track, queue?: Track[]) => void;
 }
 
-// Guaranteed flagship New Music Friday release featuring Tate McRae
-const NEW_MUSIC_FRIDAY: AlbumItem = {
-  id: '37i9dQZF1DX4JAvHpjipBk',
-  name: 'New Music Friday',
-  artists: [{ name: 'Tate McRae' }],
-  images: [{ url: 'https://i.scdn.co/image/ab67706f00000002b299b91ee0cfcac7d8c15f1c' }],
-  release_date: '2024',
-  total_tracks: 12
-};
-
-// Airtight deduplication: New Music Friday is strictly at index 0, no duplicates can ever occur
+// Deduplicate albums by unique clean ID and case-insensitive title
 const deduplicateAlbums = (items: AlbumItem[]): AlbumItem[] => {
   const seenIds = new Set<string>();
   const seenNames = new Set<string>();
   const results: AlbumItem[] = [];
-
-  seenIds.add(NEW_MUSIC_FRIDAY.id);
-  seenNames.add(NEW_MUSIC_FRIDAY.name.toLowerCase().trim());
-  results.push(NEW_MUSIC_FRIDAY);
 
   for (const item of items) {
     if (!item) continue;
@@ -65,7 +52,6 @@ export const AlbumsPage: React.FC<AlbumsPageProps> = () => {
   // User-driven liked albums
   const [likedAlbumIds, setLikedAlbumIds] = useState<Set<string>>(() => {
     try {
-      localStorage.removeItem('slothify_liked_albums');
       const saved = localStorage.getItem('slothify_user_liked_album_ids');
       if (saved) return new Set(JSON.parse(saved));
     } catch (e) {}
@@ -81,17 +67,17 @@ export const AlbumsPage: React.FC<AlbumsPageProps> = () => {
     return {};
   });
 
-  // Base albums catalog
+  // Real-time albums catalog (fetched dynamically from live API)
   const [albums, setAlbums] = useState<AlbumItem[]>(() => {
     if (cache.albumsData && cache.albumsData.length > 0) {
       return deduplicateAlbums(cache.albumsData);
     }
-    return [NEW_MUSIC_FRIDAY];
+    return [];
   });
 
   const [isLoading, setIsLoading] = useState<boolean>(() => !cache.albumsData || cache.albumsData.length === 0);
   const [searchQuery, setSearchQuery] = useState('');
-  const [filterType, setFilterType] = useState<'all' | 'liked'>('all');
+  const [filterType, setFilterType] = useState<string>('all');
 
   // Real-time Spotify search state
   const [searchResults, setSearchResults] = useState<AlbumItem[] | null>(null);
@@ -123,6 +109,7 @@ export const AlbumsPage: React.FC<AlbumsPageProps> = () => {
                   : [{ url: `https://ui-avatars.com/api/?name=${encodeURIComponent(cleanName)}&background=181824&color=f5d0b5&size=500&bold=true` }],
                 release_date: item.release_date?.substring(0, 4) || '2024',
                 total_tracks: item.total_tracks || 10,
+                genre: item.genre || 'Pop',
                 isLiked: false
               });
             }
@@ -224,7 +211,7 @@ export const AlbumsPage: React.FC<AlbumsPageProps> = () => {
     navigate(`/album/${album.id}`, { state: { album } });
   };
 
-  // Build current displayed list with strict like filtering & deduplication
+  // Build current displayed list with strict like filtering, genre filtering & deduplication
   const displayedAlbums = useMemo(() => {
     let source: AlbumItem[];
 
@@ -236,14 +223,23 @@ export const AlbumsPage: React.FC<AlbumsPageProps> = () => {
       albums.forEach(a => {
         if (likedAlbumIds.has(a.id)) likedMap.set(a.id, a);
       });
-      if (likedAlbumIds.has(NEW_MUSIC_FRIDAY.id)) {
-        likedMap.set(NEW_MUSIC_FRIDAY.id, NEW_MUSIC_FRIDAY);
-      }
       source = Array.from(likedMap.values());
     } else if (searchQuery.trim().length >= 2 && searchResults !== null) {
       source = searchResults;
     } else {
       source = deduplicateAlbums(albums);
+      if (filterType !== 'all') {
+        source = source.filter(a => {
+          const g = (a.genre || '').toLowerCase();
+          if (filterType === 'pop') return g.includes('pop') || g.includes('latin');
+          if (filterType === 'hip-hop') return g.includes('hip-hop') || g.includes('rap');
+          if (filterType === 'bollywood') return g.includes('bollywood') || g.includes('hindi') || g.includes('indian');
+          if (filterType === 'punjabi') return g.includes('punjabi');
+          if (filterType === 'r&b') return g.includes('r&b') || g.includes('soul');
+          if (filterType === 'rock') return g.includes('rock') || g.includes('indie') || g.includes('alternative');
+          return g === filterType.toLowerCase();
+        });
+      }
     }
 
     return source
@@ -259,6 +255,17 @@ export const AlbumsPage: React.FC<AlbumsPageProps> = () => {
         return a.name.toLowerCase().includes(q) || a.artists.some(art => art.name.toLowerCase().includes(q));
       });
   }, [albums, filterType, likedAlbumIds, likedProfiles, searchQuery, searchResults]);
+
+  const categories = [
+    { id: 'all', label: 'All Albums' },
+    { id: 'pop', label: 'Pop' },
+    { id: 'hip-hop', label: 'Hip-Hop' },
+    { id: 'bollywood', label: 'Bollywood' },
+    { id: 'punjabi', label: 'Punjabi' },
+    { id: 'r&b', label: 'R&B' },
+    { id: 'rock', label: 'Rock & Indie' },
+    { id: 'liked', label: `Liked (${likedAlbumIds.size})` },
+  ];
 
   return (
     <div className="space-y-6 animate-in fade-in duration-300 pb-20 select-none">
@@ -276,84 +283,67 @@ export const AlbumsPage: React.FC<AlbumsPageProps> = () => {
           </p>
         </div>
 
-        <div className="flex items-center space-x-3">
-          {/* Filter Pills */}
-          <div className="flex items-center bg-white/[0.05] p-1 rounded-full border border-white/[0.08]">
-            <button
-              onClick={() => {
-                setFilterType('all');
-                setSearchQuery('');
-                setSearchResults(null);
-              }}
-              className={`px-3 py-1 rounded-full text-xs font-semibold transition-all ${
-                filterType === 'all'
-                  ? isOcean
-                    ? 'bg-blue-600 text-white shadow-sm'
-                    : 'bg-[#f5d0b5] text-black shadow-sm'
-                  : 'text-slate-400 hover:text-white'
-              }`}
-            >
-              All Albums
-            </button>
-            <button
-              onClick={() => setFilterType('liked')}
-              className={`px-3 py-1 rounded-full text-xs font-semibold transition-all ${
-                filterType === 'liked'
-                  ? isOcean
-                    ? 'bg-blue-600 text-white shadow-sm'
-                    : 'bg-[#f5d0b5] text-black shadow-sm'
-                  : 'text-slate-400 hover:text-white'
-              }`}
-            >
-              Liked ({likedAlbumIds.size})
-            </button>
-          </div>
-
-          {/* Search Box with Real-time Spotify indicator */}
-          <div className="relative flex items-center w-44 sm:w-64">
-            <div className="absolute left-3 inset-y-0 flex items-center pointer-events-none">
-              {isSearching ? (
-                <Loader2 size={14} className={`animate-spin ${isOcean ? 'text-blue-400' : 'text-[#f5d0b5]'}`} />
-              ) : (
-                <Search size={14} className="text-slate-400" />
-              )}
-            </div>
-            <input
-              type="text"
-              placeholder="Search Spotify albums..."
-              value={searchQuery}
-              onChange={(e) => {
-                const val = e.target.value;
-                setSearchQuery(val);
-                if (val.trim().length >= 2) {
-                  setIsSearching(true);
-                } else {
-                  setIsSearching(false);
-                  setSearchResults(null);
-                }
-              }}
-              className={`w-full bg-white/[0.04] text-xs text-white placeholder-slate-500 pl-8 pr-8 py-2 rounded-full border border-white/[0.08] outline-none transition-all leading-normal ${
-                isOcean ? 'focus:border-blue-500/50' : 'focus:border-[#f5d0b5]/50'
-              }`}
-            />
-            {searchQuery && (
-              <div className="absolute right-2 inset-y-0 flex items-center">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setSearchQuery('');
-                    setSearchResults(null);
-                    setIsSearching(false);
-                  }}
-                  className="text-slate-400 hover:text-white p-1 rounded-full transition-colors flex items-center justify-center"
-                  title="Clear search"
-                >
-                  <X size={13} />
-                </button>
-              </div>
+        {/* Search Box with Real-time Spotify indicator */}
+        <div className="relative flex items-center w-full sm:w-64">
+          <div className="absolute left-3 inset-y-0 flex items-center pointer-events-none">
+            {isSearching ? (
+              <Loader2 size={14} className={`animate-spin ${isOcean ? 'text-blue-400' : 'text-[#f5d0b5]'}`} />
+            ) : (
+              <Search size={14} className="text-slate-400" />
             )}
           </div>
+          <input
+            type="text"
+            placeholder="Search albums or artists..."
+            value={searchQuery}
+            onChange={(e) => {
+              const val = e.target.value;
+              setSearchQuery(val);
+              if (val.trim().length >= 2) {
+                setIsSearching(true);
+              } else {
+                setIsSearching(false);
+                setSearchResults(null);
+              }
+            }}
+            className={`w-full bg-white/[0.04] text-xs text-white placeholder-slate-500 pl-8 pr-8 py-2 rounded-full border border-white/[0.08] outline-none transition-all leading-normal ${
+              isOcean ? 'focus:border-blue-500/50' : 'focus:border-[#f5d0b5]/50'
+            }`}
+          />
+          {searchQuery && (
+            <button
+              onClick={() => {
+                setSearchQuery('');
+                setSearchResults(null);
+                setIsSearching(false);
+              }}
+              className="absolute right-2.5 p-0.5 text-slate-400 hover:text-white"
+            >
+              <X size={12} />
+            </button>
+          )}
         </div>
+      </div>
+
+      {/* Genre & Filter Tabs Bar */}
+      <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-hide">
+        {categories.map((cat) => (
+          <button
+            key={cat.id}
+            onClick={() => {
+              setFilterType(cat.id);
+            }}
+            className={`px-3.5 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition-all ${
+              filterType === cat.id
+                ? isOcean
+                  ? 'bg-blue-600 text-white shadow-sm shadow-blue-500/20'
+                  : 'bg-[#f5d0b5] text-black shadow-sm shadow-[#f5d0b5]/20'
+                : 'bg-white/[0.04] text-slate-300 hover:text-white hover:bg-white/[0.08] border border-white/[0.06]'
+            }`}
+          >
+            {cat.label}
+          </button>
+        ))}
       </div>
 
       {/* Grid of Albums */}

@@ -61,9 +61,15 @@ export const POPULAR_SPOTIFY_PLAYLISTS = [
     { id: '37i9dQZF1DWV7EzJMK2FUI', name: "Jazz in the Background", description: "Soft, unobtrusive jazz vibes.", image: 'https://images.unsplash.com/photo-1511192336575-5a79af67a629?w=600' },
 ];
 
-function decodeHtmlEntities(str: string): string {
+function decodeHtmlEntities(str: any): string {
     if (!str) return '';
-    return str
+    let val = str;
+    if (typeof val !== 'string') {
+        if (typeof val === 'object' && val.name) val = val.name;
+        else if (typeof val === 'object' && val.title) val = val.title;
+        else val = String(val || '');
+    }
+    return val
         .replace(/&quot;/g, '"')
         .replace(/&amp;/g, '&')
         .replace(/&#039;/g, "'")
@@ -1715,51 +1721,120 @@ export class SpotifyScraperPlugin implements MetadataPlugin {
     }
 
     /**
-     * Get authentic new releases and top chart albums (strictly albums, never playlists)
+     * Get authentic, real-time new releases and top chart albums from live public APIs
      */
     async getNewReleases(): Promise<any[]> {
         const albums: any[] = [];
-        const seenAlbumNames = new Set<string>();
-
-        // Headline featured release: New Music Friday (Tate McRae) from Spotify
-        const headlineId = '37i9dQZF1DX4JAvHpjipBk';
-        seenAlbumNames.add('new music friday');
-        albums.push({
-            id: headlineId,
-            name: 'New Music Friday',
-            artists: [{ name: 'Tate McRae' }],
-            images: [{ url: 'https://i.scdn.co/image/ab67706f00000002b299b91ee0cfcac7d8c15f1c' }],
-            release_date: '2024',
-            total_tracks: 12
-        });
+        const seenNames = new Set<string>();
+        const seenIds = new Set<string>();
 
         try {
-            // Extract authentic albums directly from Spotify flagship playlists
-            const topHits = await this.getPlaylist('37i9dQZF1DXcBWIGoYBM5M'); // Today's Top Hits
-            const global50 = await this.getPlaylist('37i9dQZEVXbMDoHDwVN2tF'); // Top 50 Global
-            const allItems = [...(topHits.tracks?.items || []), ...(global50.tracks?.items || [])];
+            const [usRes, inRes, saavnRes] = await Promise.allSettled([
+                axios.get('https://itunes.apple.com/us/rss/topalbums/limit=35/json', {
+                    headers: { 'User-Agent': 'Mozilla/5.0' },
+                    timeout: 4000
+                }),
+                axios.get('https://itunes.apple.com/in/rss/topalbums/limit=35/json', {
+                    headers: { 'User-Agent': 'Mozilla/5.0' },
+                    timeout: 4000
+                }),
+                axios.get('https://www.jiosaavn.com/api.php?__call=content.getAlbums&_format=json&_marker=0&cc=in&p=1&n=30', {
+                    headers: { 'User-Agent': 'Mozilla/5.0' },
+                    timeout: 4000
+                })
+            ]);
 
-            for (const item of allItems) {
-                const track = item.track;
-                const alb = (track as any)?.album;
-                if (!alb || !alb.name) continue;
-                const norm = alb.name.toLowerCase().trim();
-                const cover = alb.images?.[0]?.url;
-                if (!cover || seenAlbumNames.has(norm)) continue;
-                seenAlbumNames.add(norm);
+            // 1. Apple Music Global / US Top Chart Albums
+            if (usRes.status === 'fulfilled') {
+                const entries = usRes.value.data?.feed?.entry || [];
+                for (const e of entries) {
+                    const name = decodeHtmlEntities(e['im:name']?.label);
+                    const artist = decodeHtmlEntities(e['im:artist']?.label || 'Artist');
+                    const rawImg = e['im:image']?.[2]?.label || e['im:image']?.[0]?.label;
+                    const img = rawImg ? rawImg.replace(/\/\d+x\d+bb\./, '/600x600bb.') : '';
+                    const genre = e['category']?.attributes?.label || 'Pop';
+                    const year = e['im:releaseDate']?.label?.substring(0, 4) || '2024';
+                    const tracks = Number(e['im:itemCount']?.label || 10);
+                    const id = e['id']?.attributes?.['im:id'] || `it_${name.toLowerCase().replace(/[^a-z0-9]/g, '')}`;
 
-                albums.push({
-                    id: alb.id || (alb.uri ? alb.uri.replace('spotify:album:', '') : `album-${norm.replace(/[^a-z0-9]/g, '')}`),
-                    name: alb.name,
-                    artists: track.artists || [{ name: 'Artist' }],
-                    images: alb.images,
-                    release_date: '2024',
-                    total_tracks: 10
-                });
-                if (albums.length >= 50) break;
+                    const norm = name.toLowerCase().trim();
+                    if (name && !seenNames.has(norm) && !seenIds.has(id)) {
+                        seenNames.add(norm);
+                        seenIds.add(id);
+                        albums.push({
+                            id,
+                            name,
+                            artists: [{ name: artist }],
+                            images: img ? [{ url: img }] : [],
+                            release_date: year,
+                            total_tracks: tracks,
+                            genre
+                        });
+                    }
+                }
+            }
+
+            // 2. Apple Music Regional / India Top Chart Albums
+            if (inRes.status === 'fulfilled') {
+                const entries = inRes.value.data?.feed?.entry || [];
+                for (const e of entries) {
+                    const name = decodeHtmlEntities(e['im:name']?.label);
+                    const artist = decodeHtmlEntities(e['im:artist']?.label || 'Artist');
+                    const rawImg = e['im:image']?.[2]?.label || e['im:image']?.[0]?.label;
+                    const img = rawImg ? rawImg.replace(/\/\d+x\d+bb\./, '/600x600bb.') : '';
+                    const genre = e['category']?.attributes?.label || 'Indian';
+                    const year = e['im:releaseDate']?.label?.substring(0, 4) || '2024';
+                    const tracks = Number(e['im:itemCount']?.label || 10);
+                    const id = e['id']?.attributes?.['im:id'] || `it_${name.toLowerCase().replace(/[^a-z0-9]/g, '')}`;
+
+                    const norm = name.toLowerCase().trim();
+                    if (name && !seenNames.has(norm) && !seenIds.has(id)) {
+                        seenNames.add(norm);
+                        seenIds.add(id);
+                        albums.push({
+                            id,
+                            name,
+                            artists: [{ name: artist }],
+                            images: img ? [{ url: img }] : [],
+                            release_date: year,
+                            total_tracks: tracks,
+                            genre
+                        });
+                    }
+                }
+            }
+
+            // 3. JioSaavn Real-Time Indian & Bollywood Releases
+            if (saavnRes.status === 'fulfilled' && Array.isArray(saavnRes.value.data)) {
+                for (const item of saavnRes.value.data) {
+                    const name = decodeHtmlEntities(item.title || item.name);
+                    if (!name) continue;
+                    const norm = name.toLowerCase().trim();
+                    const rawImg = item.image || '';
+                    const img = rawImg ? rawImg.replace(/150x150|50x50/, '500x500') : '';
+                    let artist = 'Various Artists';
+                    if (item.Artist?.music && Array.isArray(item.Artist.music)) {
+                        artist = item.Artist.music.map((m: any) => m.name).filter(Boolean).join(', ') || 'Artist';
+                    }
+                    const cleanId = `saavn_${item.albumid || item.id || norm.replace(/[^a-z0-9]/g, '')}`;
+
+                    if (!seenNames.has(norm) && !seenIds.has(cleanId)) {
+                        seenNames.add(norm);
+                        seenIds.add(cleanId);
+                        albums.push({
+                            id: cleanId,
+                            name,
+                            artists: [{ name: artist }],
+                            images: img ? [{ url: img }] : [],
+                            release_date: item.year || '2026',
+                            total_tracks: 10,
+                            genre: 'Bollywood'
+                        });
+                    }
+                }
             }
         } catch (err: any) {
-            console.warn('[SpotifyScraper] Spotify albums fetch notice:', err.message);
+            console.warn('[SpotifyScraper] Real-time albums fetch notice:', err.message);
         }
 
         return albums;

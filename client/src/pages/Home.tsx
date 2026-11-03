@@ -1723,7 +1723,9 @@ const Home: React.FC<HomeProps> = ({
                   onClick={() => navigate(`/artist/${encodeURIComponent(artistId)}`, { state: { artist } })}
                   className="flex flex-col items-center flex-shrink-0 group cursor-pointer w-20 md:w-24 text-center select-none"
                 >
-                  <div className="relative w-16 h-16 md:w-20 md:h-20 rounded-full overflow-hidden bg-black/40 border border-white/10 group-hover:border-cyan-400/60 transition-all p-0.5 shadow-lg group-hover:scale-105">
+                  <div className={`relative w-16 h-16 md:w-20 md:h-20 rounded-full overflow-hidden bg-black/40 border border-white/10 transition-all p-0.5 shadow-lg group-hover:scale-105 ${
+                    isOcean ? 'group-hover:border-cyan-400/60' : 'group-hover:border-[#f5d0b5]/60'
+                  }`}>
                     <img
                       src={getOptimizedImageUrl(imgUrl, '150')}
                       alt={artist.name || artist.artistName}
@@ -1732,7 +1734,9 @@ const Home: React.FC<HomeProps> = ({
                       loading="lazy"
                     />
                   </div>
-                  <span className="mt-2 text-xs font-medium text-white group-hover:text-cyan-300 truncate w-full transition-colors">
+                  <span className={`mt-2 text-xs font-medium text-white truncate w-full transition-colors ${
+                    isOcean ? 'group-hover:text-cyan-300' : 'group-hover:text-[#f5d0b5]'
+                  }`}>
                     {artist.name || artist.artistName}
                   </span>
                   <span className="text-[10px] text-slate-400 font-light truncate w-full">
@@ -1955,7 +1959,7 @@ const Home: React.FC<HomeProps> = ({
                   </div>
 
                   <div className="px-0.5">
-                    <h3 className="font-medium text-xs text-white truncate leading-tight group-hover:text-[#e6c8a2] transition-colors">
+                    <h3 className={`font-medium text-xs text-white truncate leading-tight transition-colors ${isOcean ? 'group-hover:text-cyan-400' : 'group-hover:text-[#e6c8a2]'}`}>
                       {track.name}
                     </h3>
                     <p className="text-[10px] text-[#8a8489] truncate mt-0.5 leading-tight font-light">
@@ -2039,7 +2043,7 @@ const Home: React.FC<HomeProps> = ({
                       }`}
                   >
                     <div className="flex items-center space-x-3 min-w-0">
-                      <span className="text-xs font-mono text-[#6e686e] w-5 text-center group-hover:text-[#e6c8a2] transition-colors flex-shrink-0">
+                      <span className={`text-xs font-mono w-5 text-center transition-colors flex-shrink-0 ${isCurrent ? (isOcean ? 'text-cyan-400 font-bold' : 'text-[#f5d0b5] font-bold') : (isOcean ? 'text-[#6e686e] group-hover:text-cyan-400' : 'text-[#6e686e] group-hover:text-[#e6c8a2]')}`}>
                         {String(idx + 1).padStart(2, '0')}
                       </span>
                       <img
@@ -2050,8 +2054,7 @@ const Home: React.FC<HomeProps> = ({
                         loading="lazy"
                       />
                       <div className="flex flex-col min-w-0">
-                        <span className={`text-xs font-semibold truncate group-hover:text-[#e6c8a2] transition-colors leading-tight ${isCurrent ? 'text-[#e6c8a2]' : 'text-white'
-                          }`}>
+                        <span className={`text-xs font-semibold truncate transition-colors leading-tight ${isCurrent ? (isOcean ? 'text-cyan-400' : 'text-[#e6c8a2]') : (isOcean ? 'text-white group-hover:text-cyan-400' : 'text-white group-hover:text-[#e6c8a2]')}`}>
                           {track.name}
                         </span>
                         <span className="text-[11px] text-[#8a8489] truncate mt-0.5 leading-tight font-light">
@@ -2069,10 +2072,10 @@ const Home: React.FC<HomeProps> = ({
                           e.stopPropagation();
                           if (onToggleLike) onToggleLike(track.id, track);
                         }}
-                        className="text-[#6e686e] hover:text-[#e6c8a2] transition-colors p-1"
+                        className={`text-[#6e686e] transition-colors p-1 ${isOcean ? 'hover:text-cyan-400' : 'hover:text-[#e6c8a2]'}`}
                         title="Like"
                       >
-                        <Heart size={14} className={isTrackLiked ? "fill-[#e6c8a2] text-[#e6c8a2]" : ""} />
+                        <Heart size={14} className={isTrackLiked ? (isOcean ? "fill-cyan-400 text-cyan-400" : "fill-[#e6c8a2] text-[#e6c8a2]") : ""} />
                       </button>
                     </div>
                   </div>
@@ -2114,7 +2117,7 @@ const Home: React.FC<HomeProps> = ({
               to={`/artist/sp_art_${encodeURIComponent(artist.name || artist.query)}`}
               className="artist-card p-3.5 rounded-2xl bg-black/20 hover:bg-black/35 border border-white/[0.08] hover:border-white/20 transition-all cursor-pointer group flex flex-col items-center text-center space-y-2.5 backdrop-blur-xl shadow-md select-none"
             >
-              <div className="relative w-20 h-20 sm:w-24 sm:h-24 rounded-full overflow-hidden shadow-lg ring-2 ring-white/10 group-hover:ring-[#e6c8a2]/50 transition-all flex-shrink-0">
+              <div className={`relative w-20 h-20 sm:w-24 sm:h-24 rounded-full overflow-hidden shadow-lg ring-2 ring-white/10 transition-all flex-shrink-0 ${isOcean ? 'group-hover:ring-cyan-400/50' : 'group-hover:ring-[#e6c8a2]/50'}`}>
                 <img
                   src={getOptimizedImageUrl(artist.avatar, '150')}
                   alt={artist.name}
@@ -2130,7 +2133,7 @@ const Home: React.FC<HomeProps> = ({
               </div>
 
               <div className="w-full px-1">
-                <h4 className="text-xs font-bold text-white truncate leading-tight group-hover:text-[#e6c8a2] transition-colors">
+                <h4 className={`text-xs font-bold text-white truncate leading-tight transition-colors ${isOcean ? 'group-hover:text-cyan-400' : 'group-hover:text-[#e6c8a2]'}`}>
                   {artist.name}
                 </h4>
                 <p className="text-[10px] text-[#8a8489] truncate mt-0.5 leading-tight font-light">
@@ -2180,7 +2183,7 @@ const Home: React.FC<HomeProps> = ({
               </div>
 
               <div className="flex-1 min-w-0">
-                <h4 className="text-xs font-semibold text-white truncate leading-tight group-hover:text-[#e6c8a2] transition-colors">
+                <h4 className={`text-xs font-semibold text-white truncate leading-tight transition-colors ${isOcean ? 'group-hover:text-cyan-400' : 'group-hover:text-[#e6c8a2]'}`}>
                   {track.name}
                 </h4>
                 <p className="text-[10px] text-[#8a8489] truncate mt-0.5 leading-tight font-light">
