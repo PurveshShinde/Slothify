@@ -7,6 +7,7 @@ import cors from 'cors';
 import { connectDB } from './db/connection.js';
 import authRoutes from './routes/auth.js';
 import apiRoutes from './routes/api.js';
+import spotifyRoutes from './routes/spotify.js';
 import youtubeRoutes from './routes/youtube.js';
 import audioRoutes from './routes/audio.js';
 import saavnRoutes from './routes/saavn.js';
@@ -62,6 +63,7 @@ app.use((req, _res, next) => {
 
 // Mount Routes
 app.use('/api/auth', authRoutes);
+app.use('/api/spotify', spotifyRoutes);
 app.use('/api', apiRoutes);
 app.use('/api/youtube', youtubeRoutes);
 app.use('/api/audio', audioRoutes);

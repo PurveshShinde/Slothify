@@ -1,22 +1,25 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, lazy, Suspense } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { CacheProvider } from './context/CacheContext';
 import { useTheme } from './context/ThemeContext';
 import Sidebar from './components/Sidebar';
 import Home from './pages/Home';
 import Search from './pages/Search';
-import Library from './pages/Library';
-import PlaylistsPage from './pages/PlaylistsPage';
-import AlbumsPage from './pages/AlbumsPage';
-import AlbumDetail from './pages/AlbumDetail';
-import ArtistsPage from './pages/ArtistsPage';
-import ArtistProfile from './pages/ArtistProfile';
-import PlaylistDetail from './pages/PlaylistDetail';
-import Downloads from './pages/Downloads';
-import Settings from './pages/Settings';
-import History from './pages/History';
-import Terms from './pages/Terms';
-import Privacy from './pages/Privacy';
+
+// Lazy-loaded secondary pages for ultra-fast initial bundle loading
+const Library = lazy(() => import('./pages/Library'));
+const PlaylistsPage = lazy(() => import('./pages/PlaylistsPage'));
+const AlbumsPage = lazy(() => import('./pages/AlbumsPage'));
+const AlbumDetail = lazy(() => import('./pages/AlbumDetail'));
+const ArtistsPage = lazy(() => import('./pages/ArtistsPage'));
+const ArtistProfile = lazy(() => import('./pages/ArtistProfile'));
+const PlaylistDetail = lazy(() => import('./pages/PlaylistDetail'));
+const Downloads = lazy(() => import('./pages/Downloads'));
+const Settings = lazy(() => import('./pages/Settings'));
+const History = lazy(() => import('./pages/History'));
+const Terms = lazy(() => import('./pages/Terms'));
+const Privacy = lazy(() => import('./pages/Privacy'));
+
 import BottomNav from './components/BottomNav';
 import Player from './components/Player';
 import ScrollToTop from './components/ScrollToTop';
@@ -25,6 +28,8 @@ import Footer from './components/Footer';
 import { User, Track } from './types';
 import axios from 'axios';
 import { AuthModal } from './components/AuthModal';
+import { SpotifyProvider } from './context/SpotifyContext';
+import SpotifyConnectModal from './components/SpotifyConnectModal';
 
 const App: React.FC = () => {
   const { isOcean } = useTheme();
@@ -696,7 +701,8 @@ const App: React.FC = () => {
 
   return (
     <CacheProvider>
-      <BrowserRouter>
+      <SpotifyProvider>
+        <BrowserRouter>
         <ScrollToTop />
         <div className={`flex h-screen text-slate-100 overflow-hidden select-none flex-col md:flex-row font-sans relative ${
           isOcean ? 'bg-[#040e1a]' : 'bg-[#120905]'
@@ -722,17 +728,6 @@ const App: React.FC = () => {
                 isOcean
                   ? 'bg-gradient-to-b from-[#020914]/50 via-[#030e1c]/60 to-[#020812]/75'
                   : 'bg-gradient-to-b from-[#140803]/35 via-[#1a0a04]/45 to-[#0d0502]/60'
-              }`}
-            />
-            {/* Atmospheric Dynamic Radial Ambient Lights */}
-            <div
-              className={`absolute -top-32 -left-32 w-[600px] h-[600px] rounded-full blur-[160px] opacity-25 transition-all duration-700 pointer-events-none ${
-                isOcean ? 'bg-cyan-600' : 'bg-[#d97736]'
-              }`}
-            />
-            <div
-              className={`absolute top-1/2 -right-32 w-[550px] h-[550px] rounded-full blur-[180px] opacity-20 transition-all duration-700 pointer-events-none ${
-                isOcean ? 'bg-blue-600' : 'bg-[#c87d46]'
               }`}
             />
           </div>
@@ -774,8 +769,15 @@ const App: React.FC = () => {
             </header>
 
             <div className="p-4 md:px-8 md:pt-6 md:pb-36">
-              <Routes>
-                <Route path="/" element={
+              <Suspense fallback={
+                <div className="min-h-[50vh] flex items-center justify-center">
+                  <div className={`w-8 h-8 rounded-full border-2 border-t-transparent animate-spin ${
+                    isOcean ? 'border-cyan-400' : 'border-[#f5d0b5]'
+                  }`} />
+                </div>
+              }>
+                <Routes>
+                  <Route path="/" element={
                   <Home
                     isAuthenticated={isAuthenticated}
                     onPlayTrack={handlePlayTrack}
@@ -907,7 +909,8 @@ const App: React.FC = () => {
                 <Route path="/privacy" element={<Privacy />} />
                 <Route path="*" element={<Navigate to="/" replace />} />
               </Routes>
-            </div>
+            </Suspense>
+          </div>
             <Footer />
           </main>
 
@@ -938,8 +941,12 @@ const App: React.FC = () => {
             onAuthSuccess={handleAuthSuccess}
             initialMode={authModalMode}
           />
+
+          {/* Spotify Playlist Importer Modal */}
+          <SpotifyConnectModal />
         </div>
       </BrowserRouter>
+      </SpotifyProvider>
     </CacheProvider>
   );
 };

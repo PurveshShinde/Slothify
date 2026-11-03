@@ -284,14 +284,9 @@ export const AlbumsPage: React.FC<AlbumsPageProps> = () => {
       {/* Top Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2 border-b border-white/[0.06]">
         <div>
-          <div className="flex items-center space-x-2.5 mb-1">
-            <div className={`p-2 rounded-xl ${isOcean ? 'bg-blue-600/20 text-blue-400' : 'bg-[#c87d46]/20 text-[#f5d0b5]'}`}>
-              <Disc size={22} />
-            </div>
-            <h1 className="text-2xl sm:text-3xl font-black text-white tracking-tight">Albums</h1>
-          </div>
-          <p className="text-xs text-slate-400">
-            {likedAlbumIds.size} liked albums • {isLoading ? 'Loading albums...' : isSearching ? 'Searching Spotify albums...' : searchQuery.trim() ? `${displayedAlbums.length} results` : `${displayedAlbums.length} available`}
+          <h1 className="text-2xl sm:text-3xl font-bold text-white tracking-tight">Albums</h1>
+          <p className="text-xs text-neutral-400 mt-0.5">
+            {likedAlbumIds.size > 0 ? `${likedAlbumIds.size} liked • ` : ''}{isLoading ? 'Loading albums...' : isSearching ? 'Searching Spotify albums...' : searchQuery.trim() ? `${displayedAlbums.length} results` : `${displayedAlbums.length} available`}
           </p>
         </div>
 
@@ -301,7 +296,7 @@ export const AlbumsPage: React.FC<AlbumsPageProps> = () => {
             {isSearching ? (
               <Loader2 size={14} className={`animate-spin ${isOcean ? 'text-blue-400' : 'text-[#f5d0b5]'}`} />
             ) : (
-              <Search size={14} className="text-slate-400" />
+              <Search size={14} className="text-neutral-400" />
             )}
           </div>
           <input
@@ -318,9 +313,7 @@ export const AlbumsPage: React.FC<AlbumsPageProps> = () => {
                 setSearchResults(null);
               }
             }}
-            className={`w-full bg-white/[0.04] text-xs text-white placeholder-slate-500 pl-8 pr-8 py-2 rounded-full border border-white/[0.08] outline-none transition-all leading-normal ${
-              isOcean ? 'focus:border-blue-500/50' : 'focus:border-[#f5d0b5]/50'
-            }`}
+            className="w-full bg-white/[0.04] text-xs text-white placeholder-neutral-500 pl-8 pr-8 py-2 rounded-full border border-white/[0.08] outline-none transition-all leading-normal focus:border-white/20"
           />
           {searchQuery && (
             <button
@@ -329,7 +322,7 @@ export const AlbumsPage: React.FC<AlbumsPageProps> = () => {
                 setSearchResults(null);
                 setIsSearching(false);
               }}
-              className="absolute right-2.5 p-0.5 text-slate-400 hover:text-white"
+              className="absolute right-2.5 p-0.5 text-neutral-400 hover:text-white"
             >
               <X size={12} />
             </button>
@@ -338,19 +331,19 @@ export const AlbumsPage: React.FC<AlbumsPageProps> = () => {
       </div>
 
       {/* Genre & Filter Tabs Bar */}
-      <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-hide">
+      <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-hide">
         {categories.map((cat) => (
           <button
             key={cat.id}
             onClick={() => {
               setFilterType(cat.id);
             }}
-            className={`px-3.5 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition-all ${
+            className={`px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-colors ${
               filterType === cat.id
                 ? isOcean
-                  ? 'bg-blue-600 text-white shadow-sm shadow-blue-500/20'
-                  : 'bg-[#f5d0b5] text-black shadow-sm shadow-[#f5d0b5]/20'
-                : 'bg-white/[0.04] text-slate-300 hover:text-white hover:bg-white/[0.08] border border-white/[0.06]'
+                  ? 'bg-blue-600 text-white'
+                  : 'bg-white text-black'
+                : 'bg-white/[0.04] text-neutral-400 hover:text-white hover:bg-white/[0.08]'
             }`}
           >
             {cat.label}

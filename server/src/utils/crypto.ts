@@ -1,7 +1,16 @@
 import crypto from 'crypto';
 
 // Server-wide master pepper / salt (can be configured in env)
-const ENCRYPTION_SECRET = process.env.ENCRYPTION_SECRET || 'slothify-zero-knowledge-fallback-secret-2026';
+const PRIMARY_SECRET = process.env.ENCRYPTION_SECRET || 'slothify_zero_knowledge_super_secret_pepper_2026';
+
+// All known candidate secrets to decrypt records created across different deployments/environments
+const CANDIDATE_SECRETS = Array.from(new Set([
+    PRIMARY_SECRET,
+    process.env.ENCRYPTION_SECRET,
+    'slothify_zero_knowledge_super_secret_pepper_2026',
+    'slothify-zero-knowledge-fallback-secret-2026',
+    'slothify-zero-knowledge-fallback-secret'
+].filter(Boolean) as string[]));
 
 // 128 English words for easy, memorable recovery passphrases
 const WORD_LIST = [
@@ -39,8 +48,12 @@ export function generateRecoveryPassphrase(): string {
 /**
  * Derive a 256-bit AES key for a specific user ID + secret
  */
+function deriveKeyWithSecret(userId: string, secret: string): Buffer {
+    return crypto.scryptSync(userId + secret, 'slothify_salt', 32);
+}
+
 function deriveKey(userId: string): Buffer {
-    return crypto.scryptSync(userId + ENCRYPTION_SECRET, 'slothify_salt', 32);
+    return deriveKeyWithSecret(userId, PRIMARY_SECRET);
 }
 
 /**
@@ -65,23 +78,37 @@ export function encryptPayload(data: any, userId: string): { ciphertext: string;
 }
 
 /**
- * Decrypt AES-256-GCM ciphertext back into JSON object
+ * Decrypt AES-256-GCM ciphertext back into JSON object.
+ * Attempts decryption using current secret, falling back to legacy environment secrets if needed.
  */
 export function decryptPayload<T = any>(ciphertext: string, ivHex: string, tagHex: string, userId: string): T | null {
+    if (!ciphertext || !ivHex || !tagHex || !userId) return null;
+
     try {
-        const key = deriveKey(userId);
         const iv = Buffer.from(ivHex, 'hex');
         const tag = Buffer.from(tagHex, 'hex');
 
-        const decipher = crypto.createDecipheriv('aes-256-gcm', key, iv);
-        decipher.setAuthTag(tag);
+        // Iterate through known candidate secrets (primary secret first)
+        for (const secret of CANDIDATE_SECRETS) {
+            try {
+                const key = deriveKeyWithSecret(userId, secret);
+                const decipher = crypto.createDecipheriv('aes-256-gcm', key, iv);
+                decipher.setAuthTag(tag);
 
-        let decrypted = decipher.update(ciphertext, 'hex', 'utf8');
-        decrypted += decipher.final('utf8');
+                let decrypted = decipher.update(ciphertext, 'hex', 'utf8');
+                decrypted += decipher.final('utf8');
 
-        return JSON.parse(decrypted);
+                return JSON.parse(decrypted);
+            } catch {
+                // Key/Auth-tag mismatch with this secret, try next candidate
+                continue;
+            }
+        }
+
+        console.warn(`[Crypto] Decryption not possible for user ${userId.slice(0, 8)}... (secret mismatch)`);
+        return null;
     } catch (err: any) {
-        console.error('[Crypto] Decryption failed:', err.message);
+        console.error('[Crypto] Unexpected decryption error:', err.message);
         return null;
     }
 }

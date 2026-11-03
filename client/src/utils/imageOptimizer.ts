@@ -94,14 +94,37 @@ export const KNOWN_ARTIST_AVATARS: Record<string, string> = {
   'diljit dosanjh': 'https://i.scdn.co/image/ab6761610000e5eb1d2b86b46187cc8e7bbd5696',
   'sidhu moose wala': 'https://i.scdn.co/image/ab6761610000e5eb12a2ef1897d2e38103dcae32',
   'karan aujla': 'https://i.scdn.co/image/ab6761610000e5ebd8b9980db67272cb4d4c3dfe',
-  'anirudh ravichander': 'https://i.scdn.co/image/ab6761610000e5eb478b87a9526742eb559eb2ec'
+  'anirudh ravichander': 'https://i.scdn.co/image/ab6761610000e5eb478b87a9526742eb559eb2ec',
+  'isabel larosa': 'https://i.scdn.co/image/ab6761610000e5eb4f47983634e0feea42302179',
+  'isabel la rosa': 'https://i.scdn.co/image/ab6761610000e5eb4f47983634e0feea42302179'
 };
+
+/**
+ * Deterministic, offline-safe SVG avatar monogram with pleasing gradient.
+ * Never fails, never blocked by adblockers, requires zero external network calls.
+ */
+export function generateMonogramSvg(initial: string, name: string): string {
+  let hash = 0;
+  for (let i = 0; i < name.length; i++) hash = name.charCodeAt(i) + ((hash << 5) - hash);
+  const palettes = [
+    ['#2563eb', '#1d4ed8'],
+    ['#7c3aed', '#6d28d9'],
+    ['#c87d46', '#9a5323'],
+    ['#059669', '#047857'],
+    ['#e11d48', '#be123c'],
+    ['#0891b2', '#0e7490']
+  ];
+  const pair = palettes[Math.abs(hash) % palettes.length];
+  const char = (initial || 'A').toUpperCase();
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="300" height="300" viewBox="0 0 300 300"><defs><linearGradient id="g" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="${pair[0]}"/><stop offset="100%" stop-color="${pair[1]}"/></linearGradient></defs><rect width="300" height="300" fill="url(#g)"/><text x="50%" y="54%" dominant-baseline="middle" text-anchor="middle" fill="#ffffff" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif" font-size="120" font-weight="700">${char}</text></svg>`;
+  return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
+}
 
 /**
  * Robust artist avatar resolver.
  * 1. Checks if known artist mapping exists (guarantees genuine 200 OK portrait).
  * 2. If artist object has an authentic image (not ui-avatars and not 404 hash), uses it.
- * 3. Otherwise falls back to known portrait or styled avatar.
+ * 3. Otherwise falls back to known portrait or offline SVG monogram.
  */
 export function getArtistAvatarUrl(
   artist: { name?: string; images?: { url?: string }[]; coverImage?: string } | null | undefined,
@@ -118,8 +141,9 @@ export function getArtistAvatarUrl(
 
   if (isInvalid) {
     if (known) return getOptimizedImageUrl(known, size);
-    const name = artist?.name || 'Artist';
-    return `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=181824&color=f5d0b5&size=${size}&bold=true`;
+    const name = (artist?.name || 'Artist').trim();
+    const initial = name.charAt(0).toUpperCase() || 'A';
+    return generateMonogramSvg(initial, name);
   }
 
   return getOptimizedImageUrl(rawUrl, size);
@@ -127,7 +151,7 @@ export function getArtistAvatarUrl(
 
 /**
  * Handle image load errors gracefully by falling back to known Spotify portrait
- * before falling back to ui-avatars.
+ * before falling back to offline SVG monogram.
  */
 export function handleArtistImageError(
   e: React.SyntheticEvent<HTMLImageElement, Event>,
@@ -140,8 +164,9 @@ export function handleArtistImageError(
     img.src = known;
     return;
   }
-  const fallbackName = artistName || 'Artist';
-  img.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(fallbackName)}&background=181824&color=f5d0b5&size=150&bold=true`;
+  const fallbackName = (artistName || 'Artist').trim();
+  const initial = fallbackName.charAt(0).toUpperCase() || 'A';
+  img.src = generateMonogramSvg(initial, fallbackName);
 }
 
 /**
@@ -158,7 +183,8 @@ export function getTrackThumbnail(
   if (!images || images.length === 0 || !images[0]?.url || images[0].url.includes('unsplash.com')) {
     if (fallback) return fallback;
     const name = track?.name || 'Track';
-    return `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=181824&color=f5d0b5&size=150&bold=true`;
+    const char = name.charAt(0) || '♪';
+    return generateMonogramSvg(char, name);
   }
 
   // If Spotify or multi-size array provided (e.g. [640x640, 300x300, 64x64])

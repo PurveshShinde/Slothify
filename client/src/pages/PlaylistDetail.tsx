@@ -1,13 +1,14 @@
 import React, { useEffect, useState, useMemo, useRef } from 'react';
 import {
   ArrowLeft, Search as SearchIcon, ArrowUpDown, Heart, Trash2, Play, Pause,
-  Clock3, MoreHorizontal, Download, Shuffle, MoreVertical, RefreshCw, ArrowDown, Plus, Music2
+  Clock3, MoreHorizontal, Download, Shuffle, MoreVertical, RefreshCw, ArrowDown, Plus, Music2, Check
 } from 'lucide-react';
 import { Playlist, Track, User } from '../types';
 import axios from 'axios';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useCache } from '../context/CacheContext';
 import { useTheme } from '../context/ThemeContext';
+import { useSpotify } from '../context/SpotifyContext';
 import PlaylistCover from '../components/PlaylistCover';
 import { getTrackThumbnail } from '../utils/imageOptimizer';
 
@@ -34,7 +35,7 @@ const KNOWN_PLAYLIST_META: Record<string, { name: string; description: string; i
   }
 };
 
-type SortOption = 'az' | 'za' | 'newest' | 'oldest' | 'duration' | 'artist';
+type SortOption = 'custom' | 'az' | 'za' | 'artist' | 'duration';
 
 interface ExtendedTrack extends Track {
   added_at?: string;
@@ -59,6 +60,24 @@ interface PlaylistDetailProps {
   user?: User | null;
 }
 
+const extractTracksArray = (data: any): ExtendedTrack[] => {
+  if (!data) return [];
+  if (Array.isArray(data.tracks)) return data.tracks;
+  if (Array.isArray(data.tracks?.items)) {
+    return data.tracks.items
+      .filter((i: any) => i && (i.track || i.id))
+      .map((i: any) => {
+        const t = i.track || i;
+        return { ...t, added_at: i.added_at, added_by: i.added_by };
+      });
+  }
+  if (Array.isArray(data.items)) {
+    return data.items.map((i: any) => i.track || i).filter(Boolean);
+  }
+  if (Array.isArray(data)) return data;
+  return [];
+};
+
 const PlaylistDetail: React.FC<PlaylistDetailProps> = ({
   isLikedView, onPlayTrack, likedTrackIds, onToggleLike, currentTrackId,
   isPlaying, onPlayPause, isShuffle, onToggleShuffle, user
@@ -69,17 +88,37 @@ const PlaylistDetail: React.FC<PlaylistDetailProps> = ({
   const id = isLikedView ? 'liked' : paramId || '';
 
   const { cache, setPlaylistDetail, removePlaylistFromCache } = useCache();
+  const { removeImportedPlaylist, spotifyPlaylists } = useSpotify();
 
   // Cache check
   const cachedData = cache.playlistDetails[id];
+  const cachedPlaylist = cachedData?.playlist || (cachedData?.name ? cachedData : null);
+  const cachedTracks = extractTracksArray(cachedData);
 
-  const [playlist, setPlaylist] = useState<Playlist | null>(cachedData?.playlist || null);
-  const [tracks, setTracks] = useState<ExtendedTrack[]>(cachedData?.tracks || []);
+  const [playlist, setPlaylist] = useState<Playlist | null>(cachedPlaylist);
+  const [tracks, setTracks] = useState<ExtendedTrack[]>(cachedTracks);
   const [filterQuery, setFilterQuery] = useState('');
-  const [sortBy, setSortBy] = useState<SortOption>('az');
+  const [sortBy, setSortBy] = useState<SortOption>('custom');
   const [showSortMenu, setShowSortMenu] = useState(false);
+  const sortMenuRef = useRef<HTMLDivElement>(null);
+
+  // Close sort menu when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (sortMenuRef.current && !sortMenuRef.current.contains(e.target as Node)) {
+        setShowSortMenu(false);
+      }
+    };
+    if (showSortMenu) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [showSortMenu]);
+
   // Only show loading spinner if we have NO cached data at all
-  const [isLoading, setIsLoading] = useState(!cachedData);
+  const [isLoading, setIsLoading] = useState(!cachedPlaylist && cachedTracks.length === 0);
   const [isDeleting, setIsDeleting] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showSearchBar, setShowSearchBar] = useState(false);
@@ -108,25 +147,34 @@ const PlaylistDetail: React.FC<PlaylistDetailProps> = ({
 
   const fetchData = async (isRefresh = false) => {
     if (!id) return;
+
+    // Check Spotify playlists in context first
+    if (id.startsWith('sp_')) {
+      const spPlaylist = spotifyPlaylists.find(p => p.id === id);
+      if (spPlaylist) {
+        const fetchedTracks = extractTracksArray(spPlaylist);
+        setPlaylist(spPlaylist);
+        setTracks(fetchedTracks);
+        setPlaylistDetail(id, { playlist: spPlaylist, tracks: fetchedTracks });
+        setIsLoading(false);
+        setIsRefreshing(false);
+        return;
+      }
+    }
+
     // Use cache for ALL views including liked - skip fetch if cached and not refreshing
     if (!isRefresh && cachedData) return;
 
     // Only show full loading spinner if there's no cached data to display
     // This prevents the "no songs" flash when refreshing in the background
-    const hasCachedContent = cachedData || tracks.length > 0;
+    const hasCachedContent = cachedData || (Array.isArray(tracks) && tracks.length > 0);
     setIsLoading(!isRefresh && !hasCachedContent);
 
     try {
       if (!isLikedView) {
         const res = await axios.get(`/api/playlists/${id}`);
         const fetchedPlaylist = res.data;
-        let fetchedTracks: ExtendedTrack[] = [];
-
-        if (res.data.tracks?.items) {
-          fetchedTracks = res.data.tracks.items
-            .filter((i: any) => i.track)
-            .map((i: any) => ({ ...i.track, added_at: i.added_at, added_by: i.added_by }));
-        }
+        const fetchedTracks = extractTracksArray(fetchedPlaylist);
 
         setPlaylist(fetchedPlaylist);
         setTracks(fetchedTracks);
@@ -193,14 +241,26 @@ const PlaylistDetail: React.FC<PlaylistDetailProps> = ({
 
   useEffect(() => {
     if (id) {
+      if (id.startsWith('sp_')) {
+        const spPlaylist = spotifyPlaylists.find(p => p.id === id);
+        if (spPlaylist) {
+          const trks = extractTracksArray(spPlaylist);
+          setPlaylist(spPlaylist);
+          setTracks(trks);
+          setPlaylistDetail(id, { playlist: spPlaylist, tracks: trks });
+          setIsLoading(false);
+          return;
+        }
+      }
       if (cachedData) {
         // Show cached data instantly for ALL views (including liked)
-        setPlaylist(cachedData.playlist);
-        setTracks(cachedData.tracks);
+        const pl = cachedData.playlist || (cachedData.name ? cachedData : null);
+        const trks = extractTracksArray(cachedData);
+        setPlaylist(pl);
+        setTracks(trks);
         setIsLoading(false);
-        // For liked view, do a background refresh to pick up any changes
-        // but don't show loading state since we already have data
-        if (isLikedView) {
+        // For liked view, or if playlist has no tracks or needs refresh, fetch in background
+        if (isLikedView || !pl || !trks.length) {
           fetchData(true);
         }
       } else {
@@ -211,7 +271,7 @@ const PlaylistDetail: React.FC<PlaylistDetailProps> = ({
     }
     // Only re-fetch liked view when likedTrackIds size actually changes
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [id, isLikedView]);
+  }, [id, isLikedView, spotifyPlaylists]);
 
   // Pull-to-Refresh Handlers
   const handleTouchStart = (e: React.TouchEvent) => {
@@ -300,33 +360,41 @@ const PlaylistDetail: React.FC<PlaylistDetailProps> = ({
     if (!id || isLikedView) return;
     setIsDeleting(true);
     try {
-      await axios.delete(`/api/me/playlists/${id}`);
+      const isSpotifyPl = id.startsWith('sp_') || playlist?.isSpotify || spotifyPlaylists.some(p => p.id === id);
+      if (isSpotifyPl) {
+        removeImportedPlaylist(id);
+      } else {
+        await axios.delete(`/api/me/playlists/${id}`);
+      }
     } catch (err) {
       console.error('Failed to delete playlist on server:', err);
     } finally {
       removePlaylistFromCache(id);
       window.dispatchEvent(new Event('slothify_playlists_updated'));
+      window.dispatchEvent(new Event('slothify_spotify_playlists_updated'));
       setIsDeleting(false);
       setShowDeleteConfirm(false);
-      navigate('/playlists');
+      navigate('/library');
     }
   };
 
   const sortedAndFilteredTracks = useMemo(() => {
-    let list = [...tracks];
+    const safeTracks = Array.isArray(tracks) ? tracks : [];
+    let list = [...safeTracks];
     if (filterQuery.trim()) {
       const q = filterQuery.toLowerCase();
       list = list.filter(t =>
-        (t.name || '').toLowerCase().includes(q) ||
-        (t.artists || []).some(a => (a?.name || '').toLowerCase().includes(q))
+        (t?.name || '').toLowerCase().includes(q) ||
+        (t?.artists || []).some(a => (a?.name || '').toLowerCase().includes(q))
       );
     }
     list.sort((a, b) => {
       switch (sortBy) {
-        case 'az': return (a.name || '').localeCompare(b.name || '');
-        case 'za': return (b.name || '').localeCompare(a.name || '');
-        case 'duration': return (a.duration_ms || 0) - (b.duration_ms || 0);
-        case 'artist': return (a.artists?.[0]?.name || '').localeCompare(b.artists?.[0]?.name || '');
+        case 'custom': return 0;
+        case 'az': return (a?.name || '').localeCompare(b?.name || '');
+        case 'za': return (b?.name || '').localeCompare(a?.name || '');
+        case 'duration': return (a?.duration_ms || 0) - (b?.duration_ms || 0);
+        case 'artist': return (a?.artists?.[0]?.name || '').localeCompare(b?.artists?.[0]?.name || '');
         default: return 0;
       }
     });
@@ -334,7 +402,8 @@ const PlaylistDetail: React.FC<PlaylistDetailProps> = ({
   }, [tracks, filterQuery, sortBy]);
 
   const collaborators = useMemo(() => {
-    if (!tracks.length || !playlist?.owner) return [];
+    const safeTracks = Array.isArray(tracks) ? tracks : [];
+    if (!safeTracks.length || !playlist?.owner) return [];
     const uniqueIds = new Set<string>();
     const list: any[] = [];
 
@@ -344,8 +413,8 @@ const PlaylistDetail: React.FC<PlaylistDetailProps> = ({
     }
     list.push({ ...playlist.owner, isOwner: true });
 
-    tracks.forEach(t => {
-      if (t.added_by && t.added_by.id && !uniqueIds.has(t.added_by.id) && t.added_by.id !== 'spotify') {
+    safeTracks.forEach(t => {
+      if (t?.added_by && t.added_by.id && !uniqueIds.has(t.added_by.id) && t.added_by.id !== 'spotify') {
         uniqueIds.add(t.added_by.id);
         const name = t.added_by.display_name || t.added_by.id;
         list.push({ ...t.added_by, display_name: name });
@@ -372,7 +441,8 @@ const PlaylistDetail: React.FC<PlaylistDetailProps> = ({
 
   if (isLoading) return <div className="flex items-center justify-center h-screen bg-transparent"><div className={`w-12 h-12 border-4 ${isOcean ? 'border-blue-500' : 'border-[#f5d0b5]'} border-t-transparent rounded-full animate-spin`}></div></div>;
 
-  const totalDurationMs = tracks.reduce((acc, t) => acc + t.duration_ms, 0);
+  const safeTracksList = Array.isArray(tracks) ? tracks : [];
+  const totalDurationMs = safeTracksList.reduce((acc, t) => acc + (t?.duration_ms || 0), 0);
   const formatTotalDuration = (ms: number) => {
     const hours = Math.floor(ms / 3600000);
     const minutes = Math.floor((ms % 3600000) / 60000);
@@ -394,7 +464,7 @@ const PlaylistDetail: React.FC<PlaylistDetailProps> = ({
 
   const isOwner = playlist?.owner?.id === user?.id;
 
-  const isThisPlaylistPlaying = tracks.some(t => t.id === currentTrackId);
+  const isThisPlaylistPlaying = safeTracksList.some(t => t?.id === currentTrackId);
 
   // ✅ MAIN BUTTON LOGIC
   const handleMainPlayClick = () => {
@@ -443,6 +513,8 @@ const PlaylistDetail: React.FC<PlaylistDetailProps> = ({
     ? null
     : (playlist?.images?.[0]?.url || KNOWN_PLAYLIST_META[id]?.image || `https://picsum.photos/seed/${id}/400`);
 
+  const isSpotifyPl = id.startsWith('sp_') || Boolean(playlist?.isSpotify) || spotifyPlaylists.some(p => p.id === id);
+
   return (
     <div
       ref={containerRef}
@@ -465,38 +537,11 @@ const PlaylistDetail: React.FC<PlaylistDetailProps> = ({
       <div className="max-w-6xl mx-auto w-full mb-3 flex items-center justify-between">
         <button
           onClick={() => navigate(-1)}
-          className="inline-flex items-center space-x-2 px-3.5 py-1.5 rounded-xl bg-black/40 hover:bg-white/10 text-white/80 hover:text-white backdrop-blur-md border border-white/10 transition-all text-xs font-semibold group shadow-md hover:scale-[1.02] active:scale-95"
+          className="inline-flex items-center space-x-2 px-3.5 py-1.5 rounded-xl bg-black/40 hover:bg-white/10 text-white/80 hover:text-white backdrop-blur-md border border-white/10 transition-all text-xs font-semibold group shadow-md hover:scale-[1.02] active:scale-95 cursor-pointer"
         >
           <ArrowLeft size={16} className="group-hover:-translate-x-0.5 transition-transform" />
           <span>Back</span>
         </button>
-      </div>
-
-      {/* SEARCH BAR (Hidden until pull) */}
-      <div
-        className="px-4 overflow-hidden transition-all duration-300 ease-out"
-        style={{
-          height: (pullMoveY > 20 || showSearchBar) ? '64px' : '0px',
-          opacity: (pullMoveY > 20 || showSearchBar) ? 1 : 0,
-          marginBottom: (pullMoveY > 20 || showSearchBar) ? '8px' : '0px'
-        }}
-      >
-        <div className="relative w-full">
-          <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
-          <input
-            type="text"
-            placeholder="Find on this page"
-            value={filterQuery}
-            onChange={(e) => {
-              setFilterQuery(e.target.value);
-              if (e.target.value.length > 0) setShowSearchBar(true);
-            }}
-            onBlur={() => {
-              if (filterQuery.length === 0) setShowSearchBar(false);
-            }}
-            className="w-full bg-white/10 border-none rounded-md py-2.5 pl-9 pr-4 text-white placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-white/20 transition-all text-sm font-semibold"
-          />
-        </div>
       </div>
 
       {/* MAIN FROSTED GLASS PLAYLIST CONTAINER */}
@@ -504,7 +549,7 @@ const PlaylistDetail: React.FC<PlaylistDetailProps> = ({
         {/* HEADER SECTION */}
         <div className="flex flex-col md:flex-row items-center md:items-end gap-6 pb-8 border-b border-white/10">
           {/* Artwork */}
-          <div className="w-48 h-48 sm:w-56 sm:h-56 md:w-64 md:h-64 flex-shrink-0 shadow-2xl rounded-2xl overflow-hidden">
+          <div className="w-48 h-48 sm:w-56 sm:h-56 md:w-64 md:h-64 flex-shrink-0 shadow-2xl rounded-2xl overflow-hidden ring-1 ring-white/10">
             {isLikedView ? (
               <div className={`w-full h-full flex items-center justify-center rounded-2xl shadow-2xl ${
                 isOcean
@@ -516,7 +561,7 @@ const PlaylistDetail: React.FC<PlaylistDetailProps> = ({
             ) : (
               <PlaylistCover
                 images={playlist?.images}
-                tracks={playlist?.tracks || { items: tracks.map(t => ({ track: t })) }}
+                tracks={playlist?.tracks || { items: safeTracksList.map(t => ({ track: t })) }}
                 iconSize={64}
                 alt={displayName}
               />
@@ -525,25 +570,46 @@ const PlaylistDetail: React.FC<PlaylistDetailProps> = ({
 
           {/* Title & Info */}
           <div className="flex-1 min-w-0 space-y-3 text-center md:text-left">
-            <span className="text-[11px] font-bold tracking-widest uppercase text-slate-400">Playlist</span>
-            <h1 className="text-3xl sm:text-4xl md:text-5xl font-black text-white tracking-tight leading-tight">{displayName}</h1>
-            <p className="text-sm text-slate-300 line-clamp-2 max-w-2xl">{displayDescription}</p>
+            <div className="flex items-center justify-center md:justify-start gap-2">
+              {isSpotifyPl ? (
+                <div className="inline-flex items-center space-x-1.5 px-2.5 py-0.5 rounded-full bg-[#1DB954]/20 border border-[#1DB954]/30 text-[#1DB954] text-[10px] font-bold tracking-wider font-display">
+                  <svg className="w-3 h-3 fill-current" viewBox="0 0 24 24">
+                    <path d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm5.503 17.306c-.218.358-.683.473-1.042.254-2.858-1.745-6.457-2.14-10.697-1.171-.41.093-.815-.164-.908-.573-.093-.41.164-.816.573-.908 4.636-1.06 8.608-.607 11.82 1.356.359.219.473.684.254 1.042zm1.469-3.267c-.274.446-.86.588-1.306.314-3.272-2.012-8.261-2.595-12.132-1.419-.501.152-1.034-.136-1.186-.637-.152-.5.136-1.033.637-1.185 4.417-1.34 9.914-.689 13.673 1.621.446.275.588.86.314 1.306zm.126-3.41c-3.924-2.33-10.395-2.545-14.152-1.404-.602.183-1.242-.162-1.425-.764-.183-.602.162-1.242.764-1.425 4.312-1.31 11.455-1.061 15.98 1.625.541.321.718 1.025.397 1.566-.321.541-1.025.718-1.564.402z" />
+                  </svg>
+                  <span>Spotify Playlist</span>
+                </div>
+              ) : (
+                <span className="text-[11px] font-bold tracking-widest uppercase text-slate-400 font-display">
+                  {isLikedView ? 'Liked Songs' : 'Playlist'}
+                </span>
+              )}
+            </div>
 
-            <div className="flex flex-wrap items-center justify-center md:justify-start gap-3 pt-2 text-xs text-slate-400">
-              {/* Creator info */}
+            <h1 className="text-3xl sm:text-4xl md:text-5xl font-black text-white tracking-tight leading-tight font-display">
+              {displayName}
+            </h1>
+            {displayDescription && (
+              <p className="text-sm text-slate-300 line-clamp-2 max-w-2xl leading-relaxed">
+                {displayDescription}
+              </p>
+            )}
+
+            <div className="flex flex-wrap items-center justify-center md:justify-start gap-3 pt-2 text-xs text-slate-400 font-medium">
               <div className="flex items-center space-x-2">
                 {ownerImage ? (
                   <img src={ownerImage} className="w-6 h-6 rounded-full object-cover ring-1 ring-white/20" alt="" />
                 ) : (
-                  <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold text-white ${isOcean ? 'bg-blue-600' : 'bg-[#c87d46]'}`}>
+                  <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold text-white ${
+                    isSpotifyPl ? 'bg-[#1DB954] text-black' : (isOcean ? 'bg-blue-600' : 'bg-[#c87d46]')
+                  }`}>
                     {(playlist?.owner?.display_name || 'S').charAt(0)}
                   </div>
                 )}
-                <span className="font-bold text-white">{playlist?.owner?.display_name || 'Slothify'}</span>
+                <span className="font-bold text-white">{playlist?.owner?.display_name || (isSpotifyPl ? 'Spotify' : 'Slothify')}</span>
               </div>
               <span>•</span>
-              <span>{tracks.length} song{tracks.length === 1 ? '' : 's'}</span>
-              {tracks.length > 0 && (
+              <span>{safeTracksList.length} song{safeTracksList.length === 1 ? '' : 's'}</span>
+              {safeTracksList.length > 0 && (
                 <>
                   <span>•</span>
                   <span>{formatTotalDuration(totalDurationMs)}</span>
@@ -554,12 +620,12 @@ const PlaylistDetail: React.FC<PlaylistDetailProps> = ({
         </div>
 
         {/* ACTION CONTROLS ROW */}
-        <div className="flex items-center justify-between py-6">
+        <div className="flex flex-wrap items-center justify-between gap-4 py-6">
           <div className="flex items-center space-x-5 text-slate-300">
             <button
               onClick={handleMainPlayClick}
               disabled={sortedAndFilteredTracks.length === 0}
-              className={`w-14 h-14 rounded-full flex items-center justify-center shadow-xl transition-all ${
+              className={`w-14 h-14 rounded-full flex items-center justify-center shadow-xl transition-all cursor-pointer ${
                 sortedAndFilteredTracks.length === 0
                   ? 'bg-slate-700/50 text-slate-500 cursor-not-allowed opacity-50'
                   : isOcean
@@ -573,18 +639,85 @@ const PlaylistDetail: React.FC<PlaylistDetailProps> = ({
             <button
               onClick={onToggleShuffle}
               disabled={sortedAndFilteredTracks.length === 0}
-              className={`transition-all active:scale-90 ${isShuffle ? (isOcean ? 'text-blue-400' : 'text-[#f5d0b5]') : 'text-slate-400 hover:text-white'}`}
+              className={`transition-all active:scale-90 cursor-pointer ${isShuffle ? (isOcean ? 'text-blue-400' : 'text-[#f5d0b5]') : 'text-slate-400 hover:text-white'}`}
+              title={isShuffle ? 'Disable Shuffle' : 'Enable Shuffle'}
             >
               <Shuffle size={24} />
             </button>
           </div>
 
           <div className="flex items-center space-x-3 text-slate-400">
+            {/* Inline Search Input */}
+            <div className="relative">
+              <SearchIcon size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+              <input
+                type="text"
+                placeholder="Find in playlist..."
+                value={filterQuery}
+                onChange={(e) => setFilterQuery(e.target.value)}
+                className="bg-white/10 focus:bg-white/15 border border-white/10 rounded-full pl-8 pr-3 py-1.5 text-xs text-white placeholder-slate-400 outline-none transition-all w-36 sm:w-48 focus:w-56"
+              />
+            </div>
+
+            {/* Sort Dropdown */}
+            <div className="relative" ref={sortMenuRef}>
+              <button
+                onClick={() => setShowSortMenu(prev => !prev)}
+                className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-full text-xs font-semibold border transition-all cursor-pointer ${
+                  sortBy !== 'custom'
+                    ? (isOcean ? 'bg-blue-600/20 text-blue-400 border-blue-500/30' : 'bg-[#c87d46]/20 text-[#f5d0b5] border-[#c87d46]/30')
+                    : 'bg-white/5 text-slate-300 hover:text-white border-white/10 hover:bg-white/10'
+                }`}
+                title="Sort tracks"
+              >
+                <ArrowUpDown size={14} />
+                <span className="hidden sm:inline">
+                  {sortBy === 'custom' ? 'Custom Order' :
+                   sortBy === 'az' ? 'Title (A-Z)' :
+                   sortBy === 'za' ? 'Title (Z-A)' :
+                   sortBy === 'artist' ? 'Artist' : 'Duration'}
+                </span>
+              </button>
+
+              {showSortMenu && (
+                <div className={`absolute right-0 mt-2 w-52 rounded-2xl border p-1.5 shadow-2xl z-30 animate-in fade-in zoom-in-95 duration-150 backdrop-blur-2xl ${
+                  isOcean ? 'bg-[#0f172a]/95 border-blue-500/20' : 'bg-[#18151c]/95 border-white/10'
+                }`}>
+                  <div className="px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-400 font-display">
+                    Sort by
+                  </div>
+                  {[
+                    { key: 'custom', label: 'Custom / Spotify Order' },
+                    { key: 'az', label: 'Title (A to Z)' },
+                    { key: 'za', label: 'Title (Z to A)' },
+                    { key: 'artist', label: 'Artist' },
+                    { key: 'duration', label: 'Duration' }
+                  ].map(opt => (
+                    <button
+                      key={opt.key}
+                      onClick={() => {
+                        setSortBy(opt.key as SortOption);
+                        setShowSortMenu(false);
+                      }}
+                      className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-medium transition-colors text-left cursor-pointer ${
+                        sortBy === opt.key
+                          ? (isOcean ? 'bg-blue-600 text-white font-bold' : 'bg-[#f5d0b5] text-black font-bold')
+                          : 'text-slate-300 hover:text-white hover:bg-white/5'
+                      }`}
+                    >
+                      <span>{opt.label}</span>
+                      {sortBy === opt.key && <Check size={14} />}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+
             {!isLikedView && (
               <button
                 onClick={() => setShowDeleteConfirm(true)}
-                title="Delete this playlist permanently"
-                className="flex items-center gap-1.5 px-3.5 py-2 rounded-full text-xs font-semibold text-rose-400 hover:text-white bg-rose-500/10 hover:bg-rose-600/90 border border-rose-500/20 shadow-sm transition-all duration-200 active:scale-95"
+                title="Delete this playlist"
+                className="flex items-center gap-1.5 px-3.5 py-2 rounded-full text-xs font-semibold text-rose-400 hover:text-white bg-rose-500/10 hover:bg-rose-600/90 border border-rose-500/20 shadow-sm transition-all duration-200 active:scale-95 cursor-pointer"
               >
                 <Trash2 size={15} />
                 <span>Delete Playlist</span>
@@ -609,7 +742,7 @@ const PlaylistDetail: React.FC<PlaylistDetailProps> = ({
               </div>
               <button
                 onClick={() => navigate('/search')}
-                className={`px-6 py-2.5 rounded-full text-xs font-bold text-white shadow-xl transition-transform hover:scale-105 active:scale-95 ${
+                className={`px-6 py-2.5 rounded-full text-xs font-bold text-white shadow-xl transition-transform hover:scale-105 active:scale-95 cursor-pointer ${
                   isOcean ? 'bg-blue-600 hover:bg-blue-500 shadow-blue-600/30' : 'bg-[#c87d46] hover:bg-[#d97736] shadow-[#c87d46]/30'
                 }`}
               >
@@ -673,7 +806,7 @@ const PlaylistDetail: React.FC<PlaylistDetailProps> = ({
                         <span className="hidden md:block text-sm text-slate-400 tabular-nums pr-2">{formatDuration(track.duration_ms)}</span>
                         <button className="md:hidden text-slate-400 p-2"><MoreVertical size={24} /></button>
                         {isOwner && !isLikedView && (
-                          <button onClick={(e) => removeTrack(track, e)} className="hidden md:block p-1 text-slate-500 hover:text-white opacity-0 group-hover:opacity-100 transition-opacity">
+                          <button onClick={(e) => removeTrack(track, e)} className="hidden md:block p-1 text-slate-500 hover:text-white opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer">
                             <Trash2 size={16} />
                           </button>
                         )}
@@ -697,7 +830,9 @@ const PlaylistDetail: React.FC<PlaylistDetailProps> = ({
             <div className="space-y-1">
               <h3 className="text-lg font-bold text-white">Delete Playlist?</h3>
               <p className="text-xs text-slate-400 leading-relaxed">
-                Are you sure you want to delete <span className="text-white font-semibold">&ldquo;{displayName}&rdquo;</span>? This will permanently remove it from your encrypted library and cloud database.
+                {id.startsWith('sp_') || playlist?.isSpotify
+                  ? <>Are you sure you want to remove <span className="text-white font-semibold">&ldquo;{displayName}&rdquo;</span> from your library? It will be removed from this session.</>
+                  : <>Are you sure you want to delete <span className="text-white font-semibold">&ldquo;{displayName}&rdquo;</span>? This will permanently remove it from your encrypted library and cloud database.</>}
               </p>
             </div>
             <div className="flex gap-3 pt-2">

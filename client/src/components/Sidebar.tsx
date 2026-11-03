@@ -7,6 +7,7 @@ import { User, Playlist } from '../types';
 import { NavLink, useNavigate } from 'react-router-dom';
 import { useTheme } from '../context/ThemeContext';
 import { useCache } from '../context/CacheContext';
+import { useSpotify } from '../context/SpotifyContext';
 import axios from 'axios';
 import PlaylistCover from './PlaylistCover';
 
@@ -29,6 +30,7 @@ const Sidebar: React.FC<SidebarProps> = ({ user, isAuthenticated, onOpenAuth, on
   const navigate = useNavigate();
   const { isOcean } = useTheme();
   const { cache, setLibraryPlaylists } = useCache();
+  const { isConnected: isSpotifyConnected, spotifyPlaylists } = useSpotify();
   const [sidebarPlaylists, setSidebarPlaylists] = useState<any[]>(() => {
     return isAuthenticated ? (cache.libraryPlaylists || []) : [];
   });
@@ -93,39 +95,52 @@ const Sidebar: React.FC<SidebarProps> = ({ user, isAuthenticated, onOpenAuth, on
   const userImage = localAvatar || '/avatars/ghost.png';
 
   const navClass = ({ isActive }: { isActive: boolean }) =>
-    `w-full flex items-center space-x-3.5 px-4 py-2.5 rounded-xl text-sm transition-all duration-150 ${
+    `w-full flex items-center space-x-3 px-3.5 py-2.5 rounded-xl text-xs font-semibold font-display tracking-[0.02em] transition-all duration-150 ${
       isActive
         ? isOcean
-          ? 'bg-[#131d33] text-[#60a5fa] font-medium border border-blue-500/25 shadow-sm'
-          : 'bg-[#241c19] text-[#f5d0b5] font-medium border border-[#f5d0b5]/20 shadow-sm'
-        : 'text-[#8a8489] hover:text-white hover:bg-white/[0.03]'
+          ? 'bg-blue-600/15 text-blue-400 font-bold'
+          : 'bg-white/10 text-white font-bold'
+        : 'text-neutral-400 hover:text-white hover:bg-white/[0.04]'
     }`;
 
   const currentList = isAuthenticated ? (playlists.length > 0 ? playlists : sidebarPlaylists) : [];
 
-  const displayedPlaylists = isAuthenticated && currentList.length > 0
+  const inAppList = isAuthenticated && currentList.length > 0
     ? currentList.map(p => ({
         id: p.id,
         name: p.name,
         images: p.images,
-        tracks: p.tracks
+        tracks: p.tracks,
+        isSpotify: false
       }))
     : [];
+
+  const spotifyList = isSpotifyConnected && spotifyPlaylists.length > 0
+    ? spotifyPlaylists.map(p => ({
+        id: p.id,
+        name: p.name,
+        images: p.images,
+        tracks: p.tracks,
+        isSpotify: true
+      }))
+    : [];
+
+  const displayedPlaylists = [...inAppList, ...spotifyList];
 
   return (
     <aside className={`hidden md:flex w-60 flex-shrink-0 flex-col p-4 space-y-5 border-r select-none transition-colors duration-300 z-20 bg-black/35 backdrop-blur-2xl border-white/10`}>
       {/* Brand Header: Sloth Mascot + Wordmark */}
       <div
         onClick={() => navigate('/')}
-        className="pt-2 pb-2 px-2 flex items-center justify-center space-x-2.5 cursor-pointer group"
+        className="pt-2 pb-2 px-2 flex items-center space-x-2.5 cursor-pointer group"
         title="Slothify Home"
       >
         <img
           src="/favicon_sloth.png"
           alt="Slothify"
-          className="w-8 h-8 object-contain transition-transform duration-300 group-hover:scale-110 group-active:scale-95 drop-shadow-md"
+          className="w-7 h-7 object-contain transition-transform duration-200 group-hover:scale-105"
         />
-        <h1 className="text-xs font-bold tracking-[0.35em] text-[#e8ded6] uppercase group-hover:text-white transition-colors">
+        <h1 className="text-[13px] font-black tracking-[0.26em] uppercase text-white/95 font-display transition-colors">
           Slothify
         </h1>
       </div>
@@ -142,7 +157,10 @@ const Sidebar: React.FC<SidebarProps> = ({ user, isAuthenticated, onOpenAuth, on
         </NavLink>
         <NavLink to="/library" className={navClass} end>
           <Library size={18} strokeWidth={1.8} />
-          <span>Your Library</span>
+          <span className="flex-1">Your Library</span>
+          {isSpotifyConnected && (
+            <span className="w-1.5 h-1.5 rounded-full bg-[#1DB954] shadow-sm shadow-[#1DB954] flex-shrink-0" title="Spotify Connected" />
+          )}
         </NavLink>
         <NavLink to="/liked" className={navClass}>
           <Heart size={18} strokeWidth={1.8} />
@@ -171,7 +189,7 @@ const Sidebar: React.FC<SidebarProps> = ({ user, isAuthenticated, onOpenAuth, on
 
       {/* Playlists Quick Access Section */}
       <div className="flex-1 overflow-y-auto space-y-3 pr-1 scrollbar-hide">
-        <div className="flex items-center justify-between px-2 text-[10px] font-bold tracking-[0.18em] text-[#8a8489] uppercase">
+        <div className="flex items-center justify-between px-2 text-[10px] font-bold tracking-[0.2em] text-[#8a8489] uppercase font-display">
           <span>Your Playlists</span>
           <button
             onClick={() => navigate('/library')}
@@ -193,14 +211,14 @@ const Sidebar: React.FC<SidebarProps> = ({ user, isAuthenticated, onOpenAuth, on
                 <div className="w-5 h-5 rounded-md overflow-hidden flex-shrink-0">
                   <PlaylistCover images={item.images} tracks={item.tracks} iconSize={11} />
                 </div>
-                <span className="text-xs text-[#c4beb6] group-hover:text-white truncate">
+                <span className="text-xs font-medium font-display text-[#c4beb6] group-hover:text-white truncate">
                   {item.name}
                 </span>
               </div>
             ))
           ) : (
             <div className="px-2 py-4 text-center">
-              <p className="text-[11px] text-[#8a8489]">
+              <p className="text-[11px] font-display text-[#8a8489]">
                 {isAuthenticated ? 'No playlists yet' : 'Sign in to create playlists'}
               </p>
             </div>
@@ -224,7 +242,7 @@ const Sidebar: React.FC<SidebarProps> = ({ user, isAuthenticated, onOpenAuth, on
                     isOcean ? 'ring-blue-500/30' : 'ring-[#f5d0b5]/20'
                   }`}
                 />
-                <span className="text-xs font-medium text-[#c4beb6] group-hover:text-white truncate">
+                <span className="text-xs font-semibold font-display text-[#c4beb6] group-hover:text-white truncate">
                   {user?.username || user?.display_name || 'madebyuser'}
                 </span>
               </div>
@@ -256,10 +274,10 @@ const Sidebar: React.FC<SidebarProps> = ({ user, isAuthenticated, onOpenAuth, on
         ) : (
           <button
             onClick={onOpenAuth}
-            className={`w-full flex items-center justify-center space-x-2 px-3 py-2.5 rounded-xl text-xs font-semibold tracking-wide transition-all border ${
+            className={`w-full flex items-center justify-center space-x-2 px-3.5 py-2.5 rounded-xl text-xs font-semibold font-display tracking-wide transition-all active:scale-98 ${
               isOcean
-                ? 'bg-[#131d33] hover:bg-[#1a2744] text-[#60a5fa] border-blue-500/30 shadow-md shadow-blue-500/10'
-                : 'bg-[#241c19] hover:bg-[#2e2320] text-[#f5d0b5] border-[#f5d0b5]/20'
+                ? 'bg-blue-600 hover:bg-blue-500 text-white shadow-sm'
+                : 'bg-white hover:bg-neutral-200 text-black shadow-sm'
             }`}
           >
             <LogIn size={14} />

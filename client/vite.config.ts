@@ -31,6 +31,19 @@ export default defineConfig(({ mode }) => {
       alias: {
         '@': path.resolve(__dirname, './src'),
       }
+    },
+    build: {
+      target: 'es2020',
+      cssCodeSplit: true,
+      chunkSizeWarningLimit: 600,
+      rollupOptions: {
+        output: {
+          manualChunks: {
+            'vendor-react': ['react', 'react-dom', 'react-router-dom'],
+            'vendor-icons': ['lucide-react']
+          }
+        }
+      }
     }
   };
 });

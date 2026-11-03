@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { Search as SearchIcon, Play, ArrowLeft, Plus, Loader2, Music2, CheckCircle2 } from 'lucide-react';
+import { Search as SearchIcon, Play, ArrowLeft, Plus, Loader2, Music2, CheckCircle2, Disc } from 'lucide-react';
 import { Track, Playlist } from '../types';
 import axios from 'axios';
 import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { useTheme } from '../context/ThemeContext';
+import { useCache } from '../context/CacheContext';
 import PlaylistCover from '../components/PlaylistCover';
 import { AudioService } from '../services/audioService';
 import { useDebounce } from '../hooks/useDebounce';
@@ -211,20 +212,23 @@ interface SearchProps {
 
 const formatFollowers = (count?: number | { total: number }) => {
   const num = typeof count === 'object' && count !== null ? (count as any).total : typeof count === 'number' ? count : 0;
-  if (!num || num <= 0) return 'Artist';
+  if (!num || num <= 0) return 'Popular Artist';
   if (num >= 1000000) return `${(num / 1000000).toFixed(1)}M followers`;
   if (num >= 10000) return `${(num / 1000).toFixed(0)}K followers`;
   if (num >= 1000) return `${(num / 1000).toFixed(1)}K followers`;
   return `${num} followers`;
 };
 
+export type SearchFilterTab = 'all' | 'songs' | 'artists' | 'albums';
+
 // In-memory client search cache for instant return navigations (< 1ms)
-const clientSearchCache = new Map<string, { results: Track[]; artists: any[] }>();
+const clientSearchCache = new Map<string, { results: Track[]; artists: any[]; albums: any[] }>();
 
 const Search: React.FC<SearchProps> = ({ isAuthenticated, onPlayTrack }) => {
   const navigate = useNavigate();
   const location = useLocation();
   const { isOcean } = useTheme();
+  const { cache, setLibraryPlaylists, setPlaylistDetail } = useCache();
 
   // Keep search query strictly in local state (hidden from URL)
   const [query, setQuery] = useState<string>(() => {
@@ -233,9 +237,12 @@ const Search: React.FC<SearchProps> = ({ isAuthenticated, onPlayTrack }) => {
     return stateQuery || urlQuery || '';
   });
 
+  const [activeTab, setActiveTab] = useState<SearchFilterTab>('all');
+
   const initialCached = query.trim() ? clientSearchCache.get(query.trim()) : null;
   const [results, setResults] = useState<Track[]>(() => initialCached?.results || []);
   const [artists, setArtists] = useState<any[]>(() => initialCached?.artists || []);
+  const [albums, setAlbums] = useState<any[]>(() => initialCached?.albums || []);
   const [isLoading, setIsLoading] = useState<boolean>(() => !initialCached && !!query.trim());
 
   // Debounce the query by 300ms for optimal responsive typing without hammering API
@@ -248,10 +255,10 @@ const Search: React.FC<SearchProps> = ({ isAuthenticated, onPlayTrack }) => {
     }
   }, [location.search, navigate, location.state]);
 
-  // Playlist Management State
+  // Playlist Management State (Pre-populated from cache for instant 0ms modal opening)
   const [showPlaylistModal, setShowPlaylistModal] = useState(false);
   const [selectedTrack, setSelectedTrack] = useState<Track | null>(null);
-  const [myPlaylists, setMyPlaylists] = useState<Playlist[]>([]);
+  const [myPlaylists, setMyPlaylists] = useState<Playlist[]>(() => cache.libraryPlaylists || []);
   const [isAddingToPlaylist, setIsAddingToPlaylist] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
@@ -270,6 +277,7 @@ const Search: React.FC<SearchProps> = ({ isAuthenticated, onPlayTrack }) => {
     if (!query.trim()) {
       setResults([]);
       setArtists([]);
+      setAlbums([]);
       setIsLoading(false);
     }
   }, [query]);
@@ -279,6 +287,8 @@ const Search: React.FC<SearchProps> = ({ isAuthenticated, onPlayTrack }) => {
     const trimmed = debouncedQuery.trim();
     if (!trimmed) {
       setResults([]);
+      setArtists([]);
+      setAlbums([]);
       setIsLoading(false);
       return;
     }
@@ -287,6 +297,7 @@ const Search: React.FC<SearchProps> = ({ isAuthenticated, onPlayTrack }) => {
     if (cached) {
       setResults(cached.results);
       setArtists(cached.artists);
+      setAlbums(cached.albums || []);
       setIsLoading(false);
     } else {
       setIsLoading(true);
@@ -306,17 +317,33 @@ const Search: React.FC<SearchProps> = ({ isAuthenticated, onPlayTrack }) => {
             const fB = typeof b.followers === 'object' && b.followers !== null ? b.followers.total : (Number(b.followers) || 0);
             return fB - fA;
           });
-          const topArtists = matched.slice(0, 6);
+          const topArtists = matched.slice(0, 12);
           setArtists(topArtists);
           const currentEntry = clientSearchCache.get(trimmed);
           clientSearchCache.set(trimmed, {
             results: currentEntry?.results || results,
-            artists: topArtists
+            artists: topArtists,
+            albums: currentEntry?.albums || albums
           });
         }
       }).catch(() => {});
 
-      // 1. Primary: Search Slothify global catalog (Spotify + JioSaavn)
+      // 1. Search for albums matching query in parallel
+      axios.get(`/api/albums/search?q=${encodeURIComponent(trimmed)}`, {
+        signal: abortController.signal
+      }).then(res => {
+        if (!abortController.signal.aborted && Array.isArray(res.data)) {
+          setAlbums(res.data);
+          const currentEntry = clientSearchCache.get(trimmed);
+          clientSearchCache.set(trimmed, {
+            results: currentEntry?.results || results,
+            artists: currentEntry?.artists || artists,
+            albums: res.data
+          });
+        }
+      }).catch(() => {});
+
+      // 2. Primary: Search Slothify global catalog (Spotify + JioSaavn)
       try {
         const res = await axios.get(`/api/search?q=${encodeURIComponent(trimmed)}`, {
           signal: abortController.signal
@@ -328,7 +355,8 @@ const Search: React.FC<SearchProps> = ({ isAuthenticated, onPlayTrack }) => {
           const currentEntry = clientSearchCache.get(trimmed);
           clientSearchCache.set(trimmed, {
             results: res.data,
-            artists: currentEntry?.artists || artists
+            artists: currentEntry?.artists || artists,
+            albums: currentEntry?.albums || albums
           });
           return;
         }
@@ -338,7 +366,7 @@ const Search: React.FC<SearchProps> = ({ isAuthenticated, onPlayTrack }) => {
         }
       }
 
-      // 2. Secondary fallback: Cloudflare AudioService (JioSaavn)
+      // 3. Secondary fallback: Cloudflare AudioService (JioSaavn)
       try {
         const saavnRes = await AudioService.searchSongs(trimmed);
         if (abortController.signal.aborted) return;
@@ -348,7 +376,8 @@ const Search: React.FC<SearchProps> = ({ isAuthenticated, onPlayTrack }) => {
           const currentEntry = clientSearchCache.get(trimmed);
           clientSearchCache.set(trimmed, {
             results: mappedTracks,
-            artists: currentEntry?.artists || artists
+            artists: currentEntry?.artists || artists,
+            albums: currentEntry?.albums || albums
           });
         }
       } catch (saavnErr) {
@@ -369,7 +398,7 @@ const Search: React.FC<SearchProps> = ({ isAuthenticated, onPlayTrack }) => {
     };
   }, [debouncedQuery]);
 
-  const openPlaylistModal = async (track: Track, e: React.MouseEvent) => {
+  const openPlaylistModal = (track: Track, e: React.MouseEvent) => {
     e.stopPropagation();
     setSelectedTrack(track);
 
@@ -379,41 +408,119 @@ const Search: React.FC<SearchProps> = ({ isAuthenticated, onPlayTrack }) => {
       return;
     }
 
+    // Instantly use cached playlists so modal opens with 0ms lag
+    if (cache.libraryPlaylists && cache.libraryPlaylists.length > 0) {
+      setMyPlaylists(cache.libraryPlaylists);
+    }
+
     setShowPlaylistModal(true);
     setShowInlineCreate(false);
-    try {
-      const res = await axios.get('/api/me/playlists');
-      setMyPlaylists(res.data);
-    } catch (err) {
-      console.error(err);
-    }
+
+    // Revalidate in background
+    axios.get('/api/me/playlists')
+      .then(res => {
+        if (Array.isArray(res.data)) {
+          setMyPlaylists(res.data);
+          setLibraryPlaylists(res.data);
+        }
+      })
+      .catch(err => {
+        console.error('Failed to refresh playlists:', err);
+      });
   };
 
-  const addToPlaylist = async (playlistId: string) => {
+  const addToPlaylist = (playlistId: string) => {
     if (!selectedTrack) return;
-    setIsAddingToPlaylist(true);
+    const trackToAdd = selectedTrack;
+    const targetPlaylist = myPlaylists.find(p => p.id === playlistId);
+    const playlistName = targetPlaylist?.name || 'playlist';
 
-    try {
-      await axios.post(`/api/playlists/${playlistId}/tracks`, {
-        track: selectedTrack,
-        uris: [selectedTrack.uri || `spotify:track:${selectedTrack.id}`]
+    // 1. INSTANT OPTIMISTIC UI: Dismiss modal and show success toast immediately (0ms delay)
+    setShowPlaylistModal(false);
+    setToastMessage(`Added "${trackToAdd.name}" to ${playlistName}!`);
+    setTimeout(() => setToastMessage(null), 3000);
+
+    // 2. Optimistically update local component state & library cache
+    setMyPlaylists(prev => prev.map(p => {
+      if (p.id === playlistId) {
+        const total = (p.tracks?.total || 0) + 1;
+        const currentItems = p.tracks?.items || [];
+        const hasTrack = currentItems.some(i => i.track?.id === trackToAdd.id);
+        return {
+          ...p,
+          tracks: {
+            ...p.tracks,
+            total,
+            items: hasTrack ? currentItems : [...currentItems, { track: trackToAdd }]
+          }
+        };
+      }
+      return p;
+    }));
+
+    if (cache.libraryPlaylists) {
+      const updatedLibrary = cache.libraryPlaylists.map(p => {
+        if (p.id === playlistId) {
+          const total = (p.tracks?.total || 0) + 1;
+          const currentItems = p.tracks?.items || [];
+          const hasTrack = currentItems.some(i => i.track?.id === trackToAdd.id);
+          return {
+            ...p,
+            tracks: {
+              ...p.tracks,
+              total,
+              items: hasTrack ? currentItems : [...currentItems, { track: trackToAdd }]
+            }
+          };
+        }
+        return p;
       });
-      setShowPlaylistModal(false);
-      setToastMessage(`Added "${selectedTrack.name}" to playlist!`);
-      setTimeout(() => setToastMessage(null), 3000);
-      window.dispatchEvent(new Event('slothify_playlists_updated'));
-    } catch (err) {
-      console.error(err);
-      alert('Failed to add track to playlist');
-    } finally {
-      setIsAddingToPlaylist(false);
+      setLibraryPlaylists(updatedLibrary);
     }
+
+    // 3. Immediately dispatch event so Sidebar & Playlists page update without waiting
+    window.dispatchEvent(new Event('slothify_playlists_updated'));
+
+    // 4. Perform network request in background (non-blocking)
+    axios.post(`/api/playlists/${playlistId}/tracks`, {
+      track: trackToAdd,
+      uris: [trackToAdd.uri || `spotify:track:${trackToAdd.id}`]
+    })
+      .then(res => {
+        if (res.data) {
+          const rawPlaylist = res.data;
+          const items = rawPlaylist.tracks?.items || [];
+          const tracksArray = items.map((i: any) => i.track || i).filter(Boolean);
+          setPlaylistDetail(playlistId, {
+            playlist: rawPlaylist,
+            tracks: tracksArray
+          });
+          window.dispatchEvent(new Event('slothify_playlists_updated'));
+        }
+      })
+      .catch(err => {
+        console.error('Failed to add track to playlist on server:', err);
+        setToastMessage(`Could not save "${trackToAdd.name}" to ${playlistName}. Please check your connection.`);
+        setTimeout(() => setToastMessage(null), 3500);
+      });
   };
 
   const handleCreatePlaylist = async (trackToAdd?: Track | null) => {
     const targetTrack = trackToAdd !== undefined ? trackToAdd : selectedTrack;
     const name = newPlaylistName.trim() || `My Playlist #${myPlaylists.length + 1}`;
     setIsCreatingPlaylist(true);
+
+    // Instantly close modals for responsive UX
+    setShowPlaylistModal(false);
+    setShowSearchBarCreateModal(false);
+    setShowInlineCreate(false);
+    setNewPlaylistName('');
+
+    if (targetTrack) {
+      setToastMessage(`Creating "${name}" with "${targetTrack.name}"...`);
+    } else {
+      setToastMessage(`Creating "${name}"...`);
+    }
 
     try {
       const res = await axios.post('/api/me/playlists', {
@@ -423,28 +530,183 @@ const Search: React.FC<SearchProps> = ({ isAuthenticated, onPlayTrack }) => {
       const created: Playlist = res.data;
       setMyPlaylists(prev => [created, ...prev]);
 
+      if (cache.libraryPlaylists) {
+        setLibraryPlaylists([created, ...cache.libraryPlaylists]);
+      }
+
+      let createdTracks: Track[] = [];
       if (targetTrack) {
-        await axios.post(`/api/playlists/${created.id}/tracks`, {
+        const addRes = await axios.post(`/api/playlists/${created.id}/tracks`, {
           track: targetTrack,
           uris: [targetTrack.uri || `spotify:track:${targetTrack.id}`]
         });
+        if (addRes.data) {
+          const items = addRes.data.tracks?.items || [];
+          createdTracks = items.map((i: any) => i.track || i).filter(Boolean);
+        } else {
+          createdTracks = [targetTrack];
+        }
         setToastMessage(`Created "${created.name}" and added "${targetTrack.name}"!`);
       } else {
         setToastMessage(`Created playlist "${created.name}"!`);
       }
 
-      setShowPlaylistModal(false);
-      setShowSearchBarCreateModal(false);
-      setShowInlineCreate(false);
-      setNewPlaylistName('');
+      setPlaylistDetail(created.id, {
+        playlist: created,
+        tracks: createdTracks
+      });
+
       setTimeout(() => setToastMessage(null), 3000);
       window.dispatchEvent(new Event('slothify_playlists_updated'));
     } catch (err) {
       console.error(err);
-      alert('Failed to create playlist');
+      setToastMessage('Failed to create playlist');
+      setTimeout(() => setToastMessage(null), 3000);
     } finally {
       setIsCreatingPlaylist(false);
     }
+  };
+
+  const renderTrackRow = (track: Track, queue: Track[] = results) => {
+    const thumbUrl = getTrackThumbnail(track, '', '150');
+    return (
+      <div
+        key={track.id}
+        onClick={() => onPlayTrack(track, queue)}
+        className="flex items-center space-x-3.5 p-2.5 bg-white/[0.02] hover:bg-white/[0.05] border border-white/[0.04] rounded-2xl cursor-pointer transition-all group"
+      >
+        <div className="relative w-11 h-11 flex-shrink-0 rounded-xl overflow-hidden bg-[#18151c]">
+          <img
+            src={thumbUrl}
+            loading="lazy"
+            className="w-full h-full object-cover"
+            alt=""
+            onError={(e) => {
+              (e.currentTarget as HTMLImageElement).src = 'https://images.unsplash.com/photo-1518199266791-5375a83190b7?w=150';
+            }}
+          />
+          <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+            <Play size={16} fill="white" className="text-white ml-0.5" />
+          </div>
+        </div>
+
+        <div className="flex-1 min-w-0">
+          <h3 className={`font-semibold text-xs md:text-sm text-white truncate transition-colors leading-tight ${
+            isOcean ? 'group-hover:text-blue-400' : 'group-hover:text-[#f5d0b5]'
+          }`}>
+            {track.name}
+          </h3>
+          <p className="text-[11px] text-[#8a8489] truncate mt-0.5 leading-tight">
+            {track.artists && track.artists.length > 0 ? (
+              track.artists.map((a, i) => (
+                <React.Fragment key={a.name || i}>
+                  {i > 0 && ', '}
+                  <Link
+                    to={`/artist/sp_art_${encodeURIComponent(a.name)}`}
+                    onClick={(e) => e.stopPropagation()}
+                    className="hover:underline hover:text-white transition-colors"
+                  >
+                    {a.name}
+                  </Link>
+                </React.Fragment>
+              ))
+            ) : (
+              'Artist'
+            )}
+          </p>
+        </div>
+
+        <button
+          onClick={(e) => openPlaylistModal(track, e)}
+          className={`p-2 text-[#8a8489] rounded-full transition-colors flex-shrink-0 hover:bg-white/5 cursor-pointer ${
+            isOcean ? 'hover:text-blue-400' : 'hover:text-[#f5d0b5]'
+          }`}
+          title="Add to Playlist"
+        >
+          <Plus size={18} />
+        </button>
+      </div>
+    );
+  };
+
+  const renderArtistCard = (artist: any) => {
+    const imgUrl = getArtistAvatarUrl(artist, '300');
+    return (
+      <Link
+        key={artist.id}
+        to={`/artist/${artist.id}`}
+        className="artist-card group p-3.5 rounded-2xl bg-white/[0.02] hover:bg-white/[0.06] border border-white/[0.04] hover:border-white/15 transition-all flex flex-col items-center text-center cursor-pointer shadow-sm hover:scale-[1.02]"
+      >
+        <div className="relative w-20 h-20 sm:w-24 sm:h-24 rounded-full overflow-hidden shadow-md ring-2 ring-white/10 group-hover:ring-cyan-400/40 mb-2.5 bg-[#18151c] flex-shrink-0">
+          <img
+            src={imgUrl}
+            loading="lazy"
+            alt={artist.name}
+            onError={(e) => handleArtistImageError(e, artist.name)}
+            className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
+          />
+        </div>
+        <h3 className="text-xs sm:text-sm font-bold text-white truncate w-full group-hover:text-cyan-300 transition-colors">
+          {artist.name}
+        </h3>
+        <span className="text-[10px] text-cyan-300/80 font-medium mt-0.5">
+          Artist • {formatFollowers(artist.followers)}
+        </span>
+      </Link>
+    );
+  };
+
+  const renderAlbumCard = (album: any) => {
+    const coverUrl = getOptimizedImageUrl(album.images?.[0]?.url, '300');
+    const firstArtist = album.artists?.[0];
+    let artistName = 'Artist';
+    if (typeof firstArtist === 'string' && firstArtist.trim() && firstArtist !== '[object Object]') {
+      artistName = firstArtist;
+    } else if (typeof firstArtist?.name === 'string' && firstArtist.name.trim() && firstArtist.name !== '[object Object]') {
+      artistName = firstArtist.name;
+    } else if (typeof album.artist === 'string' && album.artist.trim() && album.artist !== '[object Object]') {
+      artistName = album.artist;
+    } else if (typeof album.subtitle === 'string' && album.subtitle.trim() && album.subtitle !== '[object Object]') {
+      artistName = album.subtitle;
+    }
+    const year = album.release_date ? String(album.release_date).split('-')[0] : '';
+    return (
+      <div
+        key={album.id}
+        onClick={() => navigate(`/album/${album.id}`, { state: { album } })}
+        className="group p-3 rounded-2xl bg-white/[0.02] hover:bg-white/[0.06] border border-white/[0.04] hover:border-white/15 transition-all flex flex-col cursor-pointer shadow-sm hover:scale-[1.02]"
+      >
+        <div className="relative aspect-square w-full rounded-xl overflow-hidden shadow-md mb-2.5 bg-[#18151c]">
+          {coverUrl ? (
+            <img
+              src={coverUrl}
+              loading="lazy"
+              alt={album.name}
+              onError={(e) => {
+                // High quality fallback: replace broken image so broken image icon never renders
+                (e.currentTarget as HTMLImageElement).src = `https://ui-avatars.com/api/?name=${encodeURIComponent(album.name)}&background=18151c&color=f5d0b5&size=500&bold=true`;
+              }}
+              className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
+            />
+          ) : (
+            <div className="w-full h-full flex items-center justify-center bg-white/5">
+              <Disc size={28} className="text-white/30" />
+            </div>
+          )}
+          <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+            <div className={`w-9 h-9 rounded-full ${isOcean ? 'bg-blue-500' : 'bg-[#c87d46]'} flex items-center justify-center shadow-lg`}>
+              <Play size={15} fill="white" className="text-white ml-0.5" />
+            </div>
+          </div>
+        </div>
+        <h3 className="text-xs sm:text-sm font-bold text-white truncate w-full group-hover:text-blue-400 transition-colors">
+          {album.name}
+        </h3>
+        <p className="text-[11px] text-[#8a8489] truncate mt-0.5">
+          {year ? `${year} • ${artistName}` : artistName}
+        </p>
+      </div>
+    );
   };
 
   const categories = isOcean ? OCEAN_CATEGORIES : AUTUMN_CATEGORIES;
@@ -516,6 +778,44 @@ const Search: React.FC<SearchProps> = ({ isAuthenticated, onPlayTrack }) => {
           </button>
         )}
       </div>
+
+      {/* Filter Pills Bar (All, Songs, Artists, Albums) */}
+      {query.trim() && (
+        <div className="flex items-center space-x-2 overflow-x-auto scrollbar-hide py-1 -mt-2">
+          {(['all', 'songs', 'artists', 'albums'] as const).map((tab) => {
+            const isActive = activeTab === tab;
+            const countLabel =
+              tab === 'songs' && results.length > 0
+                ? ` (${results.length})`
+                : tab === 'artists' && artists.length > 0
+                ? ` (${artists.length})`
+                : tab === 'albums' && albums.length > 0
+                ? ` (${albums.length})`
+                : '';
+            const labels: Record<SearchFilterTab, string> = {
+              all: 'All',
+              songs: `Songs${countLabel}`,
+              artists: `Artists${countLabel}`,
+              albums: `Albums${countLabel}`
+            };
+            return (
+              <button
+                key={tab}
+                onClick={() => setActiveTab(tab)}
+                className={`px-4 py-1.5 rounded-full text-xs font-semibold tracking-wide transition-all duration-200 cursor-pointer whitespace-nowrap ${
+                  isActive
+                    ? isOcean
+                      ? 'bg-blue-600 text-white shadow-md shadow-blue-500/25'
+                      : 'bg-[#f5d0b5] text-[#1c1410] shadow-md shadow-[#f5d0b5]/20 font-bold'
+                    : 'bg-white/[0.05] hover:bg-white/[0.1] text-white/70 hover:text-white border border-white/[0.06]'
+                }`}
+              >
+                {labels[tab]}
+              </button>
+            );
+          })}
+        </div>
+      )}
 
       {/* Modal for Playlist Selection */}
       {showPlaylistModal && (
@@ -678,110 +978,130 @@ const Search: React.FC<SearchProps> = ({ isAuthenticated, onPlayTrack }) => {
       {/* Results */}
       {query.trim() ? (
         <div className="space-y-6">
-          {/* Artists Matches */}
-          {artists.length > 0 && (
-            <div className="space-y-3">
-              <h2 className="text-sm font-bold tracking-wider text-[#8a8489] uppercase">Artists</h2>
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
-                {artists.map((artist) => {
-                  const imgUrl = getArtistAvatarUrl(artist, '150');
-                  return (
-                    <Link
-                      key={artist.id}
-                      to={`/artist/${artist.id}`}
-                      className="artist-card group p-3.5 rounded-2xl bg-white/[0.02] hover:bg-white/[0.06] border border-white/[0.04] hover:border-white/15 transition-all flex flex-col items-center text-center cursor-pointer shadow-sm hover:scale-[1.02]"
-                    >
-                      <div className="relative w-20 h-20 sm:w-24 sm:h-24 rounded-full overflow-hidden shadow-md ring-2 ring-white/10 group-hover:ring-cyan-400/40 mb-2.5 bg-[#18151c] flex-shrink-0">
-                        <img
-                          src={imgUrl}
-                          loading="lazy"
-                          alt={artist.name}
-                          onError={(e) => handleArtistImageError(e, artist.name)}
-                          className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
-                        />
-                      </div>
-                      <h3 className="text-xs sm:text-sm font-bold text-white truncate w-full group-hover:text-cyan-300 transition-colors">
-                        {artist.name}
-                      </h3>
-                      <span className="text-[10px] text-cyan-300/80 font-medium mt-0.5">
-                        Artist • {formatFollowers(artist.followers?.total || artist.followers)}
-                      </span>
-                    </Link>
-                  );
-                })}
-              </div>
+          {/* TAB: ALL */}
+          {activeTab === 'all' && (
+            <div className="space-y-6">
+              {/* Songs List */}
+              {results.length > 0 && (
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <h2 className="text-sm font-bold tracking-wider text-[#8a8489] uppercase">
+                      Songs
+                    </h2>
+                    {results.length > 5 && (
+                      <button
+                        onClick={() => setActiveTab('songs')}
+                        className="text-xs font-semibold text-[#8a8489] hover:text-white transition-colors cursor-pointer"
+                      >
+                        See all ({results.length})
+                      </button>
+                    )}
+                  </div>
+                  <div className="space-y-1.5">
+                    {results.slice(0, 10).map((track) => renderTrackRow(track))}
+                  </div>
+                </div>
+              )}
+
+              {/* Albums List */}
+              {albums.length > 0 && (
+                <div className="space-y-3 pt-2">
+                  <div className="flex items-center justify-between">
+                    <h2 className="text-sm font-bold tracking-wider text-[#8a8489] uppercase">
+                      Albums
+                    </h2>
+                    {albums.length > 6 && (
+                      <button
+                        onClick={() => setActiveTab('albums')}
+                        className="text-xs font-semibold text-[#8a8489] hover:text-white transition-colors cursor-pointer"
+                      >
+                        See all
+                      </button>
+                    )}
+                  </div>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
+                    {albums.slice(0, 6).map((album) => renderAlbumCard(album))}
+                  </div>
+                </div>
+              )}
+
+              {/* Additional songs if more than 10 */}
+              {results.length > 10 && (
+                <div className="space-y-2 pt-2">
+                  <div className="space-y-1.5">
+                    {results.slice(10, 25).map((track) => renderTrackRow(track))}
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
-          {/* Songs List */}
-          <div className="space-y-2">
-            {results.length > 0 && (
-              <h2 className="text-sm font-bold tracking-wider text-[#8a8489] uppercase mb-1">Songs</h2>
-            )}
-            {results.map((track) => {
-              const thumbUrl = getTrackThumbnail(track, '', '150');
-              return (
-              <div
-                key={track.id}
-                onClick={() => onPlayTrack(track, results)}
-                className="flex items-center space-x-3.5 p-2.5 bg-white/[0.02] hover:bg-white/[0.05] border border-white/[0.04] rounded-2xl cursor-pointer transition-all group"
-              >
-                <div className="relative w-11 h-11 flex-shrink-0 rounded-xl overflow-hidden bg-[#18151c]">
-                  <img
-                    src={thumbUrl}
-                    loading="lazy"
-                    className="w-full h-full object-cover"
-                    alt=""
-                  />
-                  <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                    <Play size={16} fill="white" className="text-white ml-0.5" />
+          {/* TAB: SONGS */}
+          {activeTab === 'songs' && (
+            <div className="space-y-2">
+              <h2 className="text-sm font-bold tracking-wider text-[#8a8489] uppercase mb-1">
+                Songs {results.length > 0 && `(${results.length})`}
+              </h2>
+              {results.length > 0 ? (
+                <div className="space-y-1.5">
+                  {results.map((track) => renderTrackRow(track))}
+                </div>
+              ) : (
+                !isLoading && (
+                  <div className="text-center text-[#8a8489] py-16 text-xs">
+                    No songs found matching &ldquo;{query}&rdquo;
                   </div>
-                </div>
-
-                <div className="flex-1 min-w-0">
-                  <h3 className={`font-semibold text-xs md:text-sm text-white truncate transition-colors leading-tight ${
-                    isOcean ? 'group-hover:text-blue-400' : 'group-hover:text-[#f5d0b5]'
-                  }`}>
-                    {track.name}
-                  </h3>
-                  <p className="text-[11px] text-[#8a8489] truncate mt-0.5 leading-tight">
-                    {track.artists && track.artists.length > 0 ? (
-                      track.artists.map((a, i) => (
-                        <React.Fragment key={a.name || i}>
-                          {i > 0 && ', '}
-                          <Link
-                            to={`/artist/sp_art_${encodeURIComponent(a.name)}`}
-                            onClick={(e) => e.stopPropagation()}
-                            className="hover:underline hover:text-white transition-colors"
-                          >
-                            {a.name}
-                          </Link>
-                        </React.Fragment>
-                      ))
-                    ) : (
-                      'Artist'
-                    )}
-                  </p>
-                </div>
-
-              <button
-                onClick={(e) => openPlaylistModal(track, e)}
-                className={`p-2 text-[#8a8489] rounded-full transition-colors flex-shrink-0 hover:bg-white/5 ${
-                  isOcean ? 'hover:text-blue-400' : 'hover:text-[#f5d0b5]'
-                }`}
-                title="Add to Playlist"
-              >
-                <Plus size={18} />
-              </button>
+                )
+              )}
             </div>
-              );
-            })}
-          {!isLoading && results.length === 0 && artists.length === 0 && (
+          )}
+
+          {/* TAB: ARTISTS */}
+          {activeTab === 'artists' && (
+            <div className="space-y-3">
+              <h2 className="text-sm font-bold tracking-wider text-[#8a8489] uppercase mb-1">
+                Artists {artists.length > 0 && `(${artists.length})`}
+              </h2>
+              {artists.length > 0 ? (
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3 sm:gap-4">
+                  {artists.map((artist) => renderArtistCard(artist))}
+                </div>
+              ) : (
+                !isLoading && (
+                  <div className="text-center text-[#8a8489] py-16 text-xs">
+                    No artists found matching &ldquo;{query}&rdquo;
+                  </div>
+                )
+              )}
+            </div>
+          )}
+
+          {/* TAB: ALBUMS */}
+          {activeTab === 'albums' && (
+            <div className="space-y-3">
+              <h2 className="text-sm font-bold tracking-wider text-[#8a8489] uppercase mb-1">
+                Albums {albums.length > 0 && `(${albums.length})`}
+              </h2>
+              {albums.length > 0 ? (
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3 sm:gap-4">
+                  {albums.map((album) => renderAlbumCard(album))}
+                </div>
+              ) : (
+                !isLoading && (
+                  <div className="text-center text-[#8a8489] py-16 text-xs">
+                    No albums found matching &ldquo;{query}&rdquo;
+                  </div>
+                )
+              )}
+            </div>
+          )}
+
+          {/* Global Empty State */}
+          {!isLoading && results.length === 0 && artists.length === 0 && albums.length === 0 && (
             <div className="text-center text-[#8a8489] py-16 text-xs">
               No results found for &ldquo;{query}&rdquo;
             </div>
           )}
-          </div>
         </div>
       ) : (
         <div className="space-y-4 pt-2">

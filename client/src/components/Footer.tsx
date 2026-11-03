@@ -26,7 +26,7 @@ const Footer: React.FC = () => {
                         alt="Slothify"
                         className="w-4 h-4 object-contain opacity-60"
                     />
-                    <span>© {new Date().getFullYear()} Slothify — for the ones who feel music, not just hear it.</span>
+                    <span>© {new Date().getFullYear()} Slothify</span>
                 </div>
 
                 {/* Center: Legal links */}

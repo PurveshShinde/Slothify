@@ -209,11 +209,11 @@ export async function searchSpotubeSpotifyTracks(cleanQuery: string, limit: numb
         const gqlExtensions = {
             persistedQuery: {
                 version: 1,
-                sha256Hash: 'bc1ca2fcd0ba1013a0fc88e6cc4f190af501851e3dafd3e1ef85840297694428'
+                sha256Hash: '75bbf6bfcfdf85b8fc828417bfad92b7cd66bf7f556d85670f4da8292373ebec'
             }
         };
 
-        const gqlUrl = `https://api-partner.spotify.com/pathfinder/v1/query?operationName=searchTracks&variables=${encodeURIComponent(JSON.stringify(gqlVariables))}&extensions=${encodeURIComponent(JSON.stringify(gqlExtensions))}`;
+        const gqlUrl = `https://api-partner.spotify.com/pathfinder/v1/query?operationName=searchDesktop&variables=${encodeURIComponent(JSON.stringify(gqlVariables))}&extensions=${encodeURIComponent(JSON.stringify(gqlExtensions))}`;
 
         const gqlRes = await fetch(gqlUrl, {
             headers: {
@@ -227,23 +227,29 @@ export async function searchSpotubeSpotifyTracks(cleanQuery: string, limit: numb
         if (!gqlRes.ok) return [];
 
         const gqlData = await gqlRes.json() as any;
-        const items = gqlData.data?.searchV2?.tracksV2?.items || [];
+        const items = gqlData.data?.search?.tracks?.items || gqlData.data?.searchV2?.tracksV2?.items || [];
         const tracks: Track[] = [];
 
         for (const wrapper of items) {
-            const t = wrapper.item?.data;
+            const t = wrapper.track || wrapper.item?.data || wrapper;
             if (!t || !t.id) continue;
 
-            const coverArt = t.albumOfTrack?.coverArt?.sources || [];
+            const coverArt = t.album?.coverArt?.sources || t.albumOfTrack?.coverArt?.sources || t.album?.images || [];
+            const rawArt = coverArt[coverArt.length - 1]?.url || coverArt[0]?.url || '';
+            const art = rawArt ? rawArt.replace(/00001e02|00004851/, '0000b273') : '';
+
+            const artistsList = (t.artists?.items || t.artists || []).map((a: any) => ({
+                name: typeof a === 'string' ? a : a.profile?.name || a.name || 'Unknown Artist'
+            }));
 
             tracks.push({
                 id: t.id,
                 uri: t.uri || `spotify:track:${t.id}`,
                 name: t.name,
-                artists: (t.artists?.items || []).map((a: any) => ({ name: a.profile?.name || 'Unknown Artist' })),
+                artists: artistsList.length > 0 ? artistsList : [{ name: 'Unknown Artist' }],
                 album: {
-                    name: t.albumOfTrack?.name || t.name,
-                    images: coverArt.map((img: any) => ({ url: img.url }))
+                    name: t.album?.name || t.albumOfTrack?.name || t.name,
+                    images: art ? [{ url: art }] : []
                 },
                 duration_ms: t.duration?.totalMilliseconds || 180000,
                 preview_url: null
@@ -301,8 +307,11 @@ export async function searchSpotifyArtists(cleanQuery: string, limit: number = 2
             const id = uri.replace('spotify:artist:', '');
             const name = item.profile?.name || '';
             if (!id || !name) continue;
-            const sources = item.visuals?.avatarImage?.sources || [];
-            const picture = sources.find((s: any) => s.width >= 500)?.url || sources[0]?.url || '';
+            const sources = item.visuals?.avatarImage?.sources || item.visuals?.headerImage?.sources || [];
+            let picture = sources.find((s: any) => s.width >= 500)?.url || sources[0]?.url || '';
+            if (picture) {
+                picture = picture.replace(/00001e02|00004851/, '0000b273');
+            }
             artists.push({ id, name, picture });
         }
         return artists;
@@ -598,19 +607,68 @@ export function scoreTrackRelevance(track: any, query: string, originalIndex: nu
     }
 
     // 2. Artist Matching: When searching for an artist (e.g. "Drake" or "Arijit Singh"), award +100 for primary artist match
-    // This ensures Drake's hits crush an obscure indie song whose title happens to be "Drake"
+    // This ensures Drake's hits crush an obscure indie song whose title happens to be "Drake".
     const isArtistExact = artistNames.some((a: string) => a === cleanQuery || isArtistNameMatch(a, cleanQuery));
     const isArtistFuzzy = !isArtistExact && artistNames.some((a: string) => a.includes(cleanQuery) || calculateSimilarity(a, cleanQuery) > 0.8);
 
-    if (isArtistExact) {
-        score += 100;
+    // Spam Knockoff Detection:
+    // If an artist names themselves after the exact song title (e.g., song "Shape of You" by artist "Shape of You"),
+    // this is a known SEO spam knockoff intended to hijack search results. Heavily penalize it!
+    const isArtistSpamKnockoff = Boolean(
+        primaryArtist && (
+            primaryArtist === trackTitle || 
+            primaryArtist.replace(/[^a-zA-Z0-9]/g, '') === baseTitle ||
+            (titleMatched && primaryArtist === cleanQuery)
+        )
+    );
+
+    if (isArtistSpamKnockoff) {
+        score -= 150;
+    } else if (isArtistExact) {
+        if (!titleMatched) {
+            score += 100;
+        } else {
+            score += 10;
+        }
     } else if (isArtistFuzzy) {
-        score += 50;
+        if (!titleMatched) {
+            score += 50;
+        }
     } else if (cleanQuery.includes(' ') && (trackTitle + ' ' + primaryArtist).includes(cleanQuery)) {
         score += 40;
     }
 
-    // 3. Track Popularity Multiplier (Crucial for generic searches)
+    // Cover / Tribute / Karaoke penalty (e.g. "Originally Performed by ...")
+    const isCoverOrTribute = /\b(originally performed by|tribute to|cover version|backing track|in the style of)\b/i.test(trackTitle) ||
+        /\b(originally performed by|tribute to|cover version|backing track|in the style of)\b/i.test(primaryArtist);
+    if (isCoverOrTribute && !cleanQuery.includes('cover') && !cleanQuery.includes('tribute')) {
+        score -= 100;
+    }
+
+    // 3. Spotify Engine Original Rank Priority:
+    // Spotify's GraphQL search incorporates billions of user streams and global listening signals.
+    // Index 0 in Spotify's official search is almost always the canonical hit!
+    if (originalIndex === 0) {
+        score += 90;
+    } else if (originalIndex === 1) {
+        score += 55;
+    } else if (originalIndex === 2) {
+        score += 35;
+    } else if (originalIndex <= 5) {
+        score += 20;
+    }
+
+    // 4. Recognized Major Artist Bonus:
+    // Authentic global chart stars (Ed Sheeran, Taylor Swift, The Weeknd, etc.) should not be displaced by amateur knockoffs
+    const isMajorArtist = artistNames.some((a: string) => 
+        TOP_ARTIST_PROFILES[a] || 
+        (track as any).followers > 50000
+    );
+    if (isMajorArtist) {
+        score += titleMatched ? 80 : 40;
+    }
+
+    // 5. Track Popularity Multiplier (Crucial for generic searches)
     // Spotify returns a 'popularity' metric. If JioSaavn has 'playCount', normalize it to 1-100.
     const trackPopularity = track.popularity || 10; // Default to low if unknown
     
@@ -682,11 +740,44 @@ export function deduplicateTracks(tracks: any[]): any[] {
         if (existingIndex === -1) {
             uniqueTracks.push(track);
         } else {
-            const existingScore = uniqueTracks[existingIndex].score ?? 0;
-            // Overwrite if new track has a higher relevance score, or if official Spotify version with high res artwork
-            const isSpotify = track.uri?.startsWith('spotify:track:') && !track.id?.startsWith('saavn_');
-            if (currentScore > existingScore || (isSpotify && currentScore >= existingScore - 5)) {
+            const existing = uniqueTracks[existingIndex];
+            const existingScore = existing.score ?? 0;
+            const currentIsSpotify = Boolean(track.uri?.startsWith('spotify:track:') && !track.id?.startsWith('saavn_'));
+            const existingIsSpotify = Boolean(existing.uri?.startsWith('spotify:track:') && !existing.id?.startsWith('saavn_'));
+
+            // Rule: Official Spotify releases have authentic global cover art and master metadata.
+            // If current track is Spotify and existing is NOT Spotify, Spotify ALWAYS takes precedence!
+            if (currentIsSpotify && !existingIsSpotify) {
+                if ((existing as any).playCount) {
+                    (track as any).playCount = (existing as any).playCount;
+                    (track as any).popularity = Math.max((track as any).popularity || 0, (existing as any).popularity || 0);
+                }
                 uniqueTracks[existingIndex] = track;
+            } else if (!currentIsSpotify && existingIsSpotify) {
+                // Keep the official Spotify track, borrowing playCount metric if available
+                if ((track as any).playCount) {
+                    (existing as any).playCount = (track as any).playCount;
+                }
+            } else {
+                // Both are from same provider. Strongly prefer original studio release over promotional compilations
+                const compilationRegex = /\b(party|hits|best of|top 100|collection|various artists|greatest hits|compilation|remix|pop \d{4}|\b\d{4}\b|now that'?s)\b/i;
+                const isCurrentCompilation = compilationRegex.test(track.album?.name || '');
+                const isExistingCompilation = compilationRegex.test(existing.album?.name || '');
+
+                // Studio Album / Single priority: If the album name includes the song title (e.g. "Teenage Dream" album for "Teenage Dream" song),
+                // it is the canonical release and should never be overridden by third-party compilations like "POP 2010"
+                const isCurrentSelfTitled = (track.album?.name || '').replace(/[^a-zA-Z0-9]/g, '').toLowerCase().includes(baseTitle);
+                const isExistingSelfTitled = (existing.album?.name || '').replace(/[^a-zA-Z0-9]/g, '').toLowerCase().includes(baseTitle);
+
+                if (isCurrentSelfTitled && !isExistingSelfTitled) {
+                    uniqueTracks[existingIndex] = track;
+                } else if (!isCurrentSelfTitled && isExistingSelfTitled) {
+                    // Keep the canonical studio release
+                } else if (!isCurrentCompilation && isExistingCompilation) {
+                    uniqueTracks[existingIndex] = track;
+                } else if (currentScore > existingScore && (isCurrentCompilation === isExistingCompilation)) {
+                    uniqueTracks[existingIndex] = track;
+                }
             }
         }
     });
@@ -1411,7 +1502,49 @@ export class SpotifyScraperPlugin implements MetadataPlugin {
                     seenIds.add(cleanId);
                     const rawImg = item.image || '';
                     const hdImg = rawImg ? rawImg.replace(/150x150|50x50/, '500x500') : '';
-                    const artist = decodeHtmlEntities(item.artist || item.primary_artists || 'Artist');
+                    let artist = 'Artist';
+                    let artistMap = item.more_info?.artistMap;
+                    if (typeof artistMap === 'string') {
+                        try { artistMap = JSON.parse(artistMap); } catch (e) {}
+                    }
+                    const primaryList = Array.isArray(artistMap?.primary_artists)
+                        ? artistMap.primary_artists
+                        : Array.isArray(artistMap?.artists)
+                        ? artistMap.artists
+                        : null;
+
+                    if (primaryList && primaryList.length > 0) {
+                        const cleanNames = primaryList
+                            .map((a: any) => {
+                                if (typeof a === 'string') return a;
+                                if (typeof a?.name === 'string') return a.name;
+                                if (typeof a?.profile?.name === 'string') return a.profile.name;
+                                return '';
+                            })
+                            .filter((n: string) => n && n.trim() && n !== '[object Object]');
+                        if (cleanNames.length > 0) {
+                            artist = decodeHtmlEntities(cleanNames.join(', '));
+                        }
+                    }
+
+                    if (artist === 'Artist') {
+                        if (typeof item.subtitle === 'string' && item.subtitle.trim() && item.subtitle !== '[object Object]') {
+                            artist = decodeHtmlEntities(item.subtitle);
+                        } else if (typeof item.header_desc === 'string' && item.header_desc.trim()) {
+                            artist = decodeHtmlEntities(item.header_desc);
+                        } else if (typeof item.artist === 'string' && item.artist.trim() && item.artist !== '[object Object]') {
+                            artist = decodeHtmlEntities(item.artist);
+                        } else if (typeof item.primary_artists === 'string' && item.primary_artists.trim() && item.primary_artists !== '[object Object]') {
+                            artist = decodeHtmlEntities(item.primary_artists);
+                        } else if (typeof item.more_info?.primary_artists === 'string' && item.more_info.primary_artists.trim()) {
+                            artist = decodeHtmlEntities(item.more_info.primary_artists);
+                        } else if (item.artist && typeof (item.artist as any).name === 'string') {
+                            artist = (item.artist as any).name;
+                        }
+                    }
+                    if (!artist || artist === '[object Object]') {
+                        artist = 'Artist';
+                    }
 
                     results.push({
                         id: cleanId,
@@ -1437,10 +1570,13 @@ export class SpotifyScraperPlugin implements MetadataPlugin {
                 if (!seenNames.has(norm) && !seenIds.has(albumId) && art) {
                     seenNames.add(norm);
                     seenIds.add(albumId);
+                    const albumArtists = (t.artists || []).map((a: any) => ({
+                        name: typeof a === 'string' ? a : a.name || 'Artist'
+                    }));
                     results.push({
                         id: albumId,
                         name: alb.name,
-                        artists: t.artists || [{ name: 'Artist' }],
+                        artists: albumArtists.length > 0 ? albumArtists : [{ name: 'Artist' }],
                         images: [{ url: art }],
                         release_date: '2024',
                         total_tracks: 10
@@ -1541,7 +1677,11 @@ export class SpotifyScraperPlugin implements MetadataPlugin {
         // Pre-query matched artists to inject their top songs only if searching for a recognized major artist (time-boxed to 800ms)
         const matchedArtists = await withTimeout(this.searchArtists(cleanQuery, 3), 800).catch(() => []);
         const primaryArtist = matchedArtists.find(a => isArtistNameMatch(a.name, cleanQuery));
-        const artistTrackPromise = (primaryArtist && (primaryArtist.followers?.total || 0) >= 5000)
+        const isRecognizedMajorArtist = primaryArtist && (
+            (primaryArtist.followers?.total || 0) >= 50000 || 
+            TOP_ARTIST_PROFILES[primaryArtist.name.toLowerCase()]
+        );
+        const artistTrackPromise = isRecognizedMajorArtist
             ? searchSpotubeSpotifyTracks(`artist:${primaryArtist.name}`, fetchLimit).catch(() => [])
             : Promise.resolve([]);
 
@@ -1589,18 +1729,68 @@ export class SpotifyScraperPlugin implements MetadataPlugin {
 
         // Map JioSaavn play counts for authentic cross-engine track popularity
         const saavnPopularityMap = new Map<string, number>();
+        if (saavnRes.status === 'fulfilled' && Array.isArray(saavnRes.value.data?.results)) {
+            saavnRes.value.data.results.forEach((item: any) => {
+                const name = decodeHtmlEntities(item.song || item.title);
+                const artist = decodeHtmlEntities(item.primary_artists || item.singers || 'Unknown Artist');
+                const playCount = Number(item.play_count) || 0;
+                const saavnPopularity = normalizePlayCountToPopularity(playCount);
+                const baseTitle = name.replace(/\([^)]*\)|\[[^\]]*\]/g, '').replace(/[-–—]\s*(remastered|live|acoustic|version|edit|official).*$/i, '').replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
+                const primaryArtistStr = artist.split(/[,x&•|–-]/)[0].replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
+                saavnPopularityMap.set(`${baseTitle}-${primaryArtistStr}`, saavnPopularity);
+            });
+        }
 
-        // Collect JioSaavn candidates (Authentic play count stream metric)
+        let spotubeCandidates: Track[] = (spotubeRes.status === 'fulfilled' && Array.isArray(spotubeRes.value)) ? spotubeRes.value : [];
+
+        // If Spotify prefix search returned few or 0 items (e.g. user typed "teenage drea" before the final "m"),
+        // check autocomplete suggestion to grab official Spotify release with canonical artwork
+        if (spotubeCandidates.length < 3 && saavnAutoRes.status === 'fulfilled') {
+            const autoTitle = saavnAutoRes.value?.data?.topquery?.data?.[0]?.title;
+            if (autoTitle && autoTitle.toLowerCase() !== cleanQuery.toLowerCase()) {
+                try {
+                    const fallbackSpotify = await withTimeout(searchSpotubeSpotifyTracks(autoTitle, fetchLimit), 1000);
+                    if (Array.isArray(fallbackSpotify) && fallbackSpotify.length > 0) {
+                        spotubeCandidates = [...spotubeCandidates, ...fallbackSpotify];
+                    }
+                } catch (e) {}
+            }
+        }
+
+        // 1. Primary: Collect Spotube candidates (Official global Spotify catalog & covers) - HIGHEST RELEVANCE
+        if (spotubeCandidates.length > 0) {
+            spotubeCandidates.forEach((track, idx) => {
+                const baseTitle = (track.name || '').replace(/\([^)]*\)|\[[^\]]*\]/g, '').replace(/[-–—]\s*(remastered|live|acoustic|version|edit|official).*$/i, '').replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
+                const primaryArtistStr = (track.artists?.[0]?.name || (track as any).artist || 'unknown').split(/[,x&•|–-]/)[0].replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
+                const sig = `${baseTitle}-${primaryArtistStr}`;
+
+                if (saavnPopularityMap.has(sig)) {
+                    (track as any).popularity = saavnPopularityMap.get(sig);
+                } else {
+                    (track as any).popularity = typeof (track as any).popularity === 'number'
+                        ? (track as any).popularity
+                        : (idx === 0 ? 98 : idx === 1 ? 92 : idx === 2 ? 85 : Math.max(10, 65 - idx * 4));
+                }
+                rawCandidates.push({ track, originalIndex: idx });
+            });
+        }
+
+        // 2. Supplementary: Collect Top Spotify Artist Tracks (if searching for a major star)
+        if (artistTracksRes.status === 'fulfilled' && Array.isArray(artistTracksRes.value)) {
+            artistTracksRes.value.forEach((track, idx) => {
+                (track as any).popularity = Math.max(30, 95 - idx * 2);
+                (track as any).followers = primaryArtist?.followers?.total || 0;
+                rawCandidates.push({ track, originalIndex: idx + 2 });
+            });
+        }
+
+        // 3. Collect JioSaavn candidates (Provides regional/Indian coverage where Spotify catalog is sparse)
         if (saavnRes.status === 'fulfilled' && Array.isArray(saavnRes.value.data?.results)) {
             saavnRes.value.data.results.forEach((item: any, idx: number) => {
                 const name = decodeHtmlEntities(item.song || item.title);
                 const artist = decodeHtmlEntities(item.primary_artists || item.singers || 'Unknown Artist');
                 const playCount = Number(item.play_count) || 0;
                 const saavnPopularity = normalizePlayCountToPopularity(playCount);
-
-                const baseTitle = name.replace(/\([^)]*\)|\[[^\]]*\]/g, '').replace(/[-–—]\s*(remastered|live|acoustic|version|edit|official).*$/i, '').replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
-                const primaryArtistStr = artist.split(/[,x&•|–-]/)[0].replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
-                saavnPopularityMap.set(`${baseTitle}-${primaryArtistStr}`, saavnPopularity);
 
                 rawCandidates.push({
                     track: {
@@ -1621,7 +1811,7 @@ export class SpotifyScraperPlugin implements MetadataPlugin {
             });
         }
 
-        // Collect JioSaavn Autocomplete candidates (Phonetic & Typo spell-check matching)
+        // 4. Collect JioSaavn Autocomplete candidates (Phonetic & Typo spell-check matching)
         if (saavnAutoRes.status === 'fulfilled' && saavnAutoRes.value?.data) {
             const autoSongs = [
                 ...(saavnAutoRes.value.data?.topquery?.data || []),
@@ -1647,35 +1837,8 @@ export class SpotifyScraperPlugin implements MetadataPlugin {
                         preview_url: null,
                         ...({ popularity: autoPopularity } as any)
                     },
-                    originalIndex: idx
+                    originalIndex: idx + 20
                 });
-            });
-        }
-
-        // Collect Top Artist Tracks first (Highest popularity signal when searching by artist)
-        if (artistTracksRes.status === 'fulfilled' && Array.isArray(artistTracksRes.value)) {
-            artistTracksRes.value.forEach((track, idx) => {
-                (track as any).popularity = Math.max(30, 98 - idx * 2);
-                (track as any).followers = primaryArtist?.followers?.total || 0;
-                rawCandidates.push({ track, originalIndex: idx });
-            });
-        }
-
-        // Collect Spotube candidates (Highest fidelity official metadata)
-        if (spotubeRes.status === 'fulfilled' && Array.isArray(spotubeRes.value)) {
-            spotubeRes.value.forEach((track, idx) => {
-                const baseTitle = (track.name || '').replace(/\([^)]*\)|\[[^\]]*\]/g, '').replace(/[-–—]\s*(remastered|live|acoustic|version|edit|official).*$/i, '').replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
-                const primaryArtistStr = (track.artists?.[0]?.name || (track as any).artist || 'unknown').split(/[,x&•|–-]/)[0].replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
-                const sig = `${baseTitle}-${primaryArtistStr}`;
-
-                if (saavnPopularityMap.has(sig)) {
-                    (track as any).popularity = saavnPopularityMap.get(sig);
-                } else {
-                    (track as any).popularity = typeof (track as any).popularity === 'number'
-                        ? (track as any).popularity
-                        : (idx === 0 ? 95 : idx === 1 ? 88 : Math.max(10, 60 - idx * 5));
-                }
-                rawCandidates.push({ track, originalIndex: idx + 2 });
             });
         }
 

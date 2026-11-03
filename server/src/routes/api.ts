@@ -79,7 +79,7 @@ router.get('/me/playlists', async (req, res) => {
         }
 
         if (isDbConnected()) {
-            const records = await EncryptedPlaylist.find({ userId: req.user.userId }).sort({ updatedAt: -1 });
+            const records = await EncryptedPlaylist.find({ userId: req.user.userId }).sort({ updatedAt: -1 }).lean();
             const playlists: Playlist[] = [];
             for (const rec of records) {
                 const decrypted = decryptPayload<Playlist>(rec.ciphertext, rec.iv, rec.tag, req.user.userId);
@@ -184,8 +184,8 @@ router.get('/search', searchCacheMiddleware, async (req, res) => {
 router.get('/playlists/:id', async (req, res) => {
     const { id } = req.params;
     try {
-        // 1. Check encrypted database if logged in
-        if (req.user && isDbConnected()) {
+        // 1. Check encrypted database (by playlistId)
+        if (isDbConnected()) {
             const rec = await EncryptedPlaylist.findOne({ playlistId: id });
             if (rec) {
                 const decrypted = decryptPayload<Playlist>(rec.ciphertext, rec.iv, rec.tag, rec.userId);
@@ -213,9 +213,15 @@ router.get('/playlists/:id', async (req, res) => {
             return res.json(local);
         }
 
-        // 3. Fallback to Spotify scraper (public playlists)
+        // 3. If ID starts with pl_, it's a private Slothify playlist - do not query Spotify
+        if (id.startsWith('pl_')) {
+            return res.status(404).json({ error: 'Playlist not found', id });
+        }
+
+        // 4. Fallback to Spotify scraper (public playlists)
+        const cleanSpotifyId = id.replace(/^sp_(playlist|album|tr)_/, '');
         const metadataPlugin = pluginRegistry.getMetadataPlugin();
-        const playlist = await metadataPlugin.getPlaylist(id);
+        const playlist = await metadataPlugin.getPlaylist(cleanSpotifyId);
         res.json(playlist);
     } catch (err: any) {
         res.status(500).json({ error: 'Failed to fetch playlist', details: err.message });
@@ -226,7 +232,7 @@ router.get('/playlists/:id', async (req, res) => {
 router.get('/playlists/:id/tracks', async (req, res) => {
     const { id } = req.params;
     try {
-        if (req.user && isDbConnected()) {
+        if (isDbConnected()) {
             const rec = await EncryptedPlaylist.findOne({ playlistId: id });
             if (rec) {
                 const decrypted = decryptPayload<Playlist>(rec.ciphertext, rec.iv, rec.tag, rec.userId);
@@ -239,6 +245,10 @@ router.get('/playlists/:id/tracks', async (req, res) => {
         const local = localLibrary.getPlaylist(id);
         if (local) {
             return res.json((local.tracks.items || []).map(i => i.track));
+        }
+
+        if (id.startsWith('pl_')) {
+            return res.json([]);
         }
 
         const metadataPlugin = pluginRegistry.getMetadataPlugin();
@@ -541,7 +551,8 @@ router.get('/me/history', async (req, res) => {
             const limit = Math.min(parseInt(req.query.limit as string) || 50, 100);
             const history = await ListeningHistory.find({ userId: req.user.userId })
                 .sort({ playedAt: -1 })
-                .limit(limit);
+                .limit(limit)
+                .lean();
 
             const tracks: (Track & { playedAt?: string })[] = history.map(h => ({
                 id: h.trackId,
@@ -1172,7 +1183,7 @@ router.get('/me/tracks', async (req, res) => {
                 return res.json({ ids, total: ids.length, items: [] });
             }
 
-            const records = await EncryptedLikedTrack.find({ userId: req.user.userId }).sort({ addedAt: -1 });
+            const records = await EncryptedLikedTrack.find({ userId: req.user.userId }).sort({ addedAt: -1 }).lean();
             const tracks: Track[] = [];
             for (const rec of records) {
                 const decrypted = decryptPayload<Track>(rec.ciphertext, rec.iv, rec.tag, req.user.userId);
@@ -1310,7 +1321,7 @@ router.delete('/me/tracks', async (req, res) => {
 router.get(['/me/artists', '/me/following'], async (req, res) => {
     try {
         if (req.user && isDbConnected()) {
-            const records = await FollowedArtist.find({ userId: req.user.userId }).sort({ followedAt: -1 });
+            const records = await FollowedArtist.find({ userId: req.user.userId }).sort({ followedAt: -1 }).lean();
             const items = records.map((r: any) => ({
                 id: r.artistId,
                 name: r.artistName,

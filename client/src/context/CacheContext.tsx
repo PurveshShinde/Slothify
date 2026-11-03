@@ -25,7 +25,7 @@ interface CacheContextType {
     clearCache: () => void;
 }
 
-const STORAGE_KEY = 'slothify_browser_cache_v11';
+const STORAGE_KEY = 'slothify_browser_cache_v14';
 
 // Check if current session started from a browser reload/F5
 const checkIsReload = (): boolean => {
@@ -41,7 +41,7 @@ const checkIsReload = (): boolean => {
 const getInitialCache = (): CacheState => {
     const isReload = checkIsReload();
 
-    // Clean up deprecated cache versions that may contain old track cover avatars or mock follower counts
+    // Clean up deprecated cache versions
     try {
         localStorage.removeItem('slothify_browser_cache_v5');
         localStorage.removeItem('slothify_browser_cache_v6');
@@ -49,12 +49,32 @@ const getInitialCache = (): CacheState => {
         localStorage.removeItem('slothify_browser_cache_v8');
         localStorage.removeItem('slothify_browser_cache_v9');
         localStorage.removeItem('slothify_browser_cache_v10');
+        localStorage.removeItem('slothify_browser_cache_v11');
+        localStorage.removeItem('slothify_browser_cache_v12');
     } catch (e) {}
 
     try {
         const stored = localStorage.getItem(STORAGE_KEY);
         if (stored) {
             const parsed = JSON.parse(stored);
+
+            // Sanitize playlistDetails to guarantee tracks is always an array
+            if (parsed.playlistDetails && typeof parsed.playlistDetails === 'object') {
+                for (const pid of Object.keys(parsed.playlistDetails)) {
+                    const entry = parsed.playlistDetails[pid];
+                    if (!entry) continue;
+                    if (entry.tracks && !Array.isArray(entry.tracks)) {
+                        if (Array.isArray(entry.tracks.items)) {
+                            parsed.playlistDetails[pid] = {
+                                playlist: entry.playlist || entry,
+                                tracks: entry.tracks.items.map((i: any) => i.track || i).filter(Boolean)
+                            };
+                        } else {
+                            delete parsed.playlistDetails[pid];
+                        }
+                    }
+                }
+            }
 
             // Invalidate stale artistsData if it has hardcoded 12.5M followers, mock counts <= 500, dead hashes, or ui-avatars initials
             if (Array.isArray(parsed.artistsData)) {

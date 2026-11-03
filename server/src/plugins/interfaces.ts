@@ -27,6 +27,7 @@ export interface Playlist {
         total: number;
         items?: { track: Track; added_at?: string }[];
     };
+    isSpotify?: boolean;
 }
 
 export interface Artist {

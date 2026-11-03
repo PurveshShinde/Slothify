@@ -17,6 +17,7 @@ export interface Playlist {
     total: number;
     items?: { track: Track }[];
   };
+  isSpotify?: boolean;
 }
 
 export interface Track {

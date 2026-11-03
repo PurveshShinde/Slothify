@@ -17,7 +17,29 @@ export const PlaylistCover: React.FC<PlaylistCoverProps> = ({
   iconSize = 24,
   alt = ''
 }) => {
-  // 1. Gather all unique album art URLs from tracks
+  // 1. Filter any generic unsplash or picsum placeholder images
+  const validImages = (images || [])
+    .map(img => img?.url)
+    .filter(url => url && !url.includes('picsum.photos') && !url.includes('images.unsplash.com')) as string[];
+
+  // 2. If the playlist has an official or custom cover art, use it directly!
+  // This prevents mosaic / custom covers from being sliced into duplicate collages.
+  if (validImages.length > 0 && validImages[0]) {
+    return (
+      <img
+        src={validImages[0]}
+        alt={alt}
+        className={`w-full h-full object-cover select-none ${className}`}
+        loading="lazy"
+        onError={(e) => {
+          // If the primary image fails, fallback to dark placeholder
+          (e.currentTarget as HTMLImageElement).style.opacity = '0.3';
+        }}
+      />
+    );
+  }
+
+  // 3. For playlists without an official cover, gather unique track album art
   const trackArtworks: string[] = [];
   if (tracks?.items && tracks.items.length > 0) {
     for (const item of tracks.items) {
@@ -27,7 +49,7 @@ export const PlaylistCover: React.FC<PlaylistCoverProps> = ({
       }
     }
     // If fewer than 4 unique artworks, fill with repeated track artworks
-    if (trackArtworks.length < 4) {
+    if (trackArtworks.length > 0 && trackArtworks.length < 4) {
       for (const item of tracks.items) {
         const url = item.track?.album?.images?.[0]?.url;
         if (url) trackArtworks.push(url);
@@ -36,16 +58,8 @@ export const PlaylistCover: React.FC<PlaylistCoverProps> = ({
     }
   }
 
-  // 2. Filter any generic unsplash or picsum placeholder images
-  const validImages = (images || [])
-    .map(img => img?.url)
-    .filter(url => url && !url.includes('picsum.photos') && !url.includes('images.unsplash.com')) as string[];
-
-  // 3. Spotify 4-song collage:
-  // Trigger when 4+ songs exist with art, or images has >= 4 items
-  const collageList = trackArtworks.length >= 4
-    ? trackArtworks.slice(0, 4)
-    : (validImages.length >= 4 ? validImages.slice(0, 4) : []);
+  // 4. Spotify 4-song collage for custom in-app playlists with 4+ songs
+  const collageList = trackArtworks.length >= 4 ? trackArtworks.slice(0, 4) : [];
 
   if (collageList.length >= 4) {
     return (
@@ -66,8 +80,8 @@ export const PlaylistCover: React.FC<PlaylistCoverProps> = ({
     );
   }
 
-  // 4. 1 to 3 songs: Use the FIRST added song's icon/artwork!
-  const firstSongArt = trackArtworks[0] || (validImages.length > 0 ? validImages[0] : null);
+  // 5. 1 to 3 songs: Use the first song's album artwork
+  const firstSongArt = trackArtworks[0];
   if (firstSongArt) {
     return (
       <img
