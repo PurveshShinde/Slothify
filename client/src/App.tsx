@@ -85,7 +85,7 @@ const App: React.FC = () => {
 
   const [isPlayerExpanded, setIsPlayerExpanded] = useState(false);
 
-  const handleOpenFullPlayer = useCallback((mode: 'normal' | 'vintage' = 'normal') => {
+  const handleOpenFullPlayer = useCallback((mode: 'normal' | 'vintage' = 'vintage') => {
     try {
       localStorage.setItem('slothify_mobile_player_style', mode);
       window.dispatchEvent(new CustomEvent('slothify_player_mode_change', { detail: mode }));
@@ -255,6 +255,17 @@ const App: React.FC = () => {
   const handlePlayPause = useCallback((playing: boolean) => {
     setIsPlaying(playing);
   }, []);
+
+  const handleDismissPlayer = useCallback(() => {
+    setIsPlaying(false);
+    setCurrentTrack(null);
+    if (isPlayerExpanded) {
+      setIsPlayerExpanded(false);
+      if (window.location.hash === '#player') {
+        window.history.back();
+      }
+    }
+  }, [isPlayerExpanded]);
 
   const handleToggleLike = useCallback((trackOrId: string | Track, passedTrack?: Track) => {
     let trackId: string;
@@ -939,6 +950,7 @@ const App: React.FC = () => {
             isShuffle={isShuffle}
             onToggleShuffle={() => setIsShuffle(!isShuffle)}
             onQueueChange={setQueue}
+            onDismiss={handleDismissPlayer}
           />
 
           <AuthModal

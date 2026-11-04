@@ -1448,15 +1448,10 @@ const Home: React.FC<HomeProps> = ({
 
       {/* 2. FEATURED HERO SHOWCASE CARD (FROSTED GLASS, AUTO-MOVING ON MOBILE, SMOOTH GLIDING CAROUSEL) */}
       <div
-        onClick={() => {
-          if (Math.abs(touchDeltaX) > 10) return;
-          if (onOpenTurntable) onOpenTurntable();
-        }}
         onTouchStart={handleHeroTouchStart}
         onTouchMove={handleHeroTouchMove}
         onTouchEnd={handleHeroTouchEnd}
-        className="relative w-full rounded-[32px] p-6 sm:p-8 md:p-9 lg:p-10 overflow-hidden shadow-2xl flex flex-col justify-between cursor-pointer group transition-all duration-300 backdrop-blur-2xl bg-black/25 hover:bg-black/35 border border-white/10 hover:border-white/20 shadow-black/70"
-        title="Click to open Fullscreen Vintage Turntable"
+        className="relative w-full rounded-[32px] p-6 sm:p-8 md:p-9 lg:p-10 overflow-hidden shadow-2xl flex flex-col justify-between transition-all duration-300 backdrop-blur-2xl bg-black/25 hover:bg-black/35 border border-white/10 hover:border-white/20 shadow-black/70"
       >
         {/* Subtle ambient glow reactive to active theme */}
         <div
@@ -1509,9 +1504,17 @@ const Home: React.FC<HomeProps> = ({
                       >
                         NOW PLAYING
                       </span>
-                      <span className="text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-blue-500/20 text-blue-400 tracking-wider uppercase border border-blue-500/30">
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (onOpenTurntable) onOpenTurntable();
+                        }}
+                        className="text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-blue-500/20 hover:bg-blue-500/30 text-blue-400 tracking-wider uppercase border border-blue-500/30 cursor-pointer active:scale-95 transition-all"
+                        title="Open Fullscreen Turntable Player"
+                      >
                         FULLSCREEN PLAYER
-                      </span>
+                      </button>
                     </div>
 
                     {/* Reference Serif Display Title */}
