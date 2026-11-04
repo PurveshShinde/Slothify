@@ -53,6 +53,54 @@ export const VintageTurntable: React.FC<VintageTurntableProps> = ({
   const { isOcean } = useTheme();
   const [rpm, setRpm] = useState<'33' | '45'>('33');
   const [activeTab, setActiveTab] = useState<'info' | 'queue'>('info');
+  const [isDragging, setIsDragging] = useState(false);
+  const [dragProgress, setDragProgress] = useState(0);
+
+  // Mobile swipe-down to dismiss gesture
+  const touchStartYRef = React.useRef<number | null>(null);
+  const touchStartXRef = React.useRef<number | null>(null);
+  const [dragY, setDragY] = useState(0);
+  const [isDraggingDown, setIsDraggingDown] = useState(false);
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    // Avoid triggering drag if interacting with scrub slider or buttons
+    const target = e.target as HTMLElement;
+    if (target.closest('input[type="range"]') || target.closest('button') || target.closest('a')) {
+      return;
+    }
+    const touch = e.touches[0];
+    touchStartYRef.current = touch.clientY;
+    touchStartXRef.current = touch.clientX;
+    setIsDraggingDown(false);
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    if (touchStartYRef.current === null || touchStartXRef.current === null) return;
+    const touch = e.touches[0];
+    const diffY = touch.clientY - touchStartYRef.current;
+    const diffX = touch.clientX - touchStartXRef.current;
+
+    // Only drag downwards if vertical movement dominates horizontal movement
+    if (diffY > 10 && Math.abs(diffY) > Math.abs(diffX) * 1.2) {
+      setIsDraggingDown(true);
+      setDragY(Math.max(0, diffY));
+    }
+  };
+
+  const handleTouchEnd = () => {
+    if (dragY > 75) {
+      setDragY(0);
+      setIsDraggingDown(false);
+      touchStartYRef.current = null;
+      touchStartXRef.current = null;
+      onClose();
+    } else {
+      setDragY(0);
+      setIsDraggingDown(false);
+      touchStartYRef.current = null;
+      touchStartXRef.current = null;
+    }
+  };
 
   // Track if disc has ever started spinning for the current track
   const [hasStarted, setHasStarted] = useState(false);
@@ -109,10 +157,22 @@ export const VintageTurntable: React.FC<VintageTurntableProps> = ({
 
   return (
     <div
-      className={`fixed inset-0 z-[200] w-screen h-screen flex flex-col justify-between p-5 md:p-8 lg:p-10 select-none overflow-hidden animate-in fade-in duration-300 ease-out text-white ${
+      style={{
+        transform: dragY > 0 ? `translateY(${dragY}px)` : undefined,
+        transition: isDraggingDown ? 'none' : 'transform 0.24s cubic-bezier(0.2, 0.9, 0.3, 1)',
+        willChange: 'transform'
+      }}
+      onTouchStart={handleTouchStart}
+      onTouchMove={handleTouchMove}
+      onTouchEnd={handleTouchEnd}
+      className={`fixed inset-0 z-[200] w-screen h-[100dvh] flex flex-col justify-between px-4 pt-safe pb-4 md:p-8 lg:p-10 select-none overflow-hidden animate-in fade-in duration-300 ease-out text-white ${
         isOcean ? 'bg-[#020612]' : 'bg-[#0d0705]'
       }`}
     >
+      {/* Mobile Swipe-down Grab Indicator */}
+      <div className="md:hidden w-full pt-1 pb-1.5 flex justify-center cursor-grab active:cursor-grabbing touch-none select-none flex-shrink-0">
+        <div className="w-10 h-1 rounded-full bg-white/30 hover:bg-white/50 transition-colors" />
+      </div>
       {/* Thematic Ambient Scenery Backdrop (Ocean Waves vs Autumn Forest) */}
       <div className="absolute inset-0 pointer-events-none overflow-hidden -z-10">
         <div
@@ -210,11 +270,11 @@ export const VintageTurntable: React.FC<VintageTurntableProps> = ({
       </header>
 
       {/* 2. MAIN VIEWPORT - PERFECT CIRCULAR DISC & CLEAN CONTROLS */}
-      <main className="flex-1 min-h-0 flex flex-col lg:flex-row items-center justify-center lg:justify-between gap-8 lg:gap-14 max-w-6xl mx-auto w-full py-4 relative z-10 overflow-y-auto lg:overflow-hidden">
+      <main className="flex-1 min-h-0 flex flex-col lg:flex-row items-center justify-center lg:justify-between gap-4 sm:gap-8 lg:gap-14 max-w-6xl mx-auto w-full py-2 lg:py-4 relative z-10 overflow-y-auto lg:overflow-hidden">
         {/* LEFT: THE PERFECT CIRCLE VINYL RECORD */}
         <div className="w-full lg:w-1/2 flex flex-col items-center justify-center relative flex-shrink-0">
           {/* Guaranteed 1:1 Aspect-Square Circular Platter Container */}
-          <div className="relative w-full max-w-[min(65vh,440px)] aspect-square flex items-center justify-center flex-shrink-0 select-none">
+          <div className="relative w-full max-w-[min(34vh,240px)] sm:max-w-[min(48vh,360px)] lg:max-w-[min(65vh,440px)] aspect-square flex items-center justify-center flex-shrink-0 select-none">
             {/* The Vinyl Disc - Flawless Perfect Circle (Continuous rotation with no hover stutter) */}
             <div
               data-vinyl-disc
@@ -256,26 +316,26 @@ export const VintageTurntable: React.FC<VintageTurntableProps> = ({
           </div>
 
           {/* Minimalist Live Waveform */}
-          <div className="mt-4 flex items-center justify-center w-full max-w-[min(65vh,440px)]">
+          <div className="mt-2.5 sm:mt-4 flex items-center justify-center w-full max-w-[min(34vh,240px)] sm:max-w-[min(48vh,360px)] lg:max-w-[min(65vh,440px)]">
             <AudioWaveform isPlaying={isPlaying} barCount={24} />
           </div>
         </div>
 
         {/* RIGHT: CLEAN MINIMALIST MEDIA PLAYER CONSOLE */}
-        <div className="w-full lg:w-1/2 max-w-lg flex flex-col justify-center space-y-6 px-2 sm:px-4">
+        <div className="w-full lg:w-1/2 max-w-lg flex flex-col justify-center space-y-3 sm:space-y-6 px-2 sm:px-4">
           {activeTab === 'info' ? (
             <>
               {/* Track Details */}
-              <div className="space-y-1.5">
+              <div className="space-y-1 sm:space-y-1.5">
                 <span className={`text-[11px] font-bold tracking-widest uppercase ${
                   isOcean ? 'text-blue-500' : 'text-[#f5d0b5]'
                 }`}>
                   Now Playing
                 </span>
-                <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-white tracking-tight leading-tight line-clamp-2">
+                <h1 className="text-xl sm:text-3xl lg:text-4xl font-bold text-white tracking-tight leading-tight line-clamp-2">
                   {trackTitle}
                 </h1>
-                <p className="text-base sm:text-lg text-slate-300 truncate">
+                <p className="text-sm sm:text-lg text-slate-300 truncate">
                   {trackArtist}
                 </p>
                 <p className="text-xs text-slate-500 font-mono truncate">
@@ -290,19 +350,31 @@ export const VintageTurntable: React.FC<VintageTurntableProps> = ({
                     className={`absolute h-full rounded-full transition-all ${
                       isOcean ? 'bg-blue-600' : 'bg-[#f5d0b5]'
                     }`}
-                    style={{ width: `${(currentProgress / (currentDuration || 1)) * 100}%` }}
+                    style={{ width: `${((isDragging ? dragProgress : currentProgress) / (currentDuration || 1)) * 100}%` }}
                   />
                   <input
                     type="range"
                     min="0"
                     max={currentDuration || 0}
-                    value={currentProgress}
-                    onChange={(e) => onSeek(Number(e.target.value))}
+                    step="any"
+                    value={isDragging ? dragProgress : currentProgress}
+                    onPointerDown={() => {
+                      setIsDragging(true);
+                      setDragProgress(currentProgress);
+                    }}
+                    onChange={(e) => {
+                      setDragProgress(Number(e.target.value));
+                    }}
+                    onPointerUp={(e) => {
+                      const val = Number(e.currentTarget.value);
+                      setIsDragging(false);
+                      onSeek(val);
+                    }}
                     className="absolute w-full h-full opacity-0 cursor-pointer z-10"
                   />
                 </div>
                 <div className="flex justify-between text-xs font-mono text-slate-500">
-                  <span>{formatTime(currentProgress)}</span>
+                  <span>{formatTime(isDragging ? dragProgress : currentProgress)}</span>
                   <span>{formatTime(currentDuration)}</span>
                 </div>
               </div>
@@ -336,16 +408,16 @@ export const VintageTurntable: React.FC<VintageTurntableProps> = ({
                 <button
                   onClick={() => onPlayPause(!isPlaying)}
                   title={isPlaying ? "Pause" : "Play"}
-                  className={`w-16 h-16 sm:w-18 sm:h-18 rounded-full flex items-center justify-center hover:scale-105 active:scale-95 transition-all shadow-xl ${
+                  className={`w-14 h-14 sm:w-16 sm:h-16 flex-shrink-0 rounded-full flex items-center justify-center hover:scale-105 active:scale-95 transition-all ${
                     isOcean
-                      ? 'bg-blue-600 hover:bg-blue-500 text-white shadow-blue-600/30 ring-2 ring-blue-500/20'
-                      : 'bg-[#f5d0b5] hover:bg-white text-black shadow-[#f5d0b5]/20'
+                      ? 'bg-blue-600 hover:bg-blue-500 text-white shadow-[0_0_28px_rgba(37,99,235,0.65)] ring-2 ring-blue-500/20'
+                      : 'bg-[#f5d0b5] hover:bg-white text-black shadow-[0_0_24px_rgba(245,208,181,0.35)]'
                   }`}
                 >
                   {isPlaying ? (
-                    <Pause size={28} fill="currentColor" />
+                    <Pause size={24} className="sm:w-7 sm:h-7" fill="currentColor" />
                   ) : (
-                    <Play size={28} fill="currentColor" className="ml-1" />
+                    <Play size={24} className="sm:w-7 sm:h-7 ml-0.5" fill="currentColor" />
                   )}
                 </button>
 
@@ -480,7 +552,7 @@ export const VintageTurntable: React.FC<VintageTurntableProps> = ({
       {/* 3. MINIMALIST FOOTER */}
       <footer className="w-full pt-3 border-t border-white/[0.06] flex items-center justify-between text-[11px] text-slate-500 font-mono relative z-20">
         <span>Slothify Minimalist Audio</span>
-        <span>Esc to close</span>
+        <span className="hidden md:inline">Esc to close</span>
       </footer>
     </div>
   );

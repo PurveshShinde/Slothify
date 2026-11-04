@@ -93,8 +93,11 @@ export async function getStreamUrl(videoId: string): Promise<string> {
                     const data = (await response.json()) as any;
                     const audioStreams = data.audioStreams;
                     if (audioStreams && audioStreams.length > 0) {
-                        audioStreams.sort((a: any, b: any) => (b.bitrate || 0) - (a.bitrate || 0));
-                        const directUrl = audioStreams[0].url;
+                        // Prefer itag 140 (M4A / AAC) over WebM (Opus 251) for progressive HTML5 <audio> playback.
+                        // M4A contains standard MP4 sample tables that enable accurate Range-based seeking in all browsers.
+                        const m4aStream = audioStreams.find((s: any) => s.itag === 140 || s.itag === '140' || s.container === 'm4a' || s.mimeType?.includes('audio/mp4'));
+                        const bestStream = m4aStream || audioStreams.sort((a: any, b: any) => (b.bitrate || 0) - (a.bitrate || 0))[0];
+                        const directUrl = bestStream?.url;
                         if (directUrl && directUrl.startsWith('http')) {
                             console.log(`[YouTubeAudioPlugin] ✅ Piped extraction succeeded via ${instance}`);
                             streamUrlCache.set(videoId, {
@@ -136,8 +139,9 @@ export async function getStreamUrl(videoId: string): Promise<string> {
                     );
 
                     if (audioStreams.length > 0) {
-                        audioStreams.sort((a: any, b: any) => (Number(b.bitrate) || 0) - (Number(a.bitrate) || 0));
-                        let directUrl = audioStreams[0].url;
+                        const m4aStream = audioStreams.find((f: any) => f.itag === 140 || f.itag === '140' || f.container === 'm4a' || f.mimeType?.includes('audio/mp4'));
+                        const bestStream = m4aStream || audioStreams.sort((a: any, b: any) => (Number(b.bitrate) || 0) - (Number(a.bitrate) || 0))[0];
+                        let directUrl = bestStream?.url;
                         if (directUrl && directUrl.startsWith('/')) {
                             directUrl = `${instance}${directUrl}`;
                         }
@@ -172,7 +176,7 @@ export async function getStreamUrl(videoId: string): Promise<string> {
                 const url = await new Promise<string>((resolve, reject) => {
                     const child = spawn(binPath, [
                         targetUrl,
-                        '-f', '140/251/bestaudio/ba/b',
+                        '-f', '140/bestaudio[ext=m4a]/251/bestaudio/ba/b',
                         '-g',
                         '--no-playlist',
                         '--quiet',

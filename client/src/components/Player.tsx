@@ -1,11 +1,13 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import {
     Play, Pause, SkipBack, SkipForward, Repeat, Repeat1, Shuffle,
     ListMusic, ChevronDown, Heart, Loader2, MonitorSpeaker, Mic2,
-    Volume2, VolumeX, Volume1, MoreVertical, Sparkles, X, Plus, Disc
+    Volume2, VolumeX, Volume1, MoreVertical, Sparkles, X, Plus, Disc, Music2,
+    Maximize2, Minimize2
 } from 'lucide-react';
 import { Track } from '../types';
-import VintageTurntable from './VintageTurntable';
+import AudioWaveform from './AudioWaveform';
 import { useTheme } from '../context/ThemeContext';
 import { AudioService } from '../services/audioService';
 
@@ -55,7 +57,7 @@ async function racePipedStreams(videoId: string, signal?: AbortSignal): Promise<
             const data = await res.json();
             const audioStreams = data.audioStreams || [];
             if (!audioStreams.length) throw new Error('No audio streams');
-            const best = audioStreams.find((s: any) => s.itag === 140 || s.quality === '128 kbps') || audioStreams[0];
+            const best = audioStreams.find((s: any) => s.itag === 140 || s.itag === '140' || s.container === 'm4a' || s.mimeType?.includes('audio/mp4') || s.quality === '128 kbps') || audioStreams[0];
             if (!best?.url) throw new Error('No url');
             return best.url as string;
         } catch (e) {
@@ -119,6 +121,51 @@ const Player: React.FC<PlayerProps> = ({
     const [smartSuggestions, setSmartSuggestions] = useState<Track[]>([]);
     const [isLoadingSuggestions, setIsLoadingSuggestions] = useState(false);
     const [activeEngine, setActiveEngine] = useState<'youtube' | 'jiosaavn' | null>(null);
+
+    // Mobile Player Mode & Swipe-Down Gesture
+    const [mobilePlayerMode, setMobilePlayerMode] = useState<'normal' | 'vintage'>(() => {
+        try {
+            const saved = localStorage.getItem('slothify_mobile_player_style');
+            if (saved === 'vintage' || saved === 'normal') return saved;
+        } catch {}
+        return 'normal';
+    });
+
+    const [isMobile, setIsMobile] = useState(() => typeof window !== 'undefined' ? window.innerWidth < 768 : false);
+    useEffect(() => {
+        const handleResize = () => setIsMobile(window.innerWidth < 768);
+        window.addEventListener('resize', handleResize);
+        return () => window.removeEventListener('resize', handleResize);
+    }, []);
+
+    // Listen for custom event to switch player mode (e.g. from Home hero "Spin Turntable")
+    useEffect(() => {
+        const handler = (e: any) => {
+            if (e.detail === 'vintage' || e.detail === 'normal') {
+                setMobilePlayerMode(e.detail);
+            }
+        };
+        window.addEventListener('slothify_player_mode_change', handler);
+        return () => window.removeEventListener('slothify_player_mode_change', handler);
+    }, []);
+
+    // Listen for Escape key to close expanded player
+    useEffect(() => {
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if (e.key === 'Escape' && isExpanded) {
+                onToggleExpand();
+            }
+        };
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+    }, [isExpanded, onToggleExpand]);
+
+    const springTransition = { 
+        type: 'spring' as const, 
+        stiffness: 260,
+        damping: 28,
+        mass: 0.8 
+    };
 
     // Guard & Caching Refs
     const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -603,18 +650,44 @@ const Player: React.FC<PlayerProps> = ({
         }
     }, [repeatMode, handleSkipForward]);
 
-    const handleSeekEnd = (value: number) => {
-        if (!audioRef.current) return;
-        audioRef.current.currentTime = value;
-        setTimeout(() => { isSeekingRef.current = false; }, 300);
-    };
+    const seekTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+    const handleSeekStart = useCallback(() => {
+        isSeekingRef.current = true;
+    }, []);
+
+    const handleSeekChange = useCallback((value: number) => {
+        isSeekingRef.current = true;
+        setProgress(value);
+    }, []);
+
+    const handleSeekCommit = useCallback((value: number) => {
+        isSeekingRef.current = true;
+        setProgress(value);
+        if (audioRef.current && isFinite(value)) {
+            try {
+                audioRef.current.currentTime = value;
+            } catch (err) {
+                console.warn('[Player] Seek error:', err);
+            }
+        }
+        if (seekTimeoutRef.current) clearTimeout(seekTimeoutRef.current);
+        seekTimeoutRef.current = setTimeout(() => {
+            isSeekingRef.current = false;
+        }, 1200);
+    }, []);
+
+    const handleSeekEnd = useCallback((value: number) => {
+        handleSeekCommit(value);
+    }, [handleSeekCommit]);
 
     // 3. Time Update & GAPLESS PRELOADER (Triggers at 15 seconds remaining)
     const onTimeUpdate = () => {
         if (!audioRef.current) return;
         const audio = audioRef.current;
 
-        if (!isSeekingRef.current) {
+        // Never overwrite progress if user is dragging slider or audio element is seeking
+        if (!isSeekingRef.current && !audio.seeking) {
             setProgress(audio.currentTime);
         }
 
@@ -643,9 +716,27 @@ const Player: React.FC<PlayerProps> = ({
             {/* Main Audio Element */}
             <audio
                 ref={audioRef}
+                preload="auto"
                 loop={repeatMode === 'one'}
                 onTimeUpdate={onTimeUpdate}
-                onLoadedMetadata={() => setDuration(audioRef.current?.duration || 0)}
+                onSeeking={() => {
+                    isSeekingRef.current = true;
+                    setIsBuffering(true);
+                }}
+                onSeeked={() => {
+                    if (seekTimeoutRef.current) clearTimeout(seekTimeoutRef.current);
+                    isSeekingRef.current = false;
+                    setIsBuffering(false);
+                    if (audioRef.current) {
+                        setProgress(audioRef.current.currentTime);
+                    }
+                }}
+                onLoadedMetadata={() => {
+                    const d = audioRef.current?.duration;
+                    if (d && isFinite(d) && d > 0) {
+                        setDuration(d);
+                    }
+                }}
                 onEnded={handleTrackEnd}
                 onWaiting={() => setIsBuffering(true)}
                 onCanPlay={() => setIsBuffering(false)}
@@ -657,10 +748,16 @@ const Player: React.FC<PlayerProps> = ({
 
             {/* QUEUE & SMART SUGGESTIONS MODAL */}
             {isQueueVisible && (
-                <div className="fixed inset-y-0 right-0 w-full sm:w-96 bg-[#121212]/95 backdrop-blur-xl border-l border-white/10 z-[120] p-6 flex flex-col shadow-2xl animate-in slide-in-from-right duration-300">
-                    <div className="flex items-center justify-between pb-4 border-b border-white/10">
+                <div className={`fixed inset-y-0 right-0 w-full sm:w-96 backdrop-blur-2xl z-[120] p-6 flex flex-col shadow-2xl animate-in slide-in-from-right duration-300 ${
+                    isOcean
+                        ? 'bg-[#071329]/95 border-l border-blue-500/20 text-white'
+                        : 'bg-[#140b07]/95 border-l border-[#f5d0b5]/15 text-white'
+                }`}>
+                    <div className={`flex items-center justify-between pb-4 border-b ${
+                        isOcean ? 'border-blue-500/15' : 'border-white/10'
+                    }`}>
                         <div className="flex items-center space-x-2">
-                            <ListMusic size={22} className="text-[#f5d0b5]" />
+                            <ListMusic size={22} className={isOcean ? 'text-blue-400' : 'text-[#f5d0b5]'} />
                             <h2 className="text-lg font-black text-white">Play Queue</h2>
                         </div>
                         <button onClick={onToggleQueue} className="p-2 text-stone-400 hover:text-white rounded-lg hover:bg-white/5">
@@ -673,7 +770,9 @@ const Player: React.FC<PlayerProps> = ({
                         {currentTrack && (
                             <div>
                                 <span className="text-xs font-bold text-stone-400 uppercase tracking-wider">Now Playing</span>
-                                <div className="flex items-center space-x-3 mt-2 p-2 bg-white/5 rounded-xl border border-white/5">
+                                <div className={`flex items-center space-x-3 mt-2 p-2 rounded-xl border ${
+                                    isOcean ? 'bg-blue-950/40 border-blue-500/25' : 'bg-white/5 border-white/5'
+                                }`}>
                                     <img src={currentTrack.album?.images?.[0]?.url || 'https://images.unsplash.com/photo-1518199266791-5375a83190b7?w=100'} className="w-12 h-12 rounded-lg object-cover" alt="" />
                                     <div className="flex-1 min-w-0">
                                         <h4 className={`text-sm font-bold truncate ${isOcean ? 'text-blue-400' : 'text-[#f5d0b5]'}`}>{currentTrack.name}</h4>
@@ -693,7 +792,9 @@ const Player: React.FC<PlayerProps> = ({
                                         <div
                                             key={`${t.id}_${idx}`}
                                             onClick={() => onTrackChange(t)}
-                                            className="flex items-center space-x-3 p-2 rounded-xl hover:bg-white/5 cursor-pointer group transition-colors"
+                                            className={`flex items-center space-x-3 p-2 rounded-xl cursor-pointer group transition-colors ${
+                                                isOcean ? 'hover:bg-blue-950/30' : 'hover:bg-white/5'
+                                            }`}
                                         >
                                             <img src={t.album?.images?.[0]?.url || 'https://images.unsplash.com/photo-1518199266791-5375a83190b7?w=100'} className="w-10 h-10 rounded-lg object-cover" alt="" />
                                             <div className="flex-1 min-w-0">
@@ -710,25 +811,29 @@ const Player: React.FC<PlayerProps> = ({
                         <div>
                             <div className="flex items-center justify-between">
                                 <div className="flex items-center space-x-2">
-                                    <Sparkles size={16} className="text-purple-400" />
-                                    <span className="text-xs font-bold text-purple-400 uppercase tracking-wider">Spotify Smart Suggestions</span>
+                                    <Sparkles size={16} className={isOcean ? 'text-cyan-400' : 'text-[#f5d0b5]'} />
+                                    <span className={`text-xs font-bold uppercase tracking-wider ${isOcean ? 'text-cyan-400' : 'text-[#f5d0b5]'}`}>
+                                        Spotify Smart Suggestions
+                                    </span>
                                 </div>
                                 <span className="text-[10px] text-slate-500">Mood Autoplay</span>
                             </div>
                             <p className="text-[11px] text-slate-400 mt-1 mb-3">
-                                Matching the mood and energy of <span className="text-slate-300 font-semibold">{currentTrack.name}</span>
+                                Matching the mood and energy of <span className={`font-semibold ${isOcean ? 'text-cyan-300' : 'text-slate-300'}`}>{currentTrack.name}</span>
                             </p>
 
                             {isLoadingSuggestions ? (
                                 <div className="flex items-center justify-center py-6">
-                                    <Loader2 size={20} className="animate-spin text-purple-400" />
+                                    <Loader2 size={20} className={`animate-spin ${isOcean ? 'text-cyan-400' : 'text-[#f5d0b5]'}`} />
                                 </div>
                             ) : (
                                 <div className="space-y-1">
                                     {smartSuggestions.map((t) => (
                                         <div
                                             key={t.id}
-                                            className="flex items-center justify-between p-2 rounded-xl hover:bg-white/5 group transition-colors"
+                                            className={`flex items-center justify-between p-2 rounded-xl group transition-colors ${
+                                                isOcean ? 'hover:bg-blue-950/30' : 'hover:bg-white/5'
+                                            }`}
                                         >
                                             <div
                                                 onClick={() => onTrackChange(t)}
@@ -736,7 +841,7 @@ const Player: React.FC<PlayerProps> = ({
                                             >
                                                 <img src={t.album.images[0]?.url} className="w-10 h-10 rounded-lg object-cover" alt="" />
                                                 <div className="flex-1 min-w-0">
-                                                    <h4 className="text-xs font-bold text-white group-hover:text-purple-400 truncate">{t.name}</h4>
+                                                    <h4 className={`text-xs font-bold text-white truncate ${isOcean ? 'group-hover:text-cyan-400' : 'group-hover:text-[#f5d0b5]'}`}>{t.name}</h4>
                                                     <p className="text-[10px] text-slate-400 truncate">{t.artists[0]?.name}</p>
                                                 </div>
                                             </div>
@@ -746,7 +851,9 @@ const Player: React.FC<PlayerProps> = ({
                                                         onQueueChange([...queue, t]);
                                                     }
                                                 }}
-                                                className="p-1.5 text-slate-500 hover:text-white rounded-lg hover:bg-white/10"
+                                                className={`p-1.5 text-slate-500 hover:text-white rounded-lg ${
+                                                    isOcean ? 'hover:bg-blue-900/40 hover:text-cyan-400' : 'hover:bg-white/10 hover:text-[#f5d0b5]'
+                                                }`}
                                                 title="Add to queue"
                                             >
                                                 <Plus size={16} />
@@ -760,240 +867,644 @@ const Player: React.FC<PlayerProps> = ({
                 </div>
             )}
 
-            {/* EXPANDED MOBILE PLAYER - Only rendered when track is active */}
-            {isExpanded && currentTrack ? (
-                <div className={`md:hidden fixed inset-0 z-[100] flex flex-col h-[100dvh] px-6 pt-safe pb-8 animate-in slide-in-from-bottom duration-300 ${isOcean ? 'bg-gradient-to-b from-[#0a152d] via-[#060c1c] to-[#03060f]' : 'bg-gradient-to-b from-[#181926] via-[#0d0e14] to-[#07080b]'}`}>
-                    <header className="flex items-center justify-between h-16 mb-4">
-                        <button onClick={onToggleExpand}><ChevronDown size={30} className="text-white" /></button>
-                        <div className="flex flex-col items-center">
-                            <span className="text-[10px] font-bold text-stone-400 uppercase tracking-widest flex items-center gap-1.5">
-                                <span className={`w-1.5 h-1.5 rounded-full animate-pulse ${isOcean ? 'bg-blue-400' : 'bg-[#f5d0b5]'}`} /> Slothify Music
-                            </span>
-                            <span className="text-xs font-semibold text-slate-300 truncate max-w-[200px] mt-0.5">{currentTrack.album?.name || ''}</span>
-                        </div>
-                        <MoreVertical size={22} className="text-white" />
-                    </header>
+            {/* UNIFIED SINGLE PLAYER: SHARED ELEMENT TRANSITIONS (EXPANDED vs MINI BAR) */}
+            <AnimatePresence mode="popLayout">
+                {isExpanded && currentTrack ? (
+                    <motion.div
+                        key="full-player"
+                        layoutId="player-surface"
+                        transition={springTransition}
+                        drag="y"
+                        dragConstraints={{ top: 0, bottom: 0 }}
+                        dragElastic={{ top: 0, bottom: 0.55 }}
+                        onDragEnd={(_, info) => {
+                            if (info.offset.y > 75 || info.velocity.y > 350) {
+                                onToggleExpand();
+                            }
+                        }}
+                        className={`fixed inset-0 z-[150] w-screen h-[100dvh] flex flex-col justify-between px-5 pt-safe pb-4 select-none overflow-hidden text-white ${
+                            isOcean ? 'bg-[#020612]' : 'bg-[#0d0705]'
+                        }`}
+                    >
+                        {/* Thematic Ambient Scenery Backdrop */}
+                        <motion.div
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            exit={{ opacity: 0, transition: { duration: 0.12 } }}
+                            className="absolute inset-0 pointer-events-none overflow-hidden -z-10"
+                        >
+                            <div
+                                className={`absolute inset-0 bg-cover bg-center transition-all duration-700 scale-105 ${
+                                    isOcean ? 'opacity-70' : 'opacity-85'
+                                }`}
+                                style={{
+                                    backgroundImage: isOcean
+                                        ? "url('/Ocean.jpg')"
+                                        : "url('/Autumn.jpg')",
+                                    imageRendering: '-webkit-optimize-contrast' as any,
+                                    filter: isOcean ? 'contrast(1.05) saturate(1.1)' : 'contrast(1.1) saturate(1.15) brightness(0.95)'
+                                }}
+                            />
+                            <div
+                                className={`absolute inset-0 ${
+                                    isOcean
+                                        ? 'bg-gradient-to-b from-[#020914]/70 via-[#030e1c]/80 to-[#020812]/92'
+                                        : 'bg-gradient-to-b from-[#140803]/45 via-[#1a0a04]/55 to-[#0d0502]/70'
+                                }`}
+                            />
+                            <div
+                                className={`absolute top-1/4 left-1/4 w-[50vw] h-[50vw] rounded-full blur-[140px] opacity-20 pointer-events-none transition-all duration-700 ${
+                                    isOcean ? 'bg-blue-600' : 'bg-[#c87d46]'
+                                }`}
+                            />
+                            <div
+                                className={`absolute bottom-1/4 right-1/4 w-[40vw] h-[40vw] rounded-full blur-[160px] opacity-15 pointer-events-none transition-all duration-700 ${
+                                    isOcean ? 'bg-cyan-600' : 'bg-[#d97736]'
+                                }`}
+                            />
+                        </motion.div>
 
-                    <div className="flex-1 flex items-center justify-center mb-8 w-full">
-                        <div className="w-full aspect-square relative shadow-[0_20px_50px_rgba(0,0,0,0.7)]">
-                            <img src={currentTrack.album?.images?.[0]?.url || 'https://images.unsplash.com/photo-1518199266791-5375a83190b7?w=300'} alt="" className="w-full h-full object-cover rounded-2xl" />
-                            {isBuffering && (
-                                <div className="absolute inset-0 flex items-center justify-center bg-black/40 rounded-2xl backdrop-blur-sm">
-                                    <Loader2 className="w-12 h-12 text-white animate-spin" />
+                        {/* Top Bar with Grab Handle / Minimize, Style Switcher, and Queue */}
+                        <motion.div
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            exit={{ opacity: 0, transition: { duration: 0.12 } }}
+                            className="w-full relative z-20 flex flex-col"
+                        >
+                            {/* Mobile Swipe-down Grab Indicator */}
+                            <div
+                                onClick={onToggleExpand}
+                                className="md:hidden w-full pt-1.5 pb-1 flex justify-center cursor-grab active:cursor-grabbing touch-none select-none flex-shrink-0"
+                            >
+                                <div className="w-10 h-1 rounded-full bg-white/30 hover:bg-white/50 transition-colors" />
+                            </div>
+
+                            <header className="flex items-center justify-between h-11 mb-1 px-0.5 select-none flex-shrink-0">
+                                <button
+                                    onClick={onToggleExpand}
+                                    className="p-2 -ml-2 text-white/80 hover:text-white active:scale-90 transition-transform"
+                                    title="Minimize player"
+                                >
+                                    <ChevronDown size={26} className="md:hidden" />
+                                    <Minimize2 size={20} className="hidden md:inline" />
+                                </button>
+
+                                {/* Style Switcher: Normal Album Art vs Vintage Vinyl CD */}
+                                <div className="flex items-center bg-white/[0.08] p-0.5 rounded-full border border-white/10 shadow-inner">
+                                    <button
+                                        onClick={() => {
+                                            setMobilePlayerMode('normal');
+                                            try { localStorage.setItem('slothify_mobile_player_style', 'normal'); } catch {}
+                                        }}
+                                        className={`flex items-center space-x-1 px-3 py-1 rounded-full text-xs font-semibold font-display transition-all ${
+                                            mobilePlayerMode === 'normal'
+                                                ? isOcean
+                                                    ? 'bg-blue-600 text-white shadow-sm'
+                                                    : 'bg-[#f5d0b5] text-black shadow-sm'
+                                                : 'text-stone-400 hover:text-white'
+                                        }`}
+                                    >
+                                        <Music2 size={12} />
+                                        <span>Normal</span>
+                                    </button>
+                                    <button
+                                        onClick={() => {
+                                            setMobilePlayerMode('vintage');
+                                            try { localStorage.setItem('slothify_mobile_player_style', 'vintage'); } catch {}
+                                        }}
+                                        className={`flex items-center space-x-1 px-3 py-1 rounded-full text-xs font-semibold font-display transition-all ${
+                                            mobilePlayerMode === 'vintage'
+                                                ? isOcean
+                                                    ? 'bg-blue-600 text-white shadow-sm'
+                                                    : 'bg-[#f5d0b5] text-black shadow-sm'
+                                                : 'text-stone-400 hover:text-white'
+                                        }`}
+                                    >
+                                        <Disc size={12} className={isPlaying && mobilePlayerMode === 'vintage' ? 'animate-spin' : ''} />
+                                        <span>Vintage</span>
+                                    </button>
+                                </div>
+
+                                <button
+                                    onClick={onToggleQueue}
+                                    className={`p-2 -mr-2 rounded-full transition-all active:scale-90 ${
+                                        isQueueVisible
+                                            ? isOcean ? 'text-blue-400 bg-white/10' : 'text-[#f5d0b5] bg-white/10'
+                                            : 'text-white/80 hover:text-white'
+                                    }`}
+                                    title="Play Queue"
+                                >
+                                    <ListMusic size={22} />
+                                </button>
+                            </header>
+                        </motion.div>
+
+                        {/* Middle: Shared Artwork (morphs to/from mini bar) */}
+                        <div className="flex-1 flex flex-col items-center justify-center my-auto w-full min-h-0 py-2 select-none relative z-10">
+                            {mobilePlayerMode === 'normal' ? (
+                                <motion.div
+                                    layoutId="player-shared-artwork"
+                                    transition={springTransition}
+                                    className="relative w-full max-w-[min(34vh,240px)] md:max-w-[min(46vh,360px)] aspect-square flex items-center justify-center select-none flex-shrink-0 shadow-[0_20px_50px_rgba(0,0,0,0.85)] rounded-2xl md:rounded-3xl overflow-hidden border border-white/10"
+                                >
+                                    <img
+                                        src={currentTrack.album?.images?.[0]?.url || 'https://images.unsplash.com/photo-1518199266791-5375a83190b7?w=500'}
+                                        alt=""
+                                        className="w-full h-full object-cover rounded-2xl md:rounded-3xl"
+                                    />
+                                    {isBuffering && (
+                                        <div className="absolute inset-0 flex items-center justify-center bg-black/40 rounded-2xl md:rounded-3xl backdrop-blur-sm">
+                                            <Loader2 className="w-12 h-12 text-white animate-spin" />
+                                        </div>
+                                    )}
+                                </motion.div>
+                            ) : (
+                                <div className="relative w-full max-w-[min(34vh,240px)] md:max-w-[min(46vh,360px)] aspect-square flex items-center justify-center select-none flex-shrink-0">
+                                    {/* Outer vinyl platter smoothly dissolves on exit */}
+                                    <motion.div
+                                        initial={{ opacity: 0, scale: 0.92 }}
+                                        animate={{ opacity: 1, scale: 1 }}
+                                        exit={{ opacity: 0, scale: 0.85, transition: { duration: 0.12 } }}
+                                        onClick={togglePlay}
+                                        className={`w-full h-full rounded-full aspect-square bg-[#0a0a0d] border border-white/10 shadow-[0_16px_40px_rgba(0,0,0,0.95)] relative overflow-hidden flex items-center justify-center cursor-pointer select-none ${
+                                            isPlaying ? 'spin-vinyl' : 'spin-vinyl-paused'
+                                        }`}
+                                        style={{
+                                            ['--spin-duration' as any]: '10s',
+                                            willChange: 'transform'
+                                        }}
+                                        title={isPlaying ? "Click to Pause" : "Click to Play"}
+                                    >
+                                        <div className="absolute inset-3 rounded-full border border-white/[0.04] pointer-events-none" />
+                                        <div className="absolute inset-6 rounded-full border border-white/[0.03] pointer-events-none" />
+                                        <div className="absolute inset-9 rounded-full border border-white/[0.04] pointer-events-none" />
+                                        <div className="absolute inset-12 rounded-full border border-white/[0.03] pointer-events-none" />
+                                        <div className="absolute inset-15 rounded-full border border-white/[0.04] pointer-events-none" />
+                                        <div className="absolute inset-0 bg-[conic-gradient(from_0deg,transparent_0deg,rgba(255,255,255,0.06)_45deg,transparent_90deg,rgba(255,255,255,0.06)_225deg,transparent_270deg)] pointer-events-none" />
+
+                                        {/* Center label image seamlessly linked to shared artwork */}
+                                        <motion.div
+                                            layoutId="player-shared-artwork"
+                                            transition={springTransition}
+                                            className="relative w-[38%] h-[38%] rounded-full overflow-hidden border-2 border-black/80 shadow-2xl flex items-center justify-center"
+                                        >
+                                            <img
+                                                src={currentTrack.album?.images?.[0]?.url || 'https://images.unsplash.com/photo-1518199266791-5375a83190b7?w=300'}
+                                                alt={currentTrack.name}
+                                                className="w-full h-full object-cover rounded-full pointer-events-none"
+                                            />
+                                            <div className="absolute inset-0 bg-black/20 pointer-events-none" />
+                                            <div className="absolute w-4 h-4 rounded-full bg-[#121215] border border-white/20 shadow-md flex items-center justify-center">
+                                                <div className="w-1.5 h-1.5 rounded-full bg-black" />
+                                            </div>
+                                        </motion.div>
+                                    </motion.div>
                                 </div>
                             )}
-                        </div>
-                    </div>
 
-                    <div className="flex justify-between items-end mb-6">
-                        <div className="flex flex-col min-w-0 pr-4">
-                            <h2 className="text-2xl font-bold text-white truncate leading-tight mb-1">{currentTrack.name}</h2>
-                            <p className="text-base text-slate-400 truncate">{currentTrack.artists[0]?.name}</p>
+                            {/* Minimalist Live Waveform */}
+                            {mobilePlayerMode === 'vintage' && (
+                                <motion.div
+                                    initial={{ opacity: 0 }}
+                                    animate={{ opacity: 1 }}
+                                    exit={{ opacity: 0, transition: { duration: 0.12 } }}
+                                    className="mt-2.5 flex items-center justify-center w-full max-w-[min(34vh,240px)] md:max-w-[min(46vh,360px)]"
+                                >
+                                    <AudioWaveform isPlaying={isPlaying} barCount={24} />
+                                </motion.div>
+                            )}
                         </div>
-                        <button onClick={() => onToggleLike(currentTrack.id, currentTrack)} className="mb-1 p-1">
-                            <Heart size={26} className={isLiked ? (isOcean ? "fill-blue-400 text-blue-400" : "fill-[#f5d0b5] text-[#f5d0b5]") : "text-white"} />
-                        </button>
-                    </div>
 
-                    <div className="space-y-2 mb-6">
-                        <div className="relative group h-1 w-full bg-white/20 rounded-full">
-                            <div className={`absolute h-full rounded-full ${isOcean ? 'bg-blue-600' : 'bg-[#f5d0b5]'}`} style={{ width: `${(progress / (currentDuration || 1)) * 100}%` }} />
-                            <input
-                                type="range" min="0" max={currentDuration || 0} value={progress}
-                                onChange={(e) => setProgress(Number(e.target.value))}
-                                onMouseDown={() => isSeekingRef.current = true}
-                                onMouseUp={(e) => handleSeekEnd(Number(e.currentTarget.value))}
-                                touch-action="none"
-                                className="absolute w-full h-full opacity-0 cursor-pointer z-10"
-                            />
-                        </div>
-                        <div className="flex justify-between text-xs text-stone-400 font-medium font-mono">
-                            <span>{formatTime(progress)}</span><span>{formatTime(currentDuration)}</span>
-                        </div>
-                    </div>
-
-                    <div className="flex justify-between items-center mb-8 px-2">
-                        <button onClick={onToggleShuffle}><Shuffle size={22} className={isShuffle ? (isOcean ? "text-blue-400" : "text-[#f5d0b5]") : "text-stone-400"} /></button>
-                        <button onClick={handleSkipBack}><SkipBack size={32} className="text-white fill-white" /></button>
-                        <button onClick={togglePlay} className={`w-16 h-16 rounded-full flex items-center justify-center hover:scale-105 active:scale-95 transition-all shadow-xl ${isOcean ? 'bg-blue-600 text-white shadow-blue-500/40' : 'bg-[#f5d0b5] text-black'}`}>
-                            {isPlaying ? <Pause size={30} fill="currentColor" /> : <Play size={30} fill="currentColor" className="ml-1" />}
-                        </button>
-                        <button onClick={handleSkipForward}><SkipForward size={32} className="text-white fill-white" /></button>
-                        <button onClick={() => setRepeatMode(prev => prev === 'off' ? 'all' : prev === 'all' ? 'one' : 'off')} className={repeatMode !== 'off' ? (isOcean ? "text-blue-400" : "text-[#f5d0b5]") : "text-stone-400"}>
-                            {repeatMode === 'one' ? <Repeat1 size={22} /> : <Repeat size={22} />}
-                        </button>
-                    </div>
-                </div>
-            ) : currentTrack ? (
-                /* DESKTOP PLAYER + MOBILE MINI - Real-time active track */
-                <>
-                    <div className={`md:hidden fixed bottom-[4.5rem] left-3 right-3 h-14 backdrop-blur-xl border border-white/10 rounded-2xl flex items-center px-2.5 justify-between shadow-2xl z-[80] bg-black/35`} onClick={() => onToggleExpand()}>
-                        <div className="flex items-center space-x-3 flex-1 min-w-0">
-                            <img src={currentTrack.album?.images?.[0]?.url || 'https://images.unsplash.com/photo-1518199266791-5375a83190b7?w=100'} className="w-10 h-10 rounded-xl object-cover" alt="" />
-                            <div className="flex flex-col min-w-0 ml-1">
-                                <span className="text-sm font-bold text-white truncate leading-tight">{currentTrack.name}</span>
-                                <span className="text-[11px] text-slate-400 truncate leading-tight">{currentTrack.artists[0]?.name}</span>
+                        {/* Bottom Console: Song Info + Scrub Bar + Controls */}
+                        <div className="w-full max-w-2xl mx-auto flex-shrink-0 pt-1 space-y-2.5 relative z-20">
+                            {/* Song Details */}
+                            <div>
+                                <motion.span
+                                    initial={{ opacity: 0 }}
+                                    animate={{ opacity: 1 }}
+                                    exit={{ opacity: 0, transition: { duration: 0.1 } }}
+                                    className={`text-[11px] font-bold tracking-widest uppercase block ${
+                                        isOcean ? 'text-blue-500' : 'text-[#f5d0b5]'
+                                    }`}
+                                >
+                                    Now Playing
+                                </motion.span>
+                                <motion.div
+                                    layoutId="player-shared-title"
+                                    transition={springTransition}
+                                    className="space-y-0.5"
+                                >
+                                    <h2 className="text-xl sm:text-2xl md:text-3xl font-bold text-white tracking-tight truncate leading-tight">
+                                        {currentTrack.name}
+                                    </h2>
+                                    <p className="text-sm md:text-base text-slate-300 truncate">
+                                        {currentTrack.artists[0]?.name}
+                                    </p>
+                                    {currentTrack.album?.name && (
+                                        <p className="text-xs text-slate-500 font-mono truncate">
+                                            {currentTrack.album.name}
+                                        </p>
+                                    )}
+                                </motion.div>
                             </div>
-                        </div>
-                        <div className="flex items-center space-x-3 mr-1">
-                            <Heart size={22} className={isLiked ? (isOcean ? "fill-blue-400 text-blue-400" : "fill-[#f5d0b5] text-[#f5d0b5]") : "text-slate-300"} onClick={(e) => { e.stopPropagation(); onToggleLike(currentTrack.id, currentTrack); }} />
-                            <button onClick={(e) => { togglePlay(e); }} className={`w-9 h-9 rounded-full flex items-center justify-center ${isOcean ? 'bg-blue-600 text-white' : 'bg-[#f5d0b5] text-black'}`}>
-                                {isPlaying ? <Pause size={20} fill="currentColor" /> : <Play size={20} fill="currentColor" className="ml-0.5" />}
-                            </button>
-                        </div>
-                        <div className="absolute bottom-0 left-3 right-3 h-[2px] bg-white/10 rounded-full overflow-hidden">
-                            <div className={`h-full ${isOcean ? 'bg-blue-400' : 'bg-[#f5d0b5]'}`} style={{ width: `${(progress / (currentDuration || 1)) * 100}%` }}></div>
-                        </div>
-                    </div>
 
-                    <div className={`hidden md:flex fixed md:bottom-3.5 md:left-[256px] md:right-6 h-[72px] backdrop-blur-2xl rounded-2xl z-[70] items-center justify-between px-5 shadow-2xl select-none transition-all duration-300 bg-black/35 hover:bg-black/45 border border-white/10 shadow-black/80`}>
-                        {/* Left: Track Info - Click to Open Vintage Turntable */}
-                        <div
-                            onClick={() => setIsTurntableOpen && setIsTurntableOpen(true)}
-                            className="flex items-center space-x-3.5 w-[28%] min-w-0 cursor-pointer group"
-                            title="Open Vintage Turntable Player"
-                        >
-                            <div className="relative flex-shrink-0">
-                                <img
-                                    src={currentTrack.album?.images?.[0]?.url || 'https://images.unsplash.com/photo-1518199266791-5375a83190b7?w=100'}
-                                    className={`w-11 h-11 rounded-xl object-cover shadow-md transition-all ${isOcean ? 'group-hover:ring-2 group-hover:ring-blue-500/50' : 'group-hover:ring-2 group-hover:ring-[#f5d0b5]/50'}`}
-                                    alt=""
-                                />
-                                <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity rounded-xl flex items-center justify-center">
-                                    <Disc size={16} className={`${isOcean ? 'text-blue-400' : 'text-[#f5d0b5]'} ${isPlaying ? 'animate-spin' : ''}`} />
-                                </div>
-                            </div>
-                            <div className="flex flex-col min-w-0">
-                                <span className={`text-xs font-semibold truncate text-white transition-colors leading-tight ${isOcean ? 'group-hover:text-blue-400' : 'group-hover:text-[#f5d0b5]'}`}>
-                                    {currentTrack.name}
-                                </span>
-                                <span className="text-[11px] text-[#8a8489] hover:text-white cursor-pointer truncate mt-0.5 leading-tight">
-                                    {currentTrack.artists[0]?.name}
-                                </span>
-                            </div>
-                            <button
-                                onClick={(e) => { e.stopPropagation(); onToggleLike(currentTrack.id, currentTrack); }}
-                                className={`p-1.5 transition-colors ml-1 ${isOcean ? 'text-[#8a8489] hover:text-blue-400' : 'text-[#8a8489] hover:text-[#f5d0b5]'}`}
-                                title="Like"
-                            >
-                                <Heart size={16} className={isLiked ? (isOcean ? "fill-blue-400 text-blue-400" : "fill-[#f5d0b5] text-[#f5d0b5]") : ""} />
-                            </button>
-                        </div>
-
-                        {/* Center: Playback Controls */}
-                        <div className="flex items-center space-x-5 justify-center">
-                            <button
-                                onClick={onToggleShuffle}
-                                title="Shuffle"
-                                className={`transition-colors ${isShuffle ? (isOcean ? 'text-blue-400' : 'text-[#f5d0b5]') : 'text-[#8a8489] hover:text-white'}`}
-                            >
-                                <Shuffle size={16} />
-                            </button>
-                            <button
-                                onClick={handleSkipBack}
-                                title="Previous"
-                                className="text-[#8a8489] hover:text-white transition-colors"
-                            >
-                                <SkipBack size={18} fill="currentColor" />
-                            </button>
-                            <button
-                                onClick={togglePlay}
-                                title={isPlaying ? "Pause" : "Play"}
-                                className={`w-9 h-9 rounded-full flex items-center justify-center hover:scale-105 active:scale-95 transition-all shadow-md ${isOcean ? 'bg-blue-600 hover:bg-blue-500 text-white shadow-blue-600/30' : 'bg-[#f5d0b5] hover:bg-[#ebd0bc] text-black shadow-[#f5d0b5]/15'}`}
-                            >
-                                {isBuffering ? (
-                                    <Loader2 size={16} className="animate-spin" />
-                                ) : isPlaying ? (
-                                    <Pause size={16} fill="currentColor" />
-                                ) : (
-                                    <Play size={16} fill="currentColor" className="ml-0.5" />
-                                )}
-                            </button>
-                            <button
-                                onClick={handleSkipForward}
-                                title="Next"
-                                className="text-[#8a8489] hover:text-white transition-colors"
-                            >
-                                <SkipForward size={18} fill="currentColor" />
-                            </button>
-                            <button
-                                onClick={() => setRepeatMode(prev => prev === 'off' ? 'all' : prev === 'all' ? 'one' : 'off')}
-                                title="Repeat"
-                                className={`transition-colors ${repeatMode !== 'off' ? (isOcean ? 'text-blue-400' : 'text-[#f5d0b5]') : 'text-[#8a8489] hover:text-white'}`}
-                            >
-                                {repeatMode === 'one' ? <Repeat1 size={16} /> : <Repeat size={16} />}
-                            </button>
-                        </div>
-
-                        {/* Right: Progress Slider & Volume */}
-                        <div className="flex items-center justify-end space-x-3 w-[38%]">
-                            <div className="flex items-center space-x-2 text-[11px] text-[#8a8489] font-mono">
-                                <span>{formatTime(progress)}</span>
-                                <div className="relative h-1 w-32 md:w-44 bg-[#232029] rounded-full group cursor-pointer">
+                            {/* Scrub Bar */}
+                            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0, transition: { duration: 0.1 } }} className="space-y-1 pt-0.5">
+                                <div className="relative group h-1.5 w-full bg-white/10 rounded-full cursor-pointer">
                                     <div
-                                        className={`absolute h-full rounded-full ${isOcean ? 'bg-blue-600' : 'bg-[#f5d0b5]'}`}
+                                        className={`absolute h-full rounded-full transition-all ${
+                                            isOcean ? 'bg-blue-600' : 'bg-[#f5d0b5]'
+                                        }`}
                                         style={{ width: `${(progress / (currentDuration || 1)) * 100}%` }}
                                     />
                                     <input
                                         type="range"
                                         min="0"
                                         max={currentDuration || 0}
+                                        step="any"
                                         value={progress}
-                                        onChange={(e) => handleSeekEnd(Number(e.target.value))}
+                                        onPointerDown={handleSeekStart}
+                                        onChange={(e) => handleSeekChange(Number(e.target.value))}
+                                        onPointerUp={(e) => handleSeekCommit(Number(e.currentTarget.value))}
+                                        onTouchStart={handleSeekStart}
+                                        onTouchEnd={(e) => handleSeekCommit(Number(e.currentTarget.value))}
                                         className="absolute w-full h-full opacity-0 cursor-pointer z-10"
                                     />
                                 </div>
-                                <span>{formatTime(currentDuration)}</span>
+                                <div className="flex justify-between text-xs text-slate-500 font-mono">
+                                    <span>{formatTime(progress)}</span>
+                                    <span>{formatTime(currentDuration)}</span>
+                                </div>
+                            </motion.div>
+
+                            {/* Playback Controls */}
+                            <div className="flex justify-between items-center pt-1.5 px-1 sm:px-6">
+                                <motion.button
+                                    initial={{ opacity: 0 }}
+                                    animate={{ opacity: 1 }}
+                                    exit={{ opacity: 0, transition: { duration: 0.1 } }}
+                                    onClick={onToggleShuffle}
+                                    className="p-2 text-slate-400 hover:text-white active:scale-90 transition-transform"
+                                    title="Shuffle"
+                                >
+                                    <Shuffle size={20} className={isShuffle ? (isOcean ? "text-blue-400" : "text-[#f5d0b5]") : "text-slate-400"} />
+                                </motion.button>
+                                <motion.button
+                                    initial={{ opacity: 0 }}
+                                    animate={{ opacity: 1 }}
+                                    exit={{ opacity: 0, transition: { duration: 0.1 } }}
+                                    onClick={handleSkipBack}
+                                    className="p-2 text-slate-300 hover:text-white active:scale-90 transition-transform"
+                                    title="Previous"
+                                >
+                                    <SkipBack size={26} fill="currentColor" />
+                                </motion.button>
+
+                                {/* Master Play Button */}
+                                <motion.button
+                                    layoutId="player-shared-play"
+                                    transition={springTransition}
+                                    onClick={togglePlay}
+                                    title={isPlaying ? "Pause" : "Play"}
+                                    className={`w-14 h-14 sm:w-16 sm:h-16 flex-shrink-0 rounded-full flex items-center justify-center hover:scale-105 active:scale-95 transition-all ${
+                                        isOcean
+                                            ? 'bg-blue-600 hover:bg-blue-500 text-white shadow-[0_0_28px_rgba(37,99,235,0.65)] ring-2 ring-blue-500/20'
+                                            : 'bg-[#f5d0b5] hover:bg-white text-black shadow-[0_0_24px_rgba(245,208,181,0.35)]'
+                                    }`}
+                                >
+                                    {isPlaying ? (
+                                        <Pause size={24} className="sm:w-7 sm:h-7" fill="currentColor" />
+                                    ) : (
+                                        <Play size={24} className="sm:w-7 sm:h-7 ml-0.5" fill="currentColor" />
+                                    )}
+                                </motion.button>
+
+                                <motion.button
+                                    initial={{ opacity: 0 }}
+                                    animate={{ opacity: 1 }}
+                                    exit={{ opacity: 0, transition: { duration: 0.1 } }}
+                                    onClick={handleSkipForward}
+                                    className="p-2 text-slate-300 hover:text-white active:scale-90 transition-transform"
+                                    title="Next"
+                                >
+                                    <SkipForward size={26} fill="currentColor" />
+                                </motion.button>
+                                <motion.button
+                                    initial={{ opacity: 0 }}
+                                    animate={{ opacity: 1 }}
+                                    exit={{ opacity: 0, transition: { duration: 0.1 } }}
+                                    onClick={() => setRepeatMode(prev => prev === 'off' ? 'all' : prev === 'all' ? 'one' : 'off')}
+                                    className="p-2 text-slate-400 hover:text-white active:scale-90 transition-transform"
+                                    title="Repeat"
+                                >
+                                    {repeatMode === 'one' ? (
+                                        <Repeat1 size={20} className={isOcean ? "text-blue-400" : "text-[#f5d0b5]"} />
+                                    ) : (
+                                        <Repeat size={20} className={repeatMode !== 'off' ? (isOcean ? "text-blue-400" : "text-[#f5d0b5]") : "text-slate-400"} />
+                                    )}
+                                </motion.button>
                             </div>
 
-                            <div className="flex items-center space-x-2 pl-2">
-                                <button
-                                    onClick={() => setIsTurntableOpen && setIsTurntableOpen(true)}
-                                    title="Open Vintage Vinyl Turntable"
-                                    className={`p-1.5 rounded-lg transition-colors ${isOcean ? 'text-[#8a8489] hover:text-blue-400 hover:bg-blue-500/10' : 'text-[#8a8489] hover:text-[#f5d0b5] hover:bg-white/5'}`}
+                            {/* Sub-controls: Like & Volume */}
+                            <div className="flex items-center justify-between pt-1.5 border-t border-white/[0.06] px-1 sm:px-6">
+                                <motion.button
+                                    layoutId="player-shared-like"
+                                    transition={springTransition}
+                                    onClick={() => onToggleLike(currentTrack.id, currentTrack)}
+                                    className={`flex items-center space-x-1.5 text-xs font-medium transition-colors active:scale-90 ${
+                                        isLiked
+                                            ? isOcean ? 'text-blue-400' : 'text-[#f5d0b5]'
+                                            : 'text-slate-400 hover:text-white'
+                                    }`}
                                 >
-                                    <Disc size={17} className={isPlaying ? "animate-spin" : ""} />
+                                    <Heart
+                                        size={18}
+                                        className={
+                                            isLiked
+                                                ? isOcean ? 'fill-blue-500 text-blue-500' : 'fill-[#f5d0b5] text-[#f5d0b5]'
+                                                : ''
+                                        }
+                                    />
+                                    <span>{isLiked ? 'Saved' : 'Save'}</span>
+                                </motion.button>
+
+                                <motion.div
+                                    initial={{ opacity: 0 }}
+                                    animate={{ opacity: 1 }}
+                                    exit={{ opacity: 0, transition: { duration: 0.1 } }}
+                                    className="flex items-center space-x-2 w-36 sm:w-44"
+                                >
+                                    <button
+                                        onClick={() => setIsMuted(!isMuted)}
+                                        className="text-slate-400 hover:text-white transition-colors"
+                                    >
+                                        {isMuted || volume === 0 ? <VolumeX size={16} /> : <Volume2 size={16} />}
+                                    </button>
+                                    <div className="relative h-1 flex-1 bg-white/10 rounded-full">
+                                        <div
+                                            className={`absolute h-full rounded-full ${
+                                                isOcean ? 'bg-blue-600' : 'bg-[#f5d0b5]'
+                                            }`}
+                                            style={{ width: `${(isMuted ? 0 : volume) * 100}%` }}
+                                        />
+                                        <input
+                                            type="range"
+                                            min="0"
+                                            max="1"
+                                            step="0.01"
+                                            value={isMuted ? 0 : volume}
+                                            onChange={(e) => {
+                                                setIsMuted(false);
+                                                setVolume(parseFloat(e.target.value));
+                                            }}
+                                            className="absolute w-full h-full opacity-0 cursor-pointer"
+                                        />
+                                    </div>
+                                </motion.div>
+                            </div>
+
+                            {/* Minimalist Footer */}
+                            <motion.footer
+                                initial={{ opacity: 0 }}
+                                animate={{ opacity: 1 }}
+                                exit={{ opacity: 0, transition: { duration: 0.1 } }}
+                                className="w-full pt-1 flex items-center justify-between text-[11px] text-slate-500 font-mono"
+                            >
+                                <span>Slothify Minimalist Audio</span>
+                                <span className="hidden md:inline">Esc to close</span>
+                            </motion.footer>
+                        </div>
+                    </motion.div>
+                ) : currentTrack ? (
+                    isMobile ? (
+                        /* MOBILE DOWNBAR: ONE UNIQUE INSTANCE OF SHARED LAYOUT IDs */
+                        <motion.div
+                            key="collapsed-player"
+                            layoutId="player-surface"
+                            transition={springTransition}
+                            drag="y"
+                            dragConstraints={{ top: 0, bottom: 0 }}
+                            dragElastic={{ top: 0.5, bottom: 0 }}
+                            onDragEnd={(_, info) => {
+                                if (info.offset.y < -25 || info.velocity.y < -250) {
+                                    onToggleExpand();
+                                }
+                            }}
+                            onClick={onToggleExpand}
+                            className={`pointer-events-auto fixed bottom-[4.5rem] left-3 right-3 h-14 backdrop-blur-xl border border-white/10 rounded-2xl flex items-center px-2.5 justify-between shadow-2xl cursor-pointer active:scale-[0.99] select-none z-[80] overflow-hidden ${
+                                isOcean ? 'bg-[#030914]/85' : 'bg-[#120703]/85'
+                            }`}
+                        >
+                            <div className="flex items-center space-x-3 flex-1 min-w-0">
+                                <motion.div
+                                    layoutId="player-shared-artwork"
+                                    transition={springTransition}
+                                    className="w-10 h-10 rounded-xl overflow-hidden flex-shrink-0"
+                                >
+                                    <img
+                                        src={currentTrack.album?.images?.[0]?.url || 'https://images.unsplash.com/photo-1518199266791-5375a83190b7?w=100'}
+                                        className="w-full h-full rounded-xl object-cover"
+                                        alt=""
+                                    />
+                                </motion.div>
+                                <motion.div
+                                    layoutId="player-shared-title"
+                                    transition={springTransition}
+                                    className="flex flex-col min-w-0 ml-1"
+                                >
+                                    <span className="text-sm font-bold text-white truncate leading-tight">{currentTrack.name}</span>
+                                    <span className="text-[11px] text-slate-400 truncate leading-tight">{currentTrack.artists[0]?.name}</span>
+                                </motion.div>
+                            </div>
+                            <div className="flex items-center space-x-3 mr-1">
+                                <motion.button
+                                    layoutId="player-shared-like"
+                                    transition={springTransition}
+                                    onClick={(e) => { e.stopPropagation(); onToggleLike(currentTrack.id, currentTrack); }}
+                                    className="p-1 text-slate-300 active:scale-90"
+                                >
+                                    <Heart size={22} className={isLiked ? (isOcean ? "fill-blue-400 text-blue-400" : "fill-[#f5d0b5] text-[#f5d0b5]") : "text-slate-300"} />
+                                </motion.button>
+                                <motion.button
+                                    layoutId="player-shared-play"
+                                    transition={springTransition}
+                                    onClick={(e) => { e.stopPropagation(); togglePlay(e); }}
+                                    className={`w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 active:scale-95 transition-transform ${
+                                        isOcean
+                                            ? 'bg-blue-600 text-white shadow-[0_0_14px_rgba(37,99,235,0.55)]'
+                                            : 'bg-[#f5d0b5] text-black shadow-sm'
+                                    }`}
+                                >
+                                    {isPlaying ? <Pause size={18} fill="currentColor" /> : <Play size={18} fill="currentColor" className="ml-0.5" />}
+                                </motion.button>
+                            </div>
+                            <div className="absolute bottom-0 left-3 right-3 h-[2px] bg-white/10 rounded-full overflow-hidden">
+                                <div className={`h-full ${isOcean ? 'bg-blue-400' : 'bg-[#f5d0b5]'}`} style={{ width: `${(progress / (currentDuration || 1)) * 100}%` }} />
+                            </div>
+                        </motion.div>
+                    ) : (
+                        /* DESKTOP MEDIA BAR: ONE UNIQUE INSTANCE OF SHARED LAYOUT IDs */
+                        <motion.div
+                            key="collapsed-player"
+                            layoutId="player-surface"
+                            transition={springTransition}
+                            className={`pointer-events-auto fixed bottom-3.5 left-[256px] right-6 h-[72px] backdrop-blur-2xl rounded-2xl flex items-center justify-between px-5 shadow-2xl select-none transition-all duration-300 border border-white/10 z-[80] shadow-black/80 ${
+                                isOcean ? 'bg-[#030914]/85 hover:bg-[#030914]/95' : 'bg-[#120703]/85 hover:bg-[#120703]/95'
+                            }`}
+                        >
+                            {/* Left: Track Info - Click to Open Full Screen Player */}
+                            <div
+                                onClick={onToggleExpand}
+                                className="flex items-center space-x-3.5 w-[28%] min-w-0 cursor-pointer group"
+                                title="Expand Full Screen Player"
+                            >
+                                <motion.div
+                                    layoutId="player-shared-artwork"
+                                    transition={springTransition}
+                                    className="relative flex-shrink-0 w-11 h-11 rounded-xl overflow-hidden"
+                                >
+                                    <img
+                                        src={currentTrack.album?.images?.[0]?.url || 'https://images.unsplash.com/photo-1518199266791-5375a83190b7?w=100'}
+                                        className={`w-full h-full rounded-xl object-cover shadow-md transition-all ${isOcean ? 'group-hover:ring-2 group-hover:ring-blue-500/50' : 'group-hover:ring-2 group-hover:ring-[#f5d0b5]/50'}`}
+                                        alt=""
+                                    />
+                                    <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity rounded-xl flex items-center justify-center">
+                                        <Disc size={16} className={`${isOcean ? 'text-blue-400' : 'text-[#f5d0b5]'} ${isPlaying ? 'animate-spin' : ''}`} />
+                                    </div>
+                                </motion.div>
+                                <motion.div
+                                    layoutId="player-shared-title"
+                                    transition={springTransition}
+                                    className="flex flex-col min-w-0"
+                                >
+                                    <span className={`text-xs font-semibold truncate text-white transition-colors leading-tight ${isOcean ? 'group-hover:text-blue-400' : 'group-hover:text-[#f5d0b5]'}`}>
+                                        {currentTrack.name}
+                                    </span>
+                                    <span className="text-[11px] text-[#8a8489] hover:text-white cursor-pointer truncate mt-0.5 leading-tight">
+                                        {currentTrack.artists[0]?.name}
+                                    </span>
+                                </motion.div>
+                                <motion.button
+                                    layoutId="player-shared-like"
+                                    transition={springTransition}
+                                    onClick={(e) => { e.stopPropagation(); onToggleLike(currentTrack.id, currentTrack); }}
+                                    className={`p-1.5 transition-colors ml-1 ${isOcean ? 'text-[#8a8489] hover:text-blue-400' : 'text-[#8a8489] hover:text-[#f5d0b5]'}`}
+                                    title="Like"
+                                >
+                                    <Heart size={16} className={isLiked ? (isOcean ? "fill-blue-400 text-blue-400" : "fill-[#f5d0b5] text-[#f5d0b5]") : ""} />
+                                </motion.button>
+                            </div>
+
+                            {/* Center: Playback Controls */}
+                            <div className="flex items-center space-x-5 justify-center">
+                                <button
+                                    onClick={onToggleShuffle}
+                                    title="Shuffle"
+                                    className={`transition-colors ${isShuffle ? (isOcean ? 'text-blue-400' : 'text-[#f5d0b5]') : 'text-[#8a8489] hover:text-white'}`}
+                                >
+                                    <Shuffle size={16} />
                                 </button>
                                 <button
-                                    onClick={() => setIsMuted(!isMuted)}
+                                    onClick={handleSkipBack}
+                                    title="Previous"
                                     className="text-[#8a8489] hover:text-white transition-colors"
                                 >
-                                    {isMuted || volume === 0 ? <VolumeX size={16} /> : volume < 0.5 ? <Volume1 size={16} /> : <Volume2 size={16} />}
+                                    <SkipBack size={18} fill="currentColor" />
+                                </button>
+                                <motion.button
+                                    layoutId="player-shared-play"
+                                    transition={springTransition}
+                                    onClick={togglePlay}
+                                    title={isPlaying ? "Pause" : "Play"}
+                                    className={`w-9 h-9 rounded-full flex items-center justify-center hover:scale-105 active:scale-95 transition-all shadow-md ${isOcean ? 'bg-blue-600 hover:bg-blue-500 text-white shadow-blue-600/30' : 'bg-[#f5d0b5] hover:bg-[#ebd0bc] text-black shadow-[#f5d0b5]/15'}`}
+                                >
+                                    {isBuffering ? (
+                                        <Loader2 size={16} className="animate-spin" />
+                                    ) : isPlaying ? (
+                                        <Pause size={16} fill="currentColor" />
+                                    ) : (
+                                        <Play size={16} fill="currentColor" className="ml-0.5" />
+                                    )}
+                                </motion.button>
+                                <button
+                                    onClick={handleSkipForward}
+                                    title="Next"
+                                    className="text-[#8a8489] hover:text-white transition-colors"
+                                >
+                                    <SkipForward size={18} fill="currentColor" />
                                 </button>
                                 <button
-                                    onClick={onToggleQueue}
-                                    title="Queue"
-                                    className={`transition-colors ${isQueueVisible ? (isOcean ? 'text-blue-400' : 'text-[#f5d0b5]') : 'text-[#8a8489] hover:text-white'}`}
+                                    onClick={() => setRepeatMode(prev => prev === 'off' ? 'all' : prev === 'all' ? 'one' : 'off')}
+                                    title="Repeat"
+                                    className={`transition-colors ${repeatMode !== 'off' ? (isOcean ? 'text-blue-400' : 'text-[#f5d0b5]') : 'text-[#8a8489] hover:text-white'}`}
                                 >
-                                    <ListMusic size={16} />
+                                    {repeatMode === 'one' ? <Repeat1 size={16} /> : <Repeat size={16} />}
                                 </button>
                             </div>
-                        </div>
-                    </div>
-                </>
-            ) : null}
 
-            {/* VINTAGE VINYL TURNTABLE PLAYER MODAL */}
-            <VintageTurntable
-                isOpen={Boolean(isTurntableOpen)}
-                onClose={() => setIsTurntableOpen && setIsTurntableOpen(false)}
-                currentTrack={currentTrack}
-                isPlaying={isPlaying}
-                onPlayPause={setIsPlaying}
-                onTrackChange={onTrackChange}
-                queue={queue}
-                progress={progress}
-                duration={currentDuration}
-                onSeek={handleSeekEnd}
-                isShuffle={isShuffle}
-                onToggleShuffle={onToggleShuffle}
-                repeatMode={repeatMode}
-                onToggleRepeat={() => setRepeatMode(prev => prev === 'off' ? 'all' : prev === 'all' ? 'one' : 'off')}
-                isLiked={Boolean(isLiked)}
-                onToggleLike={() => currentTrack && onToggleLike(currentTrack.id, currentTrack)}
-                volume={volume}
-                onVolumeChange={setVolume}
-            />
+                            {/* Right: Progress Slider & Volume */}
+                            <div className="flex items-center justify-end space-x-3 w-[38%]">
+                                <div className="flex items-center space-x-2 text-[11px] text-[#8a8489] font-mono">
+                                    <span>{formatTime(progress)}</span>
+                                    <div className="relative h-1 w-32 md:w-44 bg-[#232029] rounded-full group cursor-pointer">
+                                        <div
+                                            className={`absolute h-full rounded-full ${isOcean ? 'bg-blue-600' : 'bg-[#f5d0b5]'}`}
+                                            style={{ width: `${(progress / (currentDuration || 1)) * 100}%` }}
+                                        />
+                                        <input
+                                            type="range"
+                                            min="0"
+                                            max={currentDuration || 0}
+                                            step="any"
+                                            value={progress}
+                                            onPointerDown={handleSeekStart}
+                                            onChange={(e) => handleSeekChange(Number(e.target.value))}
+                                            onPointerUp={(e) => handleSeekCommit(Number(e.currentTarget.value))}
+                                            onMouseDown={handleSeekStart}
+                                            onMouseUp={(e) => handleSeekCommit(Number(e.currentTarget.value))}
+                                            className="absolute w-full h-full opacity-0 cursor-pointer z-10"
+                                        />
+                                    </div>
+                                    <span>{formatTime(currentDuration)}</span>
+                                </div>
+
+                                <div className="flex items-center space-x-2 pl-2">
+                                    <button
+                                        onClick={() => {
+                                            setMobilePlayerMode('vintage');
+                                            onToggleExpand();
+                                        }}
+                                        title="Open Full Player (Vintage Turntable)"
+                                        className={`p-1.5 rounded-lg transition-colors ${isOcean ? 'text-[#8a8489] hover:text-blue-400 hover:bg-blue-500/10' : 'text-[#8a8489] hover:text-[#f5d0b5] hover:bg-white/5'}`}
+                                    >
+                                        <Disc size={17} className={isPlaying ? "animate-spin" : ""} />
+                                    </button>
+                                    <button
+                                        onClick={onToggleExpand}
+                                        title="Expand Full Screen Player"
+                                        className={`p-1.5 rounded-lg transition-colors ${isOcean ? 'text-[#8a8489] hover:text-blue-400 hover:bg-blue-500/10' : 'text-[#8a8489] hover:text-[#f5d0b5] hover:bg-white/5'}`}
+                                    >
+                                        <Maximize2 size={16} />
+                                    </button>
+                                    <button
+                                        onClick={() => setIsMuted(!isMuted)}
+                                        className="text-[#8a8489] hover:text-white transition-colors"
+                                    >
+                                        {isMuted || volume === 0 ? <VolumeX size={16} /> : volume < 0.5 ? <Volume1 size={16} /> : <Volume2 size={16} />}
+                                    </button>
+                                    <button
+                                        onClick={onToggleQueue}
+                                        title="Queue"
+                                        className={`transition-colors ${isQueueVisible ? (isOcean ? 'text-blue-400' : 'text-[#f5d0b5]') : 'text-[#8a8489] hover:text-white'}`}
+                                    >
+                                        <ListMusic size={16} />
+                                    </button>
+                                </div>
+                            </div>
+                        </motion.div>
+                    )
+                ) : null}
+            </AnimatePresence>
         </>
     );
 };

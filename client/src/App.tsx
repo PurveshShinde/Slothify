@@ -1,24 +1,22 @@
-import React, { useState, useEffect, useCallback, lazy, Suspense } from 'react';
+import React, { useState, useEffect, useCallback, Suspense } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { CacheProvider } from './context/CacheContext';
 import { useTheme } from './context/ThemeContext';
 import Sidebar from './components/Sidebar';
 import Home from './pages/Home';
 import Search from './pages/Search';
-
-// Lazy-loaded secondary pages for ultra-fast initial bundle loading
-const Library = lazy(() => import('./pages/Library'));
-const PlaylistsPage = lazy(() => import('./pages/PlaylistsPage'));
-const AlbumsPage = lazy(() => import('./pages/AlbumsPage'));
-const AlbumDetail = lazy(() => import('./pages/AlbumDetail'));
-const ArtistsPage = lazy(() => import('./pages/ArtistsPage'));
-const ArtistProfile = lazy(() => import('./pages/ArtistProfile'));
-const PlaylistDetail = lazy(() => import('./pages/PlaylistDetail'));
-const Downloads = lazy(() => import('./pages/Downloads'));
-const Settings = lazy(() => import('./pages/Settings'));
-const History = lazy(() => import('./pages/History'));
-const Terms = lazy(() => import('./pages/Terms'));
-const Privacy = lazy(() => import('./pages/Privacy'));
+import Library from './pages/Library';
+import PlaylistsPage from './pages/PlaylistsPage';
+import AlbumsPage from './pages/AlbumsPage';
+import AlbumDetail from './pages/AlbumDetail';
+import ArtistsPage from './pages/ArtistsPage';
+import ArtistProfile from './pages/ArtistProfile';
+import PlaylistDetail from './pages/PlaylistDetail';
+import Downloads from './pages/Downloads';
+import Settings from './pages/Settings';
+import History from './pages/History';
+import Terms from './pages/Terms';
+import Privacy from './pages/Privacy';
 
 import BottomNav from './components/BottomNav';
 import Player from './components/Player';
@@ -86,7 +84,17 @@ const App: React.FC = () => {
 
 
   const [isPlayerExpanded, setIsPlayerExpanded] = useState(false);
-  const [isTurntableOpen, setIsTurntableOpen] = useState(false);
+
+  const handleOpenFullPlayer = useCallback((mode: 'normal' | 'vintage' = 'normal') => {
+    try {
+      localStorage.setItem('slothify_mobile_player_style', mode);
+      window.dispatchEvent(new CustomEvent('slothify_player_mode_change', { detail: mode }));
+    } catch {}
+    if (!isPlayerExpanded) {
+      window.history.pushState({ expanded: true }, '', '#player');
+      setIsPlayerExpanded(true);
+    }
+  }, [isPlayerExpanded]);
 
   // ✅ BACK BUTTON HANDLING
   useEffect(() => {
@@ -786,7 +794,7 @@ const App: React.FC = () => {
                     onPlayPause={handlePlayPause}
                     onToggleLike={handleToggleLike}
                     likedTrackIds={likedTrackIds}
-                    onOpenTurntable={() => setIsTurntableOpen(true)}
+                    onOpenTurntable={() => handleOpenFullPlayer('vintage')}
                     followedArtistIds={followedArtistIds}
                     followedArtists={followedArtistsList}
                     onToggleFollow={handleToggleFollowArtist}
@@ -931,8 +939,6 @@ const App: React.FC = () => {
             isShuffle={isShuffle}
             onToggleShuffle={() => setIsShuffle(!isShuffle)}
             onQueueChange={setQueue}
-            isTurntableOpen={isTurntableOpen}
-            setIsTurntableOpen={setIsTurntableOpen}
           />
 
           <AuthModal

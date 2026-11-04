@@ -61,3 +61,52 @@
 .animate-shimmer {
   animation: shimmer 1.8s ease-in-out infinite;
 }
+
+/* Mobile Player Slide Animations (iOS / Spotify spring curves) */
+@keyframes player-slide-up {
+  0% {
+    transform: translateY(100%);
+    opacity: 0.85;
+  }
+  100% {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+@keyframes player-slide-down {
+  0% {
+    transform: translateY(0);
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(100%);
+    opacity: 0;
+  }
+}
+
+@keyframes downbar-slide-up {
+  0% {
+    transform: translateY(40px);
+    opacity: 0;
+  }
+  100% {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+.animate-player-slide-up {
+  animation: player-slide-up 0.32s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  will-change: transform, opacity;
+}
+
+.animate-player-slide-down {
+  animation: player-slide-down 0.24s cubic-bezier(0.2, 0.9, 0.3, 1) forwards;
+  will-change: transform, opacity;
+}
+
+.animate-downbar-slide-up {
+  animation: downbar-slide-up 0.28s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  will-change: transform, opacity;
+}
