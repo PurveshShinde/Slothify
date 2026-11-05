@@ -175,20 +175,34 @@ export const VintageTurntable: React.FC<VintageTurntableProps> = ({
       </div>
       {/* Thematic Ambient Scenery Backdrop (Ocean Waves vs Autumn Forest) */}
       <div className="absolute inset-0 pointer-events-none overflow-hidden -z-10">
+        {/* Ocean Scenery Layer */}
         <div
-          className={`absolute inset-0 bg-cover bg-center transition-all duration-700 scale-105 ${
-            isOcean ? 'opacity-70' : 'opacity-85'
+          className={`absolute inset-0 bg-cover bg-center transition-all duration-700 ease-out will-change-transform ${
+            isOcean ? 'opacity-70 scale-100' : 'opacity-0 scale-[1.08]'
           }`}
           style={{
-            backgroundImage: isOcean
-              ? "url('/Ocean.jpg')"
-              : "url('/Autumn.jpg')",
+            backgroundImage: "url('/Ocean.jpg')",
             imageRendering: '-webkit-optimize-contrast' as any,
-            filter: isOcean ? 'contrast(1.05) saturate(1.1)' : 'contrast(1.1) saturate(1.15) brightness(0.95)'
+            filter: 'contrast(1.05) saturate(1.1)',
+            backfaceVisibility: 'hidden',
+            WebkitBackfaceVisibility: 'hidden',
+          }}
+        />
+        {/* Autumn Scenery Layer */}
+        <div
+          className={`absolute inset-0 bg-cover bg-center transition-all duration-700 ease-out will-change-transform ${
+            !isOcean ? 'opacity-85 scale-[1.08]' : 'opacity-0 scale-100'
+          }`}
+          style={{
+            backgroundImage: "url('/Autumn.jpg')",
+            imageRendering: '-webkit-optimize-contrast' as any,
+            filter: 'contrast(1.1) saturate(1.15) brightness(0.95)',
+            backfaceVisibility: 'hidden',
+            WebkitBackfaceVisibility: 'hidden',
           }}
         />
         <div
-          className={`absolute inset-0 ${
+          className={`absolute inset-0 transition-colors duration-700 ease-out ${
             isOcean
               ? 'bg-gradient-to-b from-[#020914]/60 via-[#030e1c]/70 to-[#020812]/85'
               : 'bg-gradient-to-b from-[#140803]/35 via-[#1a0a04]/45 to-[#0d0502]/60'
@@ -274,12 +288,31 @@ export const VintageTurntable: React.FC<VintageTurntableProps> = ({
         {/* LEFT: THE PERFECT CIRCLE VINYL RECORD */}
         <div className="w-full lg:w-1/2 flex flex-col items-center justify-center relative flex-shrink-0">
           {/* Guaranteed 1:1 Aspect-Square Circular Platter Container */}
-          <div className="relative w-full max-w-[min(34vh,240px)] sm:max-w-[min(48vh,360px)] lg:max-w-[min(65vh,440px)] aspect-square flex items-center justify-center flex-shrink-0 select-none">
+          <div className="relative w-full max-w-[min(34vh,240px)] sm:max-w-[min(48vh,360px)] lg:max-w-[min(65vh,440px)] aspect-square rounded-full flex items-center justify-center flex-shrink-0 select-none isolate">
+            {/* Pure Circular Depth Shadow: Static, non-rotating, 100% radial with zero square box edges */}
+            <div
+              aria-hidden="true"
+              className="absolute inset-1 rounded-full pointer-events-none select-none -z-10"
+              style={{
+                background: 'radial-gradient(circle at 50% 50%, rgba(0,0,0,0.95) 40%, rgba(0,0,0,0.6) 65%, transparent 88%)',
+                filter: 'blur(20px)',
+                transform: 'translateY(14px)',
+              }}
+            />
+            <div
+              aria-hidden="true"
+              className="absolute inset-0 rounded-full pointer-events-none select-none -z-10"
+              style={{
+                background: 'radial-gradient(circle at 50% 50%, rgba(0,0,0,0.7) 60%, transparent 75%)',
+                filter: 'blur(8px)',
+                transform: 'translateY(8px)',
+              }}
+            />
             {/* The Vinyl Disc - Flawless Perfect Circle (Continuous rotation with no hover stutter) */}
             <div
               data-vinyl-disc
               onClick={() => onPlayPause(!isPlaying)}
-              className={`w-full h-full rounded-full aspect-square bg-[#0a0a0d] border border-white/10 shadow-[0_20px_50px_rgba(0,0,0,0.95)] relative overflow-hidden flex items-center justify-center cursor-pointer select-none ${animClass}`}
+              className={`w-full h-full rounded-full aspect-square bg-[#0a0a0d] border border-white/10 relative overflow-hidden flex items-center justify-center cursor-pointer select-none ${animClass}`}
               style={{
                 ['--spin-duration' as any]: spinDuration,
                 willChange: 'transform'

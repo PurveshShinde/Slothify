@@ -691,22 +691,63 @@ const App: React.FC = () => {
     setIsAuthModalOpen(true);
   };
 
+  // Mild background wallpaper preloader & GPU texture decoder
+  // Allows the initial page, albums, and song card posters to load first without competition.
+  // Mildly fetches and decodes the alternate wallpaper into GPU memory during browser idle time.
+  useEffect(() => {
+    const idlePreload = () => {
+      const alternateWallpaper = isOcean ? '/Autumn.jpg' : '/Ocean.jpg';
+      const img = new Image();
+      img.decoding = 'async';
+      img.src = alternateWallpaper;
+      if ('decode' in img) {
+        img.decode().catch(() => {});
+      }
+    };
+
+    if (typeof window !== 'undefined') {
+      if ('requestIdleCallback' in window) {
+        const handle = (window as any).requestIdleCallback(idlePreload, { timeout: 3500 });
+        return () => (window as any).cancelIdleCallback?.(handle);
+      } else {
+        const timer = setTimeout(idlePreload, 2500);
+        return () => clearTimeout(timer);
+      }
+    }
+  }, [isOcean]);
+
   if (isCheckingAuth) {
     return (
       <div className={`h-screen w-full flex items-center justify-center relative overflow-hidden select-none ${
         isOcean ? 'bg-[#040e1a]' : 'bg-[#120905]'
       }`}>
+        {/* Ocean Scenery Layer */}
         <div
-          className="absolute inset-0 bg-cover bg-center opacity-60 scale-105 pointer-events-none"
+          className={`absolute inset-0 bg-cover bg-center transition-all duration-1000 ease-out will-change-transform ${
+            isOcean ? 'opacity-60 scale-100' : 'opacity-0 scale-[1.08]'
+          }`}
           style={{
-            backgroundImage: isOcean
-              ? "url('/Ocean.jpg')"
-              : "url('/Autumn.jpg')",
+            backgroundImage: "url('/Ocean.jpg')",
             imageRendering: '-webkit-optimize-contrast' as any,
-            filter: isOcean ? 'contrast(1.05) saturate(1.1)' : 'contrast(1.1) saturate(1.15) brightness(0.95)'
+            filter: 'contrast(1.05) saturate(1.1)',
+            backfaceVisibility: 'hidden',
+            WebkitBackfaceVisibility: 'hidden',
           }}
         />
-        <div className={`absolute inset-0 pointer-events-none ${
+        {/* Autumn Scenery Layer */}
+        <div
+          className={`absolute inset-0 bg-cover bg-center transition-all duration-1000 ease-out will-change-transform ${
+            !isOcean ? 'opacity-70 scale-[1.08]' : 'opacity-0 scale-100'
+          }`}
+          style={{
+            backgroundImage: "url('/Autumn.jpg')",
+            imageRendering: '-webkit-optimize-contrast' as any,
+            filter: 'contrast(1.1) saturate(1.15) brightness(0.95)',
+            backfaceVisibility: 'hidden',
+            WebkitBackfaceVisibility: 'hidden',
+          }}
+        />
+        <div className={`absolute inset-0 pointer-events-none transition-colors duration-1000 ease-out ${
           isOcean
             ? 'bg-gradient-to-b from-[#040e1a]/80 via-[#030d1c]/85 to-[#020710]/90'
             : 'bg-gradient-to-b from-[#140803]/50 via-[#1a0a04]/60 to-[#0d0502]/75'
@@ -728,22 +769,39 @@ const App: React.FC = () => {
         }`}>
           {/* Ambient Thematic Scenery Background Layer (Ocean Waves vs Autumn Scenery) */}
           <div className="fixed inset-0 pointer-events-none z-0 overflow-hidden">
-            {/* Scenery Background Image */}
+            {/* Ocean Scenery Layer */}
             <div
-              className={`absolute inset-0 bg-cover bg-center transition-all duration-1000 scale-105 ${
-                isOcean ? 'opacity-70' : 'opacity-85'
+              className={`absolute inset-0 bg-cover bg-center transition-all duration-1000 ease-out will-change-transform ${
+                isOcean
+                  ? 'opacity-70 scale-100'
+                  : 'opacity-0 scale-[1.08]'
               }`}
               style={{
-                backgroundImage: isOcean
-                  ? "url('/Ocean.jpg')"
-                  : "url('/Autumn.jpg')",
+                backgroundImage: "url('/Ocean.jpg')",
                 imageRendering: '-webkit-optimize-contrast' as any,
-                filter: isOcean ? 'contrast(1.05) saturate(1.1)' : 'contrast(1.1) saturate(1.15) brightness(0.95)'
+                filter: 'contrast(1.05) saturate(1.1)',
+                backfaceVisibility: 'hidden',
+                WebkitBackfaceVisibility: 'hidden',
+              }}
+            />
+            {/* Autumn Scenery Layer */}
+            <div
+              className={`absolute inset-0 bg-cover bg-center transition-all duration-1000 ease-out will-change-transform ${
+                !isOcean
+                  ? 'opacity-85 scale-[1.08]'
+                  : 'opacity-0 scale-100'
+              }`}
+              style={{
+                backgroundImage: "url('/Autumn.jpg')",
+                imageRendering: '-webkit-optimize-contrast' as any,
+                filter: 'contrast(1.1) saturate(1.15) brightness(0.95)',
+                backfaceVisibility: 'hidden',
+                WebkitBackfaceVisibility: 'hidden',
               }}
             />
             {/* Atmospheric Mood Vignette */}
             <div
-              className={`absolute inset-0 transition-colors duration-1000 ${
+              className={`absolute inset-0 transition-colors duration-1000 ease-out ${
                 isOcean
                   ? 'bg-gradient-to-b from-[#020914]/50 via-[#030e1c]/60 to-[#020812]/75'
                   : 'bg-gradient-to-b from-[#140803]/35 via-[#1a0a04]/45 to-[#0d0502]/60'

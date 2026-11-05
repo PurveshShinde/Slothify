@@ -41,12 +41,22 @@ export const VinylRecord: React.FC<VinylRecordProps> = ({
   return (
     <div
       onClick={onClick}
-      className={`relative aspect-square flex-shrink-0 select-none ${className || 'w-40 h-40 md:w-44 md:h-44 lg:w-48 lg:h-48'}`}
+      className={`relative aspect-square rounded-full flex-shrink-0 select-none isolate ${className || 'w-40 h-40 md:w-44 md:h-44 lg:w-48 lg:h-48'}`}
       style={{ aspectRatio: '1 / 1' }}
     >
+      {/* Pure Circular Depth Shadow: Static, non-rotating, 100% radial with zero square box edges */}
+      <div
+        aria-hidden="true"
+        className="absolute inset-1 rounded-full pointer-events-none select-none -z-10"
+        style={{
+          background: 'radial-gradient(circle at 50% 50%, rgba(0,0,0,0.92) 40%, rgba(0,0,0,0.55) 65%, transparent 88%)',
+          filter: 'blur(16px)',
+          transform: 'translateY(10px)',
+        }}
+      />
       {/* Vinyl Outer Disc */}
       <div
-        className={`w-full h-full rounded-full bg-[#0a0a0d] shadow-[0_15px_35px_rgba(0,0,0,0.8)] border border-white/[0.08] relative overflow-hidden flex items-center justify-center ${animClass}`}
+        className={`w-full h-full rounded-full bg-[#0a0a0d] border border-white/[0.08] relative overflow-hidden flex items-center justify-center ${animClass}`}
         style={{
           ['--spin-duration' as any]: '12s',
           willChange: 'transform'

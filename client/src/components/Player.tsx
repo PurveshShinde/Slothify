@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
     Play, Pause, SkipBack, SkipForward, Repeat, Repeat1, Shuffle,
@@ -122,6 +122,37 @@ const Player: React.FC<PlayerProps> = ({
     const [smartSuggestions, setSmartSuggestions] = useState<Track[]>([]);
     const [isLoadingSuggestions, setIsLoadingSuggestions] = useState(false);
     const [activeEngine, setActiveEngine] = useState<'youtube' | 'jiosaavn' | null>(null);
+
+    // Filter smart suggestions to exclude any track already in the queue or currently playing
+    const displayedSuggestions = useMemo(() => {
+        const queuedIdSet = new Set<string>();
+        const queuedKeySet = new Set<string>();
+
+        const normalizeStr = (s?: string) => (s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+
+        if (currentTrack) {
+            queuedIdSet.add(currentTrack.id);
+            queuedKeySet.add(`${normalizeStr(currentTrack.name)}_${normalizeStr(currentTrack.artists?.[0]?.name)}`);
+        }
+
+        for (const t of queue) {
+            if (t?.id) queuedIdSet.add(t.id);
+            queuedKeySet.add(`${normalizeStr(t?.name)}_${normalizeStr(t?.artists?.[0]?.name)}`);
+        }
+
+        return smartSuggestions.filter(t => {
+            if (!t || !t.id) return false;
+            if (queuedIdSet.has(t.id)) return false;
+            const key = `${normalizeStr(t.name)}_${normalizeStr(t.artists?.[0]?.name)}`;
+            if (queuedKeySet.has(key)) return false;
+            return true;
+        });
+    }, [smartSuggestions, queue, currentTrack]);
+
+    const upcomingTracks = useMemo(() => {
+        if (!currentTrack) return queue;
+        return queue.filter(t => t.id !== currentTrack.id);
+    }, [queue, currentTrack]);
 
     // Mobile Player Mode & Swipe-Down Gesture (Defaults to 'vintage')
     const [mobilePlayerMode, setMobilePlayerMode] = useState<'normal' | 'vintage'>(() => {
@@ -261,12 +292,12 @@ const Player: React.FC<PlayerProps> = ({
                 return queue[0];
             }
         }
-        // If queue has ended or only 1 song, pick top smart suggestion
-        if (smartSuggestions.length > 0) {
-            return smartSuggestions[0];
+        // If queue has ended or only 1 song, pick top smart suggestion (excluding queued tracks)
+        if (displayedSuggestions.length > 0) {
+            return displayedSuggestions[0];
         }
         return null;
-    }, [currentTrack, queue, repeatMode, smartSuggestions]);
+    }, [currentTrack, queue, repeatMode, displayedSuggestions]);
 
     // Proactive preload helper: pre-resolves next track, skipping YouTube completely if found on JioSaavn
     const preloadNextTrack = useCallback(async (track: Track) => {
@@ -629,15 +660,15 @@ const Player: React.FC<PlayerProps> = ({
             return;
         }
 
-        // If at end of queue, play top smart mood suggestion
-        if (smartSuggestions.length > 0) {
-            const nextSuggestion = smartSuggestions[0];
+        // If at end of queue, play top smart mood suggestion (excluding queued tracks)
+        if (displayedSuggestions.length > 0) {
+            const nextSuggestion = displayedSuggestions[0];
             if (onQueueChange) {
                 onQueueChange([...queue, nextSuggestion]);
             }
             onTrackChange(nextSuggestion);
         }
-    }, [currentTrack, queue, isShuffle, smartSuggestions, onTrackChange, onQueueChange]);
+    }, [currentTrack, queue, isShuffle, displayedSuggestions, onTrackChange, onQueueChange]);
 
     const handleSkipBack = useCallback((e?: React.SyntheticEvent) => {
         if (e) e.stopPropagation();
@@ -759,119 +790,247 @@ const Player: React.FC<PlayerProps> = ({
             <audio ref={preloadAudioRef} preload="auto" className="hidden" />
 
             {/* QUEUE & SMART SUGGESTIONS MODAL */}
-            {isQueueVisible && (
-                <div className={`fixed inset-y-0 right-0 w-full sm:w-96 backdrop-blur-2xl z-[120] p-6 flex flex-col shadow-2xl animate-in slide-in-from-right duration-300 ${isOcean
-                        ? 'bg-[#071329]/95 border-l border-blue-500/20 text-white'
-                        : 'bg-[#140b07]/95 border-l border-[#f5d0b5]/15 text-white'
-                    }`}>
-                    <div className={`flex items-center justify-between pb-4 border-b ${isOcean ? 'border-blue-500/15' : 'border-white/10'
-                        }`}>
-                        <div className="flex items-center space-x-2">
-                            <ListMusic size={22} className={isOcean ? 'text-blue-400' : 'text-[#f5d0b5]'} />
-                            <h2 className="text-lg font-black text-white">Play Queue</h2>
-                        </div>
-                        <button onClick={onToggleQueue} className="p-2 text-stone-400 hover:text-white rounded-lg hover:bg-white/5">
-                            <X size={20} />
-                        </button>
-                    </div>
+            <AnimatePresence>
+                {isQueueVisible && (
+                    <>
+                        {/* Backdrop Overlay with z-[190] so it sits cleanly on top of the z-[150] Full Player */}
+                        <motion.div
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            exit={{ opacity: 0 }}
+                            transition={{ duration: 0.2 }}
+                            onClick={onToggleQueue}
+                            className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[190]"
+                        />
 
-                    <div className="flex-1 overflow-y-auto space-y-6 pt-4 scrollbar-hide">
-                        {/* Now Playing */}
-                        {currentTrack && (
-                            <div>
-                                <span className="text-xs font-bold text-stone-400 uppercase tracking-wider">Now Playing</span>
-                                <div className={`flex items-center space-x-3 mt-2 p-2 rounded-xl border ${isOcean ? 'bg-blue-950/40 border-blue-500/25' : 'bg-white/5 border-white/5'
+                        {/* Slide-out Drawer with z-[200] so it appears on top of the Full Player */}
+                        <motion.div
+                            initial={{ x: '100%' }}
+                            animate={{ x: 0 }}
+                            exit={{ x: '100%' }}
+                            transition={{ type: 'spring', damping: 30, stiffness: 300 }}
+                            className={`fixed inset-y-0 right-0 w-full sm:w-[420px] backdrop-blur-3xl z-[200] flex flex-col shadow-2xl ${
+                                isOcean
+                                    ? 'bg-[#050c1b]/95 border-l border-white/[0.08] text-white'
+                                    : 'bg-[#120804]/95 border-l border-white/[0.08] text-white'
+                            }`}
+                        >
+                            {/* Drawer Header */}
+                            <div className="flex items-center justify-between px-6 py-5 border-b border-white/[0.06] flex-shrink-0">
+                                <div className="flex items-center space-x-2.5">
+                                    <div className={`w-8 h-8 rounded-xl flex items-center justify-center ${
+                                        isOcean ? 'bg-blue-500/15 text-blue-400' : 'bg-[#f5d0b5]/15 text-[#f5d0b5]'
                                     }`}>
-                                    <img src={currentTrack.album?.images?.[0]?.url || 'https://images.unsplash.com/photo-1518199266791-5375a83190b7?w=100'} className="w-12 h-12 rounded-lg object-cover" alt="" />
-                                    <div className="flex-1 min-w-0">
-                                        <h4 className={`text-sm font-bold truncate ${isOcean ? 'text-blue-400' : 'text-[#f5d0b5]'}`}>{currentTrack.name}</h4>
-                                        <p className="text-xs text-stone-400 truncate">{currentTrack.artists[0]?.name}</p>
+                                        <ListMusic size={18} />
                                     </div>
-                                    <div className={`w-2 h-2 rounded-full animate-ping mr-2 ${isOcean ? 'bg-blue-500' : 'bg-[#f5d0b5]'}`} />
+                                    <div>
+                                        <h2 className="text-base font-bold text-white tracking-tight font-display">Play Queue</h2>
+                                        <p className="text-[11px] text-slate-400">
+                                            {upcomingTracks.length} upcoming {upcomingTracks.length === 1 ? 'track' : 'tracks'}
+                                        </p>
+                                    </div>
                                 </div>
-                            </div>
-                        )}
-
-                        {/* Next in Queue */}
-                        {queue.length > 1 && (
-                            <div>
-                                <span className="text-xs font-bold text-stone-400 uppercase tracking-wider">Next In Queue</span>
-                                <div className="space-y-1 mt-2">
-                                    {queue.filter(t => t.id !== currentTrack?.id).map((t, idx) => (
-                                        <div
-                                            key={`${t.id}_${idx}`}
-                                            onClick={() => onTrackChange(t)}
-                                            className={`flex items-center space-x-3 p-2 rounded-xl cursor-pointer group transition-colors ${isOcean ? 'hover:bg-blue-950/30' : 'hover:bg-white/5'
-                                                }`}
-                                        >
-                                            <img src={t.album?.images?.[0]?.url || 'https://images.unsplash.com/photo-1518199266791-5375a83190b7?w=100'} className="w-10 h-10 rounded-lg object-cover" alt="" />
-                                            <div className="flex-1 min-w-0">
-                                                <h4 className={`text-xs font-bold text-white truncate transition-colors ${isOcean ? 'group-hover:text-blue-400' : 'group-hover:text-[#f5d0b5]'}`}>{t.name}</h4>
-                                                <p className="text-[10px] text-stone-400 truncate">{t.artists[0]?.name}</p>
-                                            </div>
-                                        </div>
-                                    ))}
-                                </div>
-                            </div>
-                        )}
-
-                        {/* Smart Mood Suggestions */}
-                        <div>
-                            <div className="flex items-center justify-between">
                                 <div className="flex items-center space-x-2">
-                                    <Sparkles size={16} className={isOcean ? 'text-cyan-400' : 'text-[#f5d0b5]'} />
-                                    <span className={`text-xs font-bold uppercase tracking-wider ${isOcean ? 'text-cyan-400' : 'text-[#f5d0b5]'}`}>
-                                        Spotify Smart Suggestions
-                                    </span>
-                                </div>
-                                <span className="text-[10px] text-slate-500">Mood Autoplay</span>
-                            </div>
-                            <p className="text-[11px] text-slate-400 mt-1 mb-3">
-                                Matching the mood and energy of <span className={`font-semibold ${isOcean ? 'text-cyan-300' : 'text-slate-300'}`}>{currentTrack.name}</span>
-                            </p>
-
-                            {isLoadingSuggestions ? (
-                                <div className="flex items-center justify-center py-6">
-                                    <Loader2 size={20} className={`animate-spin ${isOcean ? 'text-cyan-400' : 'text-[#f5d0b5]'}`} />
-                                </div>
-                            ) : (
-                                <div className="space-y-1">
-                                    {smartSuggestions.map((t) => (
-                                        <div
-                                            key={t.id}
-                                            className={`flex items-center justify-between p-2 rounded-xl group transition-colors ${isOcean ? 'hover:bg-blue-950/30' : 'hover:bg-white/5'
-                                                }`}
+                                    {upcomingTracks.length > 0 && onQueueChange && currentTrack && (
+                                        <button
+                                            onClick={() => onQueueChange([currentTrack])}
+                                            className="text-[11px] font-medium text-slate-400 hover:text-rose-400 px-2.5 py-1 rounded-lg hover:bg-white/[0.06] transition-colors"
+                                            title="Clear upcoming tracks from queue"
                                         >
-                                            <div
-                                                onClick={() => onTrackChange(t)}
-                                                className="flex items-center space-x-3 flex-1 min-w-0 cursor-pointer"
-                                            >
-                                                <img src={t.album.images[0]?.url} className="w-10 h-10 rounded-lg object-cover" alt="" />
-                                                <div className="flex-1 min-w-0">
-                                                    <h4 className={`text-xs font-bold text-white truncate ${isOcean ? 'group-hover:text-cyan-400' : 'group-hover:text-[#f5d0b5]'}`}>{t.name}</h4>
-                                                    <p className="text-[10px] text-slate-400 truncate">{t.artists[0]?.name}</p>
-                                                </div>
-                                            </div>
-                                            <button
-                                                onClick={() => {
-                                                    if (onQueueChange) {
-                                                        onQueueChange([...queue, t]);
-                                                    }
-                                                }}
-                                                className={`p-1.5 text-slate-500 hover:text-white rounded-lg ${isOcean ? 'hover:bg-blue-900/40 hover:text-cyan-400' : 'hover:bg-white/10 hover:text-[#f5d0b5]'
-                                                    }`}
-                                                title="Add to queue"
-                                            >
-                                                <Plus size={16} />
-                                            </button>
-                                        </div>
-                                    ))}
+                                            Clear
+                                        </button>
+                                    )}
+                                    <button
+                                        onClick={onToggleQueue}
+                                        className="w-8 h-8 rounded-full flex items-center justify-center text-slate-400 hover:text-white hover:bg-white/[0.08] active:scale-95 transition-all"
+                                        title="Close queue"
+                                    >
+                                        <X size={18} />
+                                    </button>
                                 </div>
-                            )}
-                        </div>
-                    </div>
-                </div>
-            )}
+                            </div>
+
+                            {/* Drawer Scrollable Content */}
+                            <div className="flex-1 overflow-y-auto space-y-6 px-6 py-5 scrollbar-hide">
+                                {/* Now Playing Section */}
+                                {currentTrack && (
+                                    <div className="space-y-2">
+                                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block px-1 font-display">
+                                            Now Playing
+                                        </span>
+                                        <div className={`flex items-center space-x-3.5 p-3 rounded-2xl border transition-all ${
+                                            isOcean
+                                                ? 'bg-blue-950/20 border-blue-500/20 shadow-[0_4px_24px_rgba(3,10,25,0.4)]'
+                                                : 'bg-[#24130b]/20 border-[#f5d0b5]/15 shadow-[0_4px_24px_rgba(15,7,3,0.4)]'
+                                        }`}>
+                                            <img
+                                                src={currentTrack.album?.images?.[0]?.url || 'https://images.unsplash.com/photo-1518199266791-5375a83190b7?w=100'}
+                                                className="w-12 h-12 rounded-xl object-cover shadow-md flex-shrink-0"
+                                                alt=""
+                                            />
+                                            <div className="flex-1 min-w-0">
+                                                <h4 className="text-sm font-semibold text-white truncate leading-snug">
+                                                    {currentTrack.name}
+                                                </h4>
+                                                <p className="text-xs text-slate-400 truncate mt-0.5">
+                                                    {currentTrack.artists[0]?.name}
+                                                </p>
+                                            </div>
+                                            {/* Calm Soundwave Equalizer Indicator */}
+                                            <div className="flex items-end space-x-0.5 h-3.5 px-1 flex-shrink-0" title="Playing">
+                                                <span className={`w-0.5 rounded-full ${isOcean ? 'bg-blue-400' : 'bg-[#f5d0b5]'} ${isPlaying ? 'animate-pulse' : 'h-1.5'}`} style={{ height: isPlaying ? '100%' : '30%' }} />
+                                                <span className={`w-0.5 rounded-full ${isOcean ? 'bg-blue-400' : 'bg-[#f5d0b5]'} ${isPlaying ? 'animate-pulse' : 'h-3'}`} style={{ height: isPlaying ? '60%' : '70%', animationDelay: '0.15s' }} />
+                                                <span className={`w-0.5 rounded-full ${isOcean ? 'bg-blue-400' : 'bg-[#f5d0b5]'} ${isPlaying ? 'animate-pulse' : 'h-2'}`} style={{ height: isPlaying ? '80%' : '50%', animationDelay: '0.3s' }} />
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* Up Next Section */}
+                                <div className="space-y-2">
+                                    <div className="flex items-center justify-between px-1">
+                                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest font-display">
+                                            Up Next
+                                        </span>
+                                        {upcomingTracks.length > 0 && (
+                                            <span className="text-[11px] text-slate-500 font-mono">
+                                                {upcomingTracks.length}
+                                            </span>
+                                        )}
+                                    </div>
+
+                                    {upcomingTracks.length === 0 ? (
+                                        <div className="py-6 px-4 text-center rounded-2xl border border-dashed border-white/[0.08] bg-white/[0.01]">
+                                            <p className="text-xs font-medium text-slate-400">Queue is empty</p>
+                                            <p className="text-[11px] text-slate-500 mt-0.5">Add tracks from recommendations below</p>
+                                        </div>
+                                    ) : (
+                                        <div className="space-y-1">
+                                            {upcomingTracks.map((t, idx) => (
+                                                <div
+                                                    key={`${t.id}_${idx}`}
+                                                    className={`flex items-center space-x-3 p-2 rounded-xl group transition-all ${
+                                                        isOcean ? 'hover:bg-blue-950/30' : 'hover:bg-white/[0.05]'
+                                                    }`}
+                                                >
+                                                    <div
+                                                        onClick={() => onTrackChange(t)}
+                                                        className="flex items-center space-x-3 flex-1 min-w-0 cursor-pointer"
+                                                    >
+                                                        <span className="text-[11px] font-mono text-slate-500 w-4 text-center flex-shrink-0 group-hover:hidden">
+                                                            {idx + 1}
+                                                        </span>
+                                                        <Play size={12} fill="currentColor" className="text-white w-4 text-center flex-shrink-0 hidden group-hover:block" />
+                                                        <img
+                                                            src={t.album?.images?.[0]?.url || 'https://images.unsplash.com/photo-1518199266791-5375a83190b7?w=100'}
+                                                            className="w-10 h-10 rounded-lg object-cover flex-shrink-0 shadow-sm"
+                                                            alt=""
+                                                        />
+                                                        <div className="flex-1 min-w-0">
+                                                            <h4 className="text-xs font-semibold text-slate-200 group-hover:text-white truncate transition-colors">
+                                                                {t.name}
+                                                            </h4>
+                                                            <p className="text-[11px] text-slate-400 truncate mt-0.5">
+                                                                {t.artists[0]?.name}
+                                                            </p>
+                                                        </div>
+                                                    </div>
+                                                    {onQueueChange && (
+                                                        <button
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                const newQueue = queue.filter(item => item.id !== t.id);
+                                                                onQueueChange(newQueue);
+                                                            }}
+                                                            className="opacity-0 group-hover:opacity-100 p-1.5 text-slate-400 hover:text-rose-400 hover:bg-white/10 rounded-lg transition-all"
+                                                            title="Remove from queue"
+                                                        >
+                                                            <X size={14} />
+                                                        </button>
+                                                    )}
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
+
+                                {/* Calm Autoplay Recommendations Section */}
+                                <div className="space-y-2 pt-2">
+                                    <div className="flex items-center justify-between px-1">
+                                        <div className="flex items-center space-x-2">
+                                            <span className={`w-1.5 h-1.5 rounded-full ${isOcean ? 'bg-blue-400' : 'bg-[#f5d0b5]'}`} />
+                                            <span className="text-[10px] font-bold text-slate-300 uppercase tracking-widest font-display">
+                                                Recommended For You
+                                            </span>
+                                        </div>
+                                        <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-white/[0.04] text-slate-400 border border-white/[0.06]">
+                                            Autoplay
+                                        </span>
+                                    </div>
+                                    <p className="text-[11px] text-slate-400 px-1">
+                                        Similar to <span className={`font-semibold ${isOcean ? 'text-blue-300' : 'text-[#f5d0b5]'}`}>{currentTrack?.name}</span>
+                                    </p>
+
+                                    {isLoadingSuggestions ? (
+                                        <div className="flex items-center justify-center py-8">
+                                            <Loader2 size={18} className={`animate-spin ${isOcean ? 'text-blue-400' : 'text-[#f5d0b5]'}`} />
+                                        </div>
+                                    ) : displayedSuggestions.length === 0 ? (
+                                        <div className="py-5 px-4 text-center rounded-xl bg-white/[0.02] border border-white/[0.04]">
+                                            <p className="text-[11px] text-slate-400">All recommended tracks are in your queue</p>
+                                        </div>
+                                    ) : (
+                                        <div className="space-y-1">
+                                            {displayedSuggestions.map((t) => (
+                                                <div
+                                                    key={t.id}
+                                                    className={`flex items-center justify-between p-2 rounded-xl group transition-all ${
+                                                        isOcean ? 'hover:bg-blue-950/30' : 'hover:bg-white/[0.05]'
+                                                    }`}
+                                                >
+                                                    <div
+                                                        onClick={() => onTrackChange(t)}
+                                                        className="flex items-center space-x-3 flex-1 min-w-0 cursor-pointer"
+                                                    >
+                                                        <img
+                                                            src={t.album?.images?.[0]?.url || 'https://images.unsplash.com/photo-1518199266791-5375a83190b7?w=100'}
+                                                            className="w-10 h-10 rounded-lg object-cover flex-shrink-0 shadow-sm"
+                                                            alt=""
+                                                        />
+                                                        <div className="flex-1 min-w-0">
+                                                            <h4 className="text-xs font-semibold text-slate-200 group-hover:text-white truncate transition-colors">
+                                                                {t.name}
+                                                            </h4>
+                                                            <p className="text-[11px] text-slate-400 truncate mt-0.5">
+                                                                {t.artists[0]?.name}
+                                                            </p>
+                                                        </div>
+                                                    </div>
+                                                    <button
+                                                        onClick={() => {
+                                                            if (onQueueChange) {
+                                                                onQueueChange([...queue, t]);
+                                                            }
+                                                        }}
+                                                        className={`p-1.5 rounded-lg text-slate-400 hover:text-white transition-all flex items-center space-x-1 ${
+                                                            isOcean
+                                                                ? 'hover:bg-blue-600/30 hover:text-blue-300'
+                                                                : 'hover:bg-[#f5d0b5]/20 hover:text-[#f5d0b5]'
+                                                        }`}
+                                                        title="Add to queue"
+                                                    >
+                                                        <Plus size={16} />
+                                                    </button>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        </motion.div>
+                    </>
+                )}
+            </AnimatePresence>
 
             {/* UNIFIED SINGLE PLAYER: SHARED ELEMENT TRANSITIONS (EXPANDED vs MINI BAR) */}
             <AnimatePresence mode="popLayout">
@@ -898,19 +1057,34 @@ const Player: React.FC<PlayerProps> = ({
                             exit={{ opacity: 0, transition: { duration: 0.15 } }}
                             className="absolute inset-0 pointer-events-none overflow-hidden -z-10"
                         >
+                            {/* Ocean Scenery Layer */}
                             <div
-                                className={`absolute inset-0 bg-cover bg-center transition-all duration-700 scale-105 ${isOcean ? 'opacity-70' : 'opacity-85'
-                                    }`}
+                                className={`absolute inset-0 bg-cover bg-center transition-all duration-700 ease-out will-change-transform ${
+                                    isOcean ? 'opacity-70 scale-100' : 'opacity-0 scale-[1.08]'
+                                }`}
                                 style={{
-                                    backgroundImage: isOcean
-                                        ? "url('/Ocean.jpg')"
-                                        : "url('/Autumn.jpg')",
+                                    backgroundImage: "url('/Ocean.jpg')",
                                     imageRendering: '-webkit-optimize-contrast' as any,
-                                    filter: isOcean ? 'contrast(1.05) saturate(1.1)' : 'contrast(1.1) saturate(1.15) brightness(0.95)'
+                                    filter: 'contrast(1.05) saturate(1.1)',
+                                    backfaceVisibility: 'hidden',
+                                    WebkitBackfaceVisibility: 'hidden',
+                                }}
+                            />
+                            {/* Autumn Scenery Layer */}
+                            <div
+                                className={`absolute inset-0 bg-cover bg-center transition-all duration-700 ease-out will-change-transform ${
+                                    !isOcean ? 'opacity-85 scale-[1.08]' : 'opacity-0 scale-100'
+                                }`}
+                                style={{
+                                    backgroundImage: "url('/Autumn.jpg')",
+                                    imageRendering: '-webkit-optimize-contrast' as any,
+                                    filter: 'contrast(1.1) saturate(1.15) brightness(0.95)',
+                                    backfaceVisibility: 'hidden',
+                                    WebkitBackfaceVisibility: 'hidden',
                                 }}
                             />
                             <div
-                                className={`absolute inset-0 ${isOcean
+                                className={`absolute inset-0 transition-colors duration-700 ease-out ${isOcean
                                         ? 'bg-gradient-to-b from-[#020914]/70 via-[#030e1c]/80 to-[#020812]/92'
                                         : 'bg-gradient-to-b from-[#140803]/45 via-[#1a0a04]/55 to-[#0d0502]/70'
                                     }`}
@@ -945,30 +1119,46 @@ const Player: React.FC<PlayerProps> = ({
                                     <div className="w-10 h-1 rounded-full bg-white/30 hover:bg-white/50 transition-colors" />
                                 </div>
 
-                                <header className="flex items-center justify-between h-11 mb-1 px-0.5 select-none flex-shrink-0">
+                                <header className="flex items-center justify-between h-11 mb-1 px-1 select-none flex-shrink-0">
                                     <button
                                         onClick={onToggleExpand}
-                                        className="p-2 -ml-2 text-white/80 hover:text-white active:scale-90 transition-transform"
+                                        className="w-9 h-9 flex items-center justify-center rounded-full text-white/80 hover:text-white hover:bg-white/10 active:scale-90 transition-all"
                                         title="Minimize player"
                                     >
-                                        <ChevronDown size={26} className="md:hidden" />
+                                        <ChevronDown size={24} className="md:hidden" />
                                         <Minimize2 size={20} className="hidden md:inline" />
                                     </button>
 
                                     {/* Style Switcher: Mobile Only; Windows/Desktop is strictly dedicated to Vintage */}
-                                    <div className="md:hidden flex items-center bg-white/[0.08] p-0.5 rounded-full border border-white/10 shadow-inner">
+                                    <div className={`md:hidden relative flex items-center p-0.5 rounded-full border backdrop-blur-md transition-colors ${
+                                        isOcean ? 'bg-black/40 border-blue-500/20' : 'bg-black/40 border-[#f5d0b5]/20'
+                                    }`}>
                                         <button
                                             onClick={() => {
                                                 setMobilePlayerMode('normal');
                                                 try { localStorage.setItem('slothify_mobile_player_style', 'normal'); } catch { }
                                             }}
-                                            className={`flex items-center space-x-1 px-3 py-1 rounded-full text-xs font-semibold font-display transition-all ${mobilePlayerMode === 'normal'
+                                            className={`relative z-10 flex items-center space-x-1 px-3 py-1 rounded-full text-xs font-semibold font-display transition-colors ${
+                                                mobilePlayerMode === 'normal'
                                                     ? isOcean
-                                                        ? 'bg-blue-600 text-white shadow-sm'
-                                                        : 'bg-[#f5d0b5] text-black shadow-sm'
-                                                    : 'text-stone-400 hover:text-white'
-                                                }`}
+                                                        ? 'text-white'
+                                                        : 'text-black'
+                                                    : isOcean
+                                                        ? 'text-slate-400 hover:text-white'
+                                                        : 'text-stone-400 hover:text-white'
+                                            }`}
                                         >
+                                            {mobilePlayerMode === 'normal' && (
+                                                <motion.div
+                                                    layoutId="mobile-player-style-pill"
+                                                    transition={{ type: "spring", stiffness: 350, damping: 30 }}
+                                                    className={`absolute inset-0 rounded-full shadow-md -z-10 ${
+                                                        isOcean
+                                                            ? 'bg-blue-600 shadow-[0_0_12px_rgba(37,99,235,0.55)]'
+                                                            : 'bg-[#f5d0b5] shadow-[0_0_12px_rgba(245,208,181,0.35)]'
+                                                    }`}
+                                                />
+                                            )}
                                             <Music2 size={12} />
                                             <span>Normal</span>
                                         </button>
@@ -977,13 +1167,27 @@ const Player: React.FC<PlayerProps> = ({
                                                 setMobilePlayerMode('vintage');
                                                 try { localStorage.setItem('slothify_mobile_player_style', 'vintage'); } catch { }
                                             }}
-                                            className={`flex items-center space-x-1 px-3 py-1 rounded-full text-xs font-semibold font-display transition-all ${mobilePlayerMode === 'vintage'
+                                            className={`relative z-10 flex items-center space-x-1 px-3 py-1 rounded-full text-xs font-semibold font-display transition-colors ${
+                                                mobilePlayerMode === 'vintage'
                                                     ? isOcean
-                                                        ? 'bg-blue-600 text-white shadow-sm'
-                                                        : 'bg-[#f5d0b5] text-black shadow-sm'
-                                                    : 'text-stone-400 hover:text-white'
-                                                }`}
+                                                        ? 'text-white'
+                                                        : 'text-black'
+                                                    : isOcean
+                                                        ? 'text-slate-400 hover:text-white'
+                                                        : 'text-stone-400 hover:text-white'
+                                            }`}
                                         >
+                                            {mobilePlayerMode === 'vintage' && (
+                                                <motion.div
+                                                    layoutId="mobile-player-style-pill"
+                                                    transition={{ type: "spring", stiffness: 350, damping: 30 }}
+                                                    className={`absolute inset-0 rounded-full shadow-md -z-10 ${
+                                                        isOcean
+                                                            ? 'bg-blue-600 shadow-[0_0_12px_rgba(37,99,235,0.55)]'
+                                                            : 'bg-[#f5d0b5] shadow-[0_0_12px_rgba(245,208,181,0.35)]'
+                                                    }`}
+                                                />
+                                            )}
                                             <Disc size={12} className={isPlaying && mobilePlayerMode === 'vintage' ? 'animate-spin' : ''} />
                                             <span>Vintage</span>
                                         </button>
@@ -997,13 +1201,16 @@ const Player: React.FC<PlayerProps> = ({
 
                                     <button
                                         onClick={onToggleQueue}
-                                        className={`p-2 -mr-2 rounded-full transition-all active:scale-90 ${isQueueVisible
-                                                ? isOcean ? 'text-blue-400 bg-white/10' : 'text-[#f5d0b5] bg-white/10'
-                                                : 'text-white/80 hover:text-white'
-                                            }`}
+                                        className={`w-9 h-9 flex items-center justify-center rounded-full transition-all active:scale-90 ${
+                                            isQueueVisible
+                                                ? isOcean
+                                                    ? 'text-blue-400 bg-blue-500/20 ring-1 ring-blue-500/40 shadow-[0_0_12px_rgba(37,99,235,0.3)]'
+                                                    : 'text-[#f5d0b5] bg-[#f5d0b5]/20 ring-1 ring-[#f5d0b5]/40 shadow-[0_0_12px_rgba(245,208,181,0.2)]'
+                                                : 'text-white/80 hover:text-white hover:bg-white/10'
+                                        }`}
                                         title="Play Queue"
                                     >
-                                        <ListMusic size={22} />
+                                        <ListMusic size={20} />
                                     </button>
                                 </header>
                             </div>
@@ -1013,65 +1220,97 @@ const Player: React.FC<PlayerProps> = ({
                                 {/* LEFT SIDE: CD / VINYL TURNTABLE & LIVE WAVEFORM */}
                                 <div className="w-full md:w-1/2 flex flex-col items-center justify-center flex-shrink-0 my-auto">
                                     {/* Desktop is ALWAYS Vintage; Mobile uses normal only if chosen */}
-                                    {isMobile && mobilePlayerMode === 'normal' ? (
-                                        <motion.div
-                                            layoutId="player-shared-artwork"
-                                            transition={springTransition}
-                                            className="relative w-full max-w-[min(34vh,240px)] sm:max-w-[min(44vh,340px)] aspect-square flex items-center justify-center select-none flex-shrink-0 shadow-[0_20px_50px_rgba(0,0,0,0.85)] rounded-2xl overflow-hidden border border-white/10"
-                                        >
-                                            <img
-                                                src={currentTrack.album?.images?.[0]?.url || 'https://images.unsplash.com/photo-1518199266791-5375a83190b7?w=500'}
-                                                alt=""
-                                                className="w-full h-full object-cover rounded-2xl"
-                                            />
-                                            {isBuffering && (
-                                                <div className="absolute inset-0 flex items-center justify-center bg-black/40 rounded-2xl backdrop-blur-sm">
-                                                    <Loader2 className="w-12 h-12 text-white animate-spin" />
-                                                </div>
-                                            )}
-                                        </motion.div>
-                                    ) : (
-                                        <div className="relative w-full max-w-[min(34vh,240px)] sm:max-w-[min(44vh,340px)] md:max-w-[min(55vh,420px)] lg:max-w-[min(65vh,460px)] aspect-square flex items-center justify-center select-none flex-shrink-0">
-                                            {/* Outer vinyl platter smoothly dissolves on exit */}
+                                    <AnimatePresence mode="wait">
+                                        {isMobile && mobilePlayerMode === 'normal' ? (
                                             <motion.div
-                                                initial={{ opacity: 0, scale: 0.92 }}
+                                                key="mobile-normal-art"
+                                                layoutId="player-shared-artwork"
+                                                transition={springTransition}
+                                                initial={{ opacity: 0, scale: 0.95 }}
                                                 animate={{ opacity: 1, scale: 1 }}
-                                                exit={isMobile ? { opacity: 0, scale: 0.85, transition: { duration: 0.12 } } : undefined}
-                                                onClick={togglePlay}
-                                                className={`w-full h-full rounded-full aspect-square bg-[#0a0a0d] border border-white/10 shadow-[0_20px_50px_rgba(0,0,0,0.95)] relative overflow-hidden flex items-center justify-center cursor-pointer select-none ${isPlaying ? 'spin-vinyl' : 'spin-vinyl-paused'
-                                                    }`}
-                                                style={{
-                                                    ['--spin-duration' as any]: '10s',
-                                                    willChange: 'transform'
-                                                }}
-                                                title={isPlaying ? "Click to Pause" : "Click to Play"}
+                                                exit={{ opacity: 0, scale: 0.9, transition: { duration: 0.15 } }}
+                                                className={`relative w-full max-w-[min(34vh,240px)] sm:max-w-[min(44vh,340px)] aspect-square flex items-center justify-center select-none flex-shrink-0 shadow-[0_20px_50px_rgba(0,0,0,0.85)] rounded-2xl overflow-hidden border ${
+                                                    isOcean ? 'border-blue-500/20' : 'border-[#f5d0b5]/15'
+                                                }`}
                                             >
-                                                <div className="absolute inset-3 sm:inset-4 rounded-full border border-white/[0.04] pointer-events-none" />
-                                                <div className="absolute inset-6 sm:inset-8 rounded-full border border-white/[0.03] pointer-events-none" />
-                                                <div className="absolute inset-9 sm:inset-12 rounded-full border border-white/[0.04] pointer-events-none" />
-                                                <div className="absolute inset-12 sm:inset-16 rounded-full border border-white/[0.03] pointer-events-none" />
-                                                <div className="absolute inset-15 sm:inset-20 rounded-full border border-white/[0.04] pointer-events-none" />
-                                                <div className="absolute inset-0 bg-[conic-gradient(from_0deg,transparent_0deg,rgba(255,255,255,0.06)_45deg,transparent_90deg,rgba(255,255,255,0.06)_225deg,transparent_270deg)] pointer-events-none" />
-
-                                                {/* Center label image seamlessly linked to shared artwork */}
-                                                <motion.div
-                                                    layoutId={isMobile ? "player-shared-artwork" : undefined}
-                                                    transition={springTransition}
-                                                    className="relative w-[38%] h-[38%] rounded-full overflow-hidden border-2 border-black/80 shadow-2xl flex items-center justify-center"
-                                                >
-                                                    <img
-                                                        src={currentTrack.album?.images?.[0]?.url || 'https://images.unsplash.com/photo-1518199266791-5375a83190b7?w=300'}
-                                                        alt={currentTrack.name}
-                                                        className="w-full h-full object-cover rounded-full pointer-events-none"
-                                                    />
-                                                    <div className="absolute inset-0 bg-black/20 pointer-events-none" />
-                                                    <div className="absolute w-4 h-4 sm:w-5 sm:h-5 rounded-full bg-[#121215] border border-white/20 shadow-md flex items-center justify-center">
-                                                        <div className="w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full bg-black" />
+                                                <img
+                                                    src={currentTrack.album?.images?.[0]?.url || 'https://images.unsplash.com/photo-1518199266791-5375a83190b7?w=500'}
+                                                    alt=""
+                                                    className="w-full h-full object-cover rounded-2xl"
+                                                />
+                                                {isBuffering && (
+                                                    <div className="absolute inset-0 flex items-center justify-center bg-black/40 rounded-2xl backdrop-blur-sm">
+                                                        <Loader2 className="w-12 h-12 text-white animate-spin" />
                                                     </div>
-                                                </motion.div>
+                                                )}
                                             </motion.div>
-                                        </div>
-                                    )}
+                                        ) : (
+                                            <motion.div
+                                                key="mobile-vintage-art"
+                                                initial={{ opacity: 0, scale: 0.95 }}
+                                                animate={{ opacity: 1, scale: 1 }}
+                                                exit={{ opacity: 0, scale: 0.9, transition: { duration: 0.15 } }}
+                                                className="relative w-full max-w-[min(34vh,240px)] sm:max-w-[min(44vh,340px)] md:max-w-[min(55vh,420px)] lg:max-w-[min(65vh,460px)] aspect-square rounded-full flex items-center justify-center select-none flex-shrink-0 isolate"
+                                            >
+                                                {/* Pure Circular Depth Shadow: Static, non-rotating, 100% radial with zero square box edges */}
+                                                <div
+                                                    aria-hidden="true"
+                                                    className="absolute inset-1 rounded-full pointer-events-none select-none -z-10"
+                                                    style={{
+                                                        background: 'radial-gradient(circle at 50% 50%, rgba(0,0,0,0.95) 40%, rgba(0,0,0,0.6) 65%, transparent 88%)',
+                                                        filter: 'blur(20px)',
+                                                        transform: 'translateY(14px)',
+                                                    }}
+                                                />
+                                                <div
+                                                    aria-hidden="true"
+                                                    className="absolute inset-0 rounded-full pointer-events-none select-none -z-10"
+                                                    style={{
+                                                        background: 'radial-gradient(circle at 50% 50%, rgba(0,0,0,0.7) 60%, transparent 75%)',
+                                                        filter: 'blur(8px)',
+                                                        transform: 'translateY(8px)',
+                                                    }}
+                                                />
+
+                                                {/* Outer vinyl platter smoothly dissolves on exit */}
+                                                <div
+                                                    onClick={togglePlay}
+                                                    className={`w-full h-full rounded-full aspect-square bg-[#0a0a0d] border relative overflow-hidden flex items-center justify-center cursor-pointer select-none ${
+                                                        isOcean ? 'border-blue-500/20' : 'border-[#f5d0b5]/15'
+                                                    } ${isPlaying ? 'spin-vinyl' : 'spin-vinyl-paused'}`}
+                                                    style={{
+                                                        ['--spin-duration' as any]: '10s',
+                                                        willChange: 'transform'
+                                                    }}
+                                                    title={isPlaying ? "Click to Pause" : "Click to Play"}
+                                                >
+                                                    <div className="absolute inset-3 sm:inset-4 rounded-full border border-white/[0.04] pointer-events-none" />
+                                                    <div className="absolute inset-6 sm:inset-8 rounded-full border border-white/[0.03] pointer-events-none" />
+                                                    <div className="absolute inset-9 sm:inset-12 rounded-full border border-white/[0.04] pointer-events-none" />
+                                                    <div className="absolute inset-12 sm:inset-16 rounded-full border border-white/[0.03] pointer-events-none" />
+                                                    <div className="absolute inset-15 sm:inset-20 rounded-full border border-white/[0.04] pointer-events-none" />
+                                                    <div className="absolute inset-0 bg-[conic-gradient(from_0deg,transparent_0deg,rgba(255,255,255,0.06)_45deg,transparent_90deg,rgba(255,255,255,0.06)_225deg,transparent_270deg)] pointer-events-none" />
+
+                                                    {/* Center label image seamlessly linked to shared artwork */}
+                                                    <div
+                                                        className="relative w-[38%] h-[38%] rounded-full overflow-hidden border-2 border-black/80 shadow-2xl flex items-center justify-center pointer-events-none"
+                                                    >
+                                                        <img
+                                                            src={currentTrack.album?.images?.[0]?.url || 'https://images.unsplash.com/photo-1518199266791-5375a83190b7?w=300'}
+                                                            alt={currentTrack.name}
+                                                            className="w-full h-full object-cover rounded-full pointer-events-none"
+                                                        />
+                                                        <div className="absolute inset-0 bg-black/20 pointer-events-none" />
+                                                        <div className={`absolute w-4 h-4 sm:w-5 sm:h-5 rounded-full bg-[#121215] border shadow-md flex items-center justify-center ${
+                                                            isOcean ? 'border-blue-400/30' : 'border-[#f5d0b5]/30'
+                                                        }`}>
+                                                            <div className="w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full bg-black" />
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </motion.div>
+                                        )}
+                                    </AnimatePresence>
 
                                     {/* Minimalist Live Waveform (Always active on desktop; on mobile if vintage) */}
                                     {(!isMobile || mobilePlayerMode === 'vintage') && (
