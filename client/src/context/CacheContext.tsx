@@ -25,7 +25,7 @@ interface CacheContextType {
     clearCache: () => void;
 }
 
-const STORAGE_KEY = 'slothify_browser_cache_v14';
+const STORAGE_KEY = 'slothify_browser_cache_v15';
 
 // Check if current session started from a browser reload/F5
 const checkIsReload = (): boolean => {
@@ -48,6 +48,11 @@ const getInitialCache = (): CacheState => {
         localStorage.removeItem('slothify_browser_cache_v7');
         localStorage.removeItem('slothify_browser_cache_v8');
         localStorage.removeItem('slothify_browser_cache_v9');
+        localStorage.removeItem('slothify_browser_cache_v10');
+        localStorage.removeItem('slothify_browser_cache_v11');
+        localStorage.removeItem('slothify_browser_cache_v12');
+        localStorage.removeItem('slothify_browser_cache_v13');
+        localStorage.removeItem('slothify_browser_cache_v14');
         localStorage.removeItem('slothify_browser_cache_v10');
         localStorage.removeItem('slothify_browser_cache_v11');
         localStorage.removeItem('slothify_browser_cache_v12');

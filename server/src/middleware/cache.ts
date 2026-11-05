@@ -67,7 +67,7 @@ export const searchCacheMiddleware = createCacheMiddleware(
     300, // 5 minutes
     (req: Request) => {
         const q = (req.query.q as string || '').toLowerCase().trim();
-        return q ? `search:tracks:${q}` : null;
+        return q ? `search:tracks:v3:${q}` : null;
     }
 );
 

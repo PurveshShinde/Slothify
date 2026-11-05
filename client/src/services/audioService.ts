@@ -126,7 +126,19 @@ export const AudioService = {
         { signal }
       );
       if (!response.ok) throw new Error(`Audio service search failed (${response.status})`);
-      return await response.json();
+      const json: SaavnSearchSongsResponse = await response.json();
+      if (json?.data?.results && Array.isArray(json.data.results)) {
+        const junkPattern = /\b(8-?bit|16-?bit|karaoke|instrumental|nightcore|tribute|cover|lofi|slowed|reverb|sped\s*up|speed\s*up|hardstyle|techno|bass\s*boosted|workout|fitness|gym|bpm|tabata|switching\s*vocals)\b/i;
+        const rawQ = query.toLowerCase();
+        if (!junkPattern.test(rawQ)) {
+          json.data.results = json.data.results.filter(s => {
+            const name = (s.name || '').toLowerCase();
+            const artist = (s.artists?.primary?.[0]?.name || '').toLowerCase();
+            return !junkPattern.test(name) && !junkPattern.test(artist);
+          });
+        }
+      }
+      return json;
     } catch (error: any) {
       if (error?.name !== 'AbortError') {
         console.error('Error fetching from Slothify Audio Service (searchSongs):', error);

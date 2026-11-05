@@ -193,6 +193,9 @@ export async function getSpotubeSpotifyToken(): Promise<string | null> {
     return pendingTokenPromise;
 }
 
+// Pre-warm token in background immediately
+getSpotubeSpotifyToken().catch(() => {});
+
 export async function searchSpotubeSpotifyTracks(cleanQuery: string, limit: number = 20): Promise<Track[]> {
     const token = await getSpotubeSpotifyToken();
     if (!token) return [];
@@ -645,6 +648,14 @@ export function scoreTrackRelevance(track: any, query: string, originalIndex: nu
         score -= 100;
     }
 
+    // Low-Play Cover Artist Suppression:
+    // If an obscure artist with < 200,000 plays covers a famous song, penalize so knockoffs don't crowd search
+    const playCount = Number((track as any).playCount) || 0;
+    const isLowPlayCover = playCount > 0 && playCount < 200000 && !isArtistExact;
+    if (isLowPlayCover && !cleanQuery.includes(primaryArtist)) {
+        score -= 120;
+    }
+
     // 3. Spotify Engine Original Rank Priority:
     // Spotify's GraphQL search incorporates billions of user streams and global listening signals.
     // Index 0 in Spotify's official search is almost always the canonical hit!
@@ -686,7 +697,7 @@ export function scoreTrackRelevance(track: any, query: string, originalIndex: nu
  */
 export function deduplicateTracks(tracks: any[]): any[] {
     const uniqueTracks: any[] = [];
-    const junkSubRegex = /\b(tribute|karaoke|instrumental\s*version|backing\s*track|8-?bit|16-?bit|type\s*beat|string\s*quartet|chiptune|arcade\s*player)\b/i;
+    const junkSubRegex = /\b(tribute|karaoke|instrumental\s*version|backing\s*track|8-?bit|16-?bit|type\s*beat|string\s*quartet|chiptune|arcade\s*player|workout|fitness|gym|nightcore|bpm|tabata|hardtekk|hardstyle|switching\s*vocals|cover\s*version|female\s*cover)\b/i;
 
     tracks.forEach(track => {
         const titleStr = (track.name || track.title || '').toLowerCase();
@@ -694,7 +705,7 @@ export function deduplicateTracks(tracks: any[]): any[] {
             ? track.artists.map((a: any) => a.name).join(' ').toLowerCase()
             : (track.artist || 'unknown').toLowerCase();
 
-        // Extra safety filter against tribute/backing track/type beat junk
+        // Extra safety filter against tribute/backing track/type beat/workout junk
         if (junkSubRegex.test(titleStr) || junkSubRegex.test(rawArtistStr)) {
             return;
         }
@@ -745,7 +756,23 @@ export function deduplicateTracks(tracks: any[]): any[] {
             const currentIsSpotify = Boolean(track.uri?.startsWith('spotify:track:') && !track.id?.startsWith('saavn_'));
             const existingIsSpotify = Boolean(existing.uri?.startsWith('spotify:track:') && !existing.id?.startsWith('saavn_'));
 
-            // Rule: Official Spotify releases have authentic global cover art and master metadata.
+            // Rule 0: Clean Original Studio Track vs Version (Acoustic, Live, Remix, etc.)
+            // The clean original studio recording MUST NEVER be overwritten by an acoustic or live version!
+            const versionRegex = /\b(acoustic|live|unplugged|radio edit|club mix|extended|instrumental|orchestral)\b/i;
+            const isCurrentVersion = versionRegex.test(track.name || '');
+            const isExistingVersion = versionRegex.test(existing.name || '');
+
+            if (!isExistingVersion && isCurrentVersion) {
+                // Existing is the clean original; keep it, never overwrite with acoustic/version!
+                return;
+            }
+            if (isExistingVersion && !isCurrentVersion) {
+                // Current is clean original studio recording; replace the acoustic/version!
+                uniqueTracks[existingIndex] = track;
+                return;
+            }
+
+            // Rule 1: Official Spotify releases have authentic global cover art and master metadata.
             // If current track is Spotify and existing is NOT Spotify, Spotify ALWAYS takes precedence!
             if (currentIsSpotify && !existingIsSpotify) {
                 if ((existing as any).playCount) {
@@ -764,16 +791,7 @@ export function deduplicateTracks(tracks: any[]): any[] {
                 const isCurrentCompilation = compilationRegex.test(track.album?.name || '');
                 const isExistingCompilation = compilationRegex.test(existing.album?.name || '');
 
-                // Studio Album / Single priority: If the album name includes the song title (e.g. "Teenage Dream" album for "Teenage Dream" song),
-                // it is the canonical release and should never be overridden by third-party compilations like "POP 2010"
-                const isCurrentSelfTitled = (track.album?.name || '').replace(/[^a-zA-Z0-9]/g, '').toLowerCase().includes(baseTitle);
-                const isExistingSelfTitled = (existing.album?.name || '').replace(/[^a-zA-Z0-9]/g, '').toLowerCase().includes(baseTitle);
-
-                if (isCurrentSelfTitled && !isExistingSelfTitled) {
-                    uniqueTracks[existingIndex] = track;
-                } else if (!isCurrentSelfTitled && isExistingSelfTitled) {
-                    // Keep the canonical studio release
-                } else if (!isCurrentCompilation && isExistingCompilation) {
+                if (!isCurrentCompilation && isExistingCompilation) {
                     uniqueTracks[existingIndex] = track;
                 } else if (currentScore > existingScore && (isCurrentCompilation === isExistingCompilation)) {
                     uniqueTracks[existingIndex] = track;
@@ -1691,7 +1709,7 @@ export class SpotifyScraperPlugin implements MetadataPlugin {
         // 3. JioSaavn Autocomplete (Typo / spell-check matching)
         // 4. Spotify Artist Top Tracks (if searching by major artist)
         const [spotubeRes, saavnRes, saavnAutoRes, artistTracksRes] = await Promise.allSettled([
-            withTimeout(searchSpotubeSpotifyTracks(cleanQuery, fetchLimit), 1200),
+            withTimeout(searchSpotubeSpotifyTracks(cleanQuery, fetchLimit), 3500),
             withTimeout(axios.get('https://www.jiosaavn.com/api.php', {
                 params: {
                     __call: 'search.getResults',
@@ -1706,8 +1724,8 @@ export class SpotifyScraperPlugin implements MetadataPlugin {
                     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
                     'Accept': 'application/json, text/plain, */*'
                 },
-                timeout: 1200
-            }), 1200),
+                timeout: 3000
+            }), 3000),
             withTimeout(axios.get('https://www.jiosaavn.com/api.php', {
                 params: {
                     __call: 'autocomplete.get',
@@ -1720,9 +1738,9 @@ export class SpotifyScraperPlugin implements MetadataPlugin {
                     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
                     'Accept': 'application/json'
                 },
-                timeout: 1000
-            }), 1000),
-            withTimeout(artistTrackPromise, 1200)
+                timeout: 2500
+            }), 2500),
+            withTimeout(artistTrackPromise, 3500)
         ]);
 
         const rawCandidates: { track: Track; originalIndex: number }[] = [];
@@ -1842,11 +1860,11 @@ export class SpotifyScraperPlugin implements MetadataPlugin {
             });
         }
 
-        // 2. Strict No-Remix Guard
-        // Drop remix/flip/lofi/unplugged/reverb/slowed/instrumental/karaoke/lyrical/8d unless user explicitly typed those words
-        const junkRegex = /\b(remix|flip|lofi|unplugged|reverb|slowed|instrumental|karaoke|lyrical|8d)\b/i;
+        // 2. Strict No-Remix / No-Junk Guard
+        // Drop remix/flip/lofi/unplugged/reverb/slowed/instrumental/karaoke/lyrical/8d/nightcore/workout/tribute/cover unless user typed those words
+        const junkRegex = /\b(remix|flip|lofi|unplugged|reverb|slowed|instrumental|karaoke|lyrical|8d|8-?bit|16-?bit|nightcore|tribute|cover|workout|fitness|gym|bpm|tabata|hardtekk|hardstyle|techno|switching\s*vocals|backing\s*track|type\s*beat|speed\s*up|sped\s*up)\b/i;
         const cleanResults = rawCandidates.filter(({ track }) => {
-            // If the user's query didn't ask for a flip/remix, drop tracks that contain those words
+            // If the user's query didn't ask for a flip/remix/cover/workout, drop tracks that contain those words
             if (!junkRegex.test(raw)) {
                 const trackTitle = (track.name || (track as any).title || '').toLowerCase();
                 const trackArtist = (track.artists || []).map((a: any) => a.name).join(' ').toLowerCase();

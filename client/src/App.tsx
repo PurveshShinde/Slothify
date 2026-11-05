@@ -96,18 +96,24 @@ const App: React.FC = () => {
     }
   }, [isPlayerExpanded]);
 
-  // ✅ BACK BUTTON HANDLING
+  // ✅ BACK BUTTON & HASH SYNCHRONIZATION
   useEffect(() => {
-    const handlePopState = (event: PopStateEvent) => {
-      // If back button is pressed and player is expanded, close it
-      if (isPlayerExpanded) {
+    const handlePopOrHash = () => {
+      // If the URL hash no longer contains '#player', ensure the full player is closed
+      if (window.location.hash !== '#player' && isPlayerExpanded) {
         setIsPlayerExpanded(false);
+      } else if (window.location.hash === '#player' && !isPlayerExpanded && currentTrack) {
+        setIsPlayerExpanded(true);
       }
     };
 
-    window.addEventListener('popstate', handlePopState);
-    return () => window.removeEventListener('popstate', handlePopState);
-  }, [isPlayerExpanded]);
+    window.addEventListener('popstate', handlePopOrHash);
+    window.addEventListener('hashchange', handlePopOrHash);
+    return () => {
+      window.removeEventListener('popstate', handlePopOrHash);
+      window.removeEventListener('hashchange', handlePopOrHash);
+    };
+  }, [isPlayerExpanded, currentTrack]);
 
   const handleToggleExpand = useCallback(() => {
     if (!isPlayerExpanded) {
@@ -115,8 +121,11 @@ const App: React.FC = () => {
       window.history.pushState({ expanded: true }, '', '#player');
       setIsPlayerExpanded(true);
     } else {
-      // CLOSE: Go back in history (triggers popstate)
-      window.history.back();
+      // CLOSE: Explicitly minimize and clean history
+      setIsPlayerExpanded(false);
+      if (window.location.hash === '#player') {
+        window.history.back();
+      }
     }
   }, [isPlayerExpanded]);
 
@@ -211,10 +220,12 @@ const App: React.FC = () => {
     return [];
   });
 
-  // Check for #player on mount (in case of refresh)
+  // Check for #player on mount: do not expand unless a track is active
   useEffect(() => {
     if (window.location.hash === '#player') {
-      setIsPlayerExpanded(true);
+      // On fresh app mount, currentTrack is null. Strip stale #player hash to avoid accidental fullscreen takeover.
+      window.history.replaceState(null, '', window.location.pathname + window.location.search);
+      setIsPlayerExpanded(false);
     }
   }, []);
 
@@ -231,6 +242,14 @@ const App: React.FC = () => {
       return;
     }
 
+    // Always keep player collapsed to bottom media bar when picking tracks from search or catalog
+    if (isPlayerExpanded) {
+      setIsPlayerExpanded(false);
+      if (window.location.hash === '#player') {
+        window.history.back();
+      }
+    }
+
     setCurrentTrack(track);
     setIsPlaying(true);
     if (trackQueue && trackQueue.length > 0) setQueue(trackQueue);
@@ -240,7 +259,7 @@ const App: React.FC = () => {
     if (isAuthenticated && track && track.id) {
       axios.post('/api/me/history', { track }).catch(() => {});
     }
-  }, [currentTrack, isAuthenticated]);
+  }, [currentTrack, isAuthenticated, isPlayerExpanded]);
 
   const handleTrackChange = useCallback((track: Track) => {
     setCurrentTrack(track);

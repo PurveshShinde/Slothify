@@ -981,14 +981,15 @@ const Search: React.FC<SearchProps> = ({ isAuthenticated, onPlayTrack }) => {
           {/* TAB: ALL */}
           {activeTab === 'all' && (
             <div className="space-y-6">
-              {/* Songs List */}
-              {results.length > 0 && (
+              
+              {/* Songs List (Prioritized with Skeleton Loader) */}
+              {(results.length > 0 || isLoading) && (
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
                     <h2 className="text-sm font-bold tracking-wider text-[#8a8489] uppercase">
                       Songs
                     </h2>
-                    {results.length > 5 && (
+                    {results.length > 5 && !isLoading && (
                       <button
                         onClick={() => setActiveTab('songs')}
                         className="text-xs font-semibold text-[#8a8489] hover:text-white transition-colors cursor-pointer"
@@ -997,9 +998,24 @@ const Search: React.FC<SearchProps> = ({ isAuthenticated, onPlayTrack }) => {
                       </button>
                     )}
                   </div>
-                  <div className="space-y-1.5">
-                    {results.slice(0, 10).map((track) => renderTrackRow(track))}
-                  </div>
+                  
+                  {isLoading && results.length === 0 ? (
+                    <div className="space-y-1.5 animate-pulse">
+                      {[1, 2, 3, 4].map((i) => (
+                        <div key={i} className="flex items-center space-x-3.5 p-2.5 bg-white/[0.02] border border-white/[0.04] rounded-2xl">
+                          <div className="w-11 h-11 rounded-xl bg-white/5"></div>
+                          <div className="flex-1 space-y-2 py-1">
+                            <div className="h-3 bg-white/10 rounded w-1/3"></div>
+                            <div className="h-2 bg-white/5 rounded w-1/4"></div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="space-y-1.5">
+                      {results.slice(0, 10).map((track) => renderTrackRow(track))}
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -1026,7 +1042,7 @@ const Search: React.FC<SearchProps> = ({ isAuthenticated, onPlayTrack }) => {
               )}
 
               {/* Additional songs if more than 10 */}
-              {results.length > 10 && (
+              {results.length > 10 && !isLoading && (
                 <div className="space-y-2 pt-2">
                   <div className="space-y-1.5">
                     {results.slice(10, 25).map((track) => renderTrackRow(track))}
@@ -1042,7 +1058,19 @@ const Search: React.FC<SearchProps> = ({ isAuthenticated, onPlayTrack }) => {
               <h2 className="text-sm font-bold tracking-wider text-[#8a8489] uppercase mb-1">
                 Songs {results.length > 0 && `(${results.length})`}
               </h2>
-              {results.length > 0 ? (
+              {isLoading && results.length === 0 ? (
+                <div className="space-y-1.5 animate-pulse">
+                  {[1, 2, 3, 4, 5, 6].map((i) => (
+                    <div key={i} className="flex items-center space-x-3.5 p-2.5 bg-white/[0.02] border border-white/[0.04] rounded-2xl">
+                      <div className="w-11 h-11 rounded-xl bg-white/5"></div>
+                      <div className="flex-1 space-y-2 py-1">
+                        <div className="h-3 bg-white/10 rounded w-1/3"></div>
+                        <div className="h-2 bg-white/5 rounded w-1/4"></div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : results.length > 0 ? (
                 <div className="space-y-1.5">
                   {results.map((track) => renderTrackRow(track))}
                 </div>
