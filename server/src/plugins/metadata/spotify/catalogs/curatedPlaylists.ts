@@ -1,0 +1,60 @@
+// Curated popular Spotify playlists for home / featured views & import discovery
+export interface CuratedPlaylist {
+    id: string;
+    name: string;
+    description: string;
+    image: string;
+}
+
+export const POPULAR_SPOTIFY_PLAYLISTS: CuratedPlaylist[] = [
+    { id: '37i9dQZF1DXcBWIGoYBM5M', name: "Today's Top Hits", description: "The biggest songs right now.", image: 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=600' },
+    { id: '37i9dQZF1DX0XUsuxWHRQd', name: "RapCaviar", description: "Music from Kendrick Lamar, Drake, and more.", image: 'https://images.unsplash.com/photo-1508700115892-45ecd05ae2ad?w=600' },
+    { id: '37i9dQZF1DX4WYpdgoIcn6', name: "Chill Hits", description: "Kick back to the best new and recent chill hits.", image: 'https://images.unsplash.com/photo-1518609878373-06d740f60d8b?w=600' },
+    { id: '37i9dQZF1DXbYM3nMM0oPk', name: "Mega Hit Mix", description: "A mega mix of 75 favorites from the last few years.", image: 'https://images.unsplash.com/photo-1470225620780-dba8ba36b745?w=600' },
+    { id: '37i9dQZF1DX1lVhptIYRda', name: "Hot Country", description: "Today's top country hits.", image: 'https://images.unsplash.com/photo-1465847899084-d164df4dedc6?w=600' },
+    { id: '37i9dQZF1DWXRqgorJj26U', name: "Rock Classics", description: "Rock legends & epic songs.", image: 'https://images.unsplash.com/photo-1498038432885-c6f3f1b912ee?w=600' },
+    { id: '37i9dQZF1DX4sWSpwq3LiO', name: "Peaceful Piano", description: "Relax and indulge with beautiful piano pieces.", image: 'https://images.unsplash.com/photo-1520523839898-5071270409a8?w=600' },
+    { id: '37i9dQZF1DX76Wlfdnj7AP', name: "Beast Mode", description: "Get your beast mode on with fast-paced tracks.", image: 'https://images.unsplash.com/photo-1534438327276-14e5300c3a48?w=600' },
+    { id: '37i9dQZF1DX5Ejj0EkURtP', name: "All Out 2010s", description: "The biggest songs of the 2010s.", image: 'https://images.unsplash.com/photo-1501386761578-eac5c94b800a?w=600' },
+    { id: '37i9dQZF1DX4o1oenSJRJd', name: "All Out 2000s", description: "The biggest songs of the 2000s.", image: 'https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f?w=600' },
+    { id: '37i9dQZF1DXbTxeAdrVG2l', name: "All Out 90s", description: "The biggest songs of the 1990s.", image: 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=600' },
+    { id: '37i9dQZF1DX4UtSsGT1Sbe', name: "All Out 80s", description: "The biggest songs of the 1980s.", image: 'https://images.unsplash.com/photo-1516450360452-9312f5e86fc7?w=600' },
+    { id: '37i9dQZF1DX10zKzsJ2jva', name: "Viva Latino", description: "Today's top Latin hits.", image: 'https://images.unsplash.com/photo-1518709268805-4e9042af9f23?w=600' },
+    { id: '37i9dQZF1DX4dyzvuaRJ0n', name: "mint", description: "The world's biggest dance & EDM tracks.", image: 'https://images.unsplash.com/photo-1470225620780-dba8ba36b745?w=600' },
+    { id: '37i9dQZF1DX2TRYkJECvfC', name: "Deep House Relax", description: "Lounge and deep house grooves.", image: 'https://images.unsplash.com/photo-1506157786151-b8491531f063?w=600' },
+    { id: '37i9dQZF1DWWQRwui0ExPn', name: "Lo-Fi Beats", description: "Beats to relax, study and chill to.", image: 'https://images.unsplash.com/photo-1518609878373-06d740f60d8b?w=600' },
+    { id: '37i9dQZF1DWUa8ZRTfalHk', name: "Pop Rising", description: "Who's next in pop music.", image: 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=600' },
+    { id: '37i9dQZF1DX6GwdWRQMoWS', name: "Feelin' Myself", description: "The hip-hop tracks that hit different.", image: 'https://images.unsplash.com/photo-1508700115892-45ecd05ae2ad?w=600' },
+    { id: '37i9dQZF1DX9B1hu034Dao', name: "Bedroom Pop", description: "Gentle guitars and dreamy indie bedroom pop.", image: 'https://images.unsplash.com/photo-1520523839898-5071270409a8?w=600' },
+    { id: '37i9dQZF1DX3YSRoSdA634', name: "Dark & Stormy", description: "Moody alternative anthems.", image: 'https://images.unsplash.com/photo-1509198397868-475647b2a1e5?w=600' },
+    { id: '37i9dQZF1DX3rxVfibe1L0', name: "Mood Booster", description: "Get happy with today's feel-good songs.", image: 'https://images.unsplash.com/photo-1470225620780-dba8ba36b745?w=600' },
+    { id: '37i9dQZF1DX0SM0LYsmbMT', name: "Jazz Classics", description: "The greatest jazz legends of all time.", image: 'https://images.unsplash.com/photo-1511192336575-5a79af67a629?w=600' },
+    { id: '37i9dQZF1DX1s9knjP51Oa', name: "Calm Before The Storm", description: "Acoustic, folk, and quiet reflections.", image: 'https://images.unsplash.com/photo-1465847899084-d164df4dedc6?w=600' },
+    { id: '37i9dQZF1DXcfZ6moR6J06', name: "Motivation Mix", description: "Uplifting beats to push through your goals.", image: 'https://images.unsplash.com/photo-1534438327276-14e5300c3a48?w=600' },
+    { id: '37i9dQZF1DX4t95P6L7fBv', name: "Sad Songs", description: "Beautiful songs for heartbreak and reflection.", image: 'https://images.unsplash.com/photo-1518609878373-06d740f60d8b?w=600' },
+    { id: '37i9dQZF1DX2Nc3B70tvx0', name: "Ultimate Indie", description: "The best new indie and alternative tracks.", image: 'https://images.unsplash.com/photo-1498038432885-c6f3f1b912ee?w=600' },
+    { id: '37i9dQZF1DX843Qf4lrFtZ', name: "Acoustic Hits", description: "Unplugged versions of the best songs.", image: 'https://images.unsplash.com/photo-1510915361894-db8b60106cb1?w=600' },
+    { id: '37i9dQZF1DX0UrRvztWcAU', name: "Wake Up Happy", description: "Feel-good morning hits to start your day right.", image: 'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=600' },
+    { id: '37i9dQZF1DX13ZzXoot6J0', name: "Feelin' Good", description: "Soul, funk, and uplifting classics.", image: 'https://images.unsplash.com/photo-1492684223066-81342ee5ff30?w=600' },
+    { id: '37i9dQZF1DX4eRPd9frC1m', name: "Baila Reggaeton", description: "The hottest reggaeton party rhythms.", image: 'https://images.unsplash.com/photo-1516450360452-9312f5e86fc7?w=600' },
+    { id: '37i9dQZF1DX889U0CL85jj', name: "Chill R&B", description: "Smooth vocals and mellow contemporary R&B.", image: 'https://images.unsplash.com/photo-1508700115892-45ecd05ae2ad?w=600' },
+    { id: '37i9dQZF1DX3oM43CtKnRV', name: "00s Rock Anthems", description: "Rock hits from Linkin Park, Green Day and more.", image: 'https://images.unsplash.com/photo-1498038432885-c6f3f1b912ee?w=600' },
+    { id: '37i9dQZF1DXdPec7aLTmlC', name: "Happy Hits!", description: "Pure upbeat energy and catchy hooks.", image: 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=600' },
+    { id: '37i9dQZF1DX70RN3TfWWJh', name: "Workout Hits", description: "High BPM hits for gym sessions.", image: 'https://images.unsplash.com/photo-1534438327276-14e5300c3a48?w=600' },
+    { id: '37i9dQZF1DXca8pP44Z4wU', name: "Coffee Table Jazz", description: "Cozy background jazz for relaxation.", image: 'https://images.unsplash.com/photo-1501386761578-eac5c94b800a?w=600' },
+    { id: '37i9dQZF1DX3Z9kCdf5d9Z', name: "Soft Pop Hits", description: "Gentle pop melodies and sweet vocals.", image: 'https://images.unsplash.com/photo-1518609878373-06d740f60d8b?w=600' },
+    { id: '37i9dQZF1DX2Ozq9f5WfF3', name: "Focus Flow", description: "Uptempo instrumental electronic music for focus.", image: 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=600' },
+    { id: '37i9dQZF1DX56b2WjW59dM', name: "Instrumental Study", description: "Soft instrumental study beats.", image: 'https://images.unsplash.com/photo-1520523839898-5071270409a8?w=600' },
+    { id: '37i9dQZF1DX4FPnjIRjYFG', name: "Night Rain", description: "Peaceful raindrops and ambient night tones.", image: 'https://images.unsplash.com/photo-1509198397868-475647b2a1e5?w=600' },
+    { id: '37i9dQZF1DWZq9h90Gq3dJ', name: "Sunset Lounge", description: "Sunset electronic and chillout beats.", image: 'https://images.unsplash.com/photo-1470225620780-dba8ba36b745?w=600' },
+    { id: '37i9dQZF1DWZwtERXCS82H', name: "Viral Hits", description: "Trending tracks taking over social media.", image: 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=600' },
+    { id: '37i9dQZF1DX6Xce72jcb9Z', name: "Sing-Along Indie", description: "Indie anthems you know every word to.", image: 'https://images.unsplash.com/photo-1498038432885-c6f3f1b912ee?w=600' },
+    { id: '37i9dQZF1DX4o21t44rGv7', name: "R&B Weekly", description: "The latest R&B singles and deep cuts.", image: 'https://images.unsplash.com/photo-1508700115892-45ecd05ae2ad?w=600' },
+    { id: '37i9dQZF1DX2L0iB23Enbq', name: "Viral 50 - Global", description: "The most viral tracks across the globe.", image: 'https://images.unsplash.com/photo-1501386761578-eac5c94b800a?w=600' },
+    { id: '37i9dQZEVXbMDoHDwVN2tF', name: "Top 50 - Global", description: "Your daily update of the most played tracks.", image: 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=600' },
+    { id: '37i9dQZEVXbLRQDuF5jeBp', name: "Top 50 - USA", description: "The most played tracks in the United States.", image: 'https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f?w=600' },
+    { id: '37i9dQZF1DX4JAvHpjipBk', name: "New Music Friday", description: "The best new releases of the week.", image: 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=600' },
+    { id: '37i9dQZF1DXdbXrPNafg9d', name: "All Out 70s", description: "From disco to classic rock, the best of the 70s.", image: 'https://images.unsplash.com/photo-1516450360452-9312f5e86fc7?w=600' },
+    { id: '37i9dQZF1DWV7EzJMK2FUI', name: "Jazz in the Background", description: "Soft, unobtrusive jazz vibes.", image: 'https://images.unsplash.com/photo-1511192336575-5a79af67a629?w=600' },
+];
+
