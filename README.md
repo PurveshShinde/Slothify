@@ -1,96 +1,140 @@
 <div align="center">
 
-<img src="./client/public/favicon_sloth.png" alt="Slothify Mascot" width="128" />
+<img src="./client/public/favicon_sloth.png" alt="Neko Music / Slothify Mascot" width="128" />
 
-# Slothify — Ad-Free Music Streaming Platform
+# Neko Music (Slothify)
 
-![Version](https://img.shields.io/badge/Version-1.1.0-007ACC.svg?style=for-the-badge)
-![License](https://img.shields.io/badge/License-MIT-green.svg?style=for-the-badge)
-![React 18](https://img.shields.io/badge/React_18-20232A?style=for-the-badge&logo=react&logoColor=61DAFB)
-![TypeScript](https://img.shields.io/badge/TypeScript-007ACC?style=for-the-badge&logo=typescript&logoColor=white)
-![Node.js](https://img.shields.io/badge/Node.js-339933?style=for-the-badge&logo=nodedotjs&logoColor=white)
+### *High-Fidelity, Ad-Free Music Streaming Platform & Edge Audio Services*
+
+[![Version](https://img.shields.io/badge/Version-1.1.0-007ACC.svg?style=for-the-badge)](package.json)
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg?style=for-the-badge)](LICENSE)
+[![React 18](https://img.shields.io/badge/React_18-20232A?style=for-the-badge&logo=react&logoColor=61DAFB)](https://react.dev/)
+[![TypeScript](https://img.shields.io/badge/TypeScript-007ACC?style=for-the-badge&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
+[![Node.js](https://img.shields.io/badge/Node.js-339933?style=for-the-badge&logo=nodedotjs&logoColor=white)](https://nodejs.org/)
+[![Cloudflare Workers](https://img.shields.io/badge/Cloudflare_Workers-F38020?style=for-the-badge&logo=cloudflare&logoColor=white)](https://workers.cloudflare.com/)
+[![Bun](https://img.shields.io/badge/Bun-000000?style=for-the-badge&logo=bun&logoColor=white)](https://bun.sh/)
 
 <p align="center">
-  <b>A modern, ad-free, high-fidelity music streaming application with modular audio engine routing, real-time metadata discovery, zero-knowledge privacy, and dynamic visual theming.</b>
+  <b>A modern, ad-free music streaming platform combining multi-engine audio routing, real-time Spotify Web Player discovery, zero-knowledge library encryption, aesthetic themes, and an edge-accelerated audio microservice.</b>
 </p>
 
-[Overview](#overview) • [Key Features](#key-features) • [Audio Engines](#audio-engines) • [Open Source Credits](#open-source-credits) • [Legal Disclaimer & Terms of Use](#legal-disclaimer--terms-of-use) • [Android Roadmap](#android-roadmap) • [Contributors](#contributors) • [Support](#support) • [License](#license)
+[Documentation](#documentation-index) • [Key Features](#key-features) • [Audio Engines](#audio-engines) • [Android Roadmap](#android-roadmap) • [Quick Start](#quick-start) • [Legal Disclaimer](#legal-disclaimer) • [Credits](#open-source-credits) • [License](#license)
 
 </div>
 
 ---
 
-## Overview
+## Documentation Index
 
-Slothify is a lightweight music streaming application designed to deliver direct audio playback without server-side transcoding bottlenecks. Combining direct stream resolution, Spotify Web Player catalog discovery, and client-encrypted library persistence, Slothify provides a responsive listening experience across desktop and mobile browsers.
+This repository uses a structured, modular documentation architecture. Please refer to the dedicated guides below for technical specifications, developer onboarding, security, and contribution protocols:
+
+| Document | Focus & Contents |
+|:---|:---|
+| **[`ARCHITECTURE.md`](ARCHITECTURE.md)** | System overview, frontend component structure, route map, database schemas, audio plugin system, and Cloudflare Worker microservice design. |
+| **[`SETUP.md`](SETUP.md)** | Step-by-step developer onboarding, environment variable reference, build commands, Docker instructions, and production cloud deployment. |
+| **[`SECURITY.md`](SECURITY.md)** | Vulnerability disclosure policy (48h SLA), zero-knowledge AES-256-GCM encryption architecture, 12-word passkey recovery, and privacy policy. |
+| **[`CONTRIBUTING.md`](CONTRIBUTING.md)** | Pull request submission guidelines, branch naming conventions, issue reporting checklists, code standards, and licensing rules. |
+| **[`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md)** | Contributor Covenant (v2.1) community behavioral standards, pledge, and moderation enforcement guidelines. |
+| **[`AGENTS.md`](AGENTS.md)** | Directives, architectural invariants, troubleshooting matrices, and task recipes for AI coding assistants (Gemini, Claude, GPT, Cursor, etc.). |
+| **[`LICENSE`](LICENSE)** | Full text of the MIT License with copyright attribution to **Purvesh Shinde**. |
 
 ---
 
 ## Key Features
 
-- **Multi-Source Audio Routing**: Stream music via JioSaavn or YouTube with automated fallback resolution to ensure uninterrupted playback.
-- **Catalog & Artist Discovery**: Search and explore global tracks, albums, and artist discographies powered by Spotify Web Player GQL and JioSaavn APIs.
-- **Dynamic Interface & Themes**: Switch between Ocean and Autumn visual themes, or toggle the interactive Vinyl Turntable player mode.
-- **Skeleton Loading States**: Smooth shimmer skeleton placeholders across Home, Albums, and Artists views for fluid screen transitions.
-- **Encrypted Library Storage**: User playlists and saved favorites are encrypted before cloud persistence.
-- **Mobile-Optimized Experience**: Touch-friendly layout with gesture navigation, pull-to-refresh, and persistent player controls.
-- **Zero-Friction Account Creation**: Sign up with just a **username and password** — no email, no Google, no OAuth required. Upon registration a unique **12-word recovery passphrase** is issued (since no email is linked) so you can always regain access. Your avatar is auto-generated from your username via DiceBear, and accounts work even in offline/local-fallback mode.
-- **Listening-Driven Personalization**: Every track you play is recorded to your personal listening history (up to the 100 most recent plays). The recommendation engine cross-references your recent history and liked tracks to extract your top artists, then surfaces 25 artist-matched tracks weighted toward what you've been listening to lately. New accounts start with a global pop mix that evolves into a fully personalized feed the more you listen.
+- **Multi-Source Audio Routing**: Resolves high-fidelity media streams via JioSaavn (up to 320 kbps AAC) or YouTube (M4A container with AAC audio) with automated fallback priority for uninterrupted playback.
+- **Real-Time Catalog Discovery**: Instant search across global songs, albums, and artist discographies powered by Spotify Web Player Pathfinder GraphQL (authenticated via Spotube TOTP), JioSaavn, and Apple Music RSS.
+- **Aesthetic Human-Crafted Interface**:
+  - **Dual Visual Themes**: Seamless switching between **Ocean Breeze** (deep cyan/navy) and **Autumn Ember** (warm amber/espresso) backed by persistent dual-layer GPU wallpaper cross-fading.
+  - **Unified Media Player**: Single responsive player engine featuring Framer Motion Shared Element Transitions (`layoutId`), mobile swipe-down collapse gestures, and byte-range seeking.
+  - **Vintage Vinyl Mode**: Interactive skeuomorphic turntable with authentic groove reflections, static circular radial depth shadows, and an animated audio visualizer waveform.
+- **Zero-Knowledge Encrypted Privacy**: User playlists and liked songs are encrypted with AES-256-GCM before cloud persistence in MongoDB. The backend cannot decrypt user data without the user's password-derived key.
+- **Zero-Friction Account Registration**: Sign up with just a **username and password** — no email, Google account, or OAuth required. Account recovery is handled via a client-generated **12-word recovery passphrase**.
+- **Personalized Recommendations**: Track plays are recorded to an indexed listening history (capped at 100 entries). The recommendation engine cross-references your top played artists to deliver a dynamic, personalized feed.
+- **Edge Audio Extension**: Includes the companion **Saavn Audio Services** microservice (`saavn-extension-main/slothify-audio-services`) compiled for Cloudflare Workers for sub-50ms DES-ECB media URL decryption.
 
 ---
 
 ## Audio Engines
 
-| Engine | Source Mechanism | Coverage |
-| :--- | :--- | :--- |
-| **JioSaavn** | Direct media stream delivery via dedicated, personally hosted Cloudflare Worker ([sumitkolhe/jiosaavn-api](https://github.com/sumitkolhe/jiosaavn-api)) | Studio releases, albums, and regional catalogs (up to 320 kbps) |
-| **YouTube (Piped)** | Decentralized stream extraction across redundant Piped instances | Global tracks, live performances, indie music, and covers |
-| **Smart Fallback** | Automated priority routing across available sources | Seamless playback with high uptime |
-
----
-
-## Open Source Credits
-
-Slothify builds upon research, tools, and open-source implementations developed by the community:
-
-- **[sumitkolhe/jiosaavn-api](https://github.com/sumitkolhe/jiosaavn-api)**: Open-source JioSaavn API framework and media endpoint architecture. Slothify uses this repository as the base architectural engine for its personally hosted, private Cloudflare Worker audio streaming service (eliminating dependency on third-party public instances).
-- **[spotube-plugin-spotify](https://github.com/sonic-liberation/spotube-plugin-spotify)**: Reverse-engineered Spotify Web Player GQL discovery algorithms for clientless track and artist metadata.
-- **[Piped](https://github.com/TeamPiped/Piped)**: Decentralized YouTube API stream extraction framework for ad-free audio delivery.
-
----
-
-## Legal Disclaimer & Terms of Use
-
-### 1. 100% Free, Open-Source & Strictly Non-Commercial
-Slothify is a fully open-source project (FOSS) created purely for educational purposes and personal use. We do not sell this application, nor do we monetize it in any way. There are no advertisements, no premium features, no subscriptions, and no hidden fees within the app. This project has absolutely no commercial value or financial intent.
-
-### 2. A Custom Browser with Content Filtering
-Slothify acts strictly as a specialized, third-party web browser and client. It simply parses the publicly available website content and APIs of YouTube, YouTube Music, Spotify, and JioSaavn, rendering them in a custom user interface. The ad-free experience it provides is fundamentally no different from using a standard web browser (like Chrome, Firefox, or Brave) equipped with a common ad-blocking extension (such as uBlock Origin).
-
-### 3. Support Content Creators
-We deeply respect the hard work of artists, musicians, and content creators. We strongly encourage all users to subscribe to official streaming services such as [YouTube Premium](https://www.youtube.com/premium), [Spotify Premium](https://www.spotify.com/premium), and [JioSaavn Pro](https://www.jiosaavn.com/pro). Purchasing official subscriptions is the best way to financially support the creators you listen to and ensure the continued growth of the music industry. Slothify is built as an educational proof-of-concept for developers and enthusiasts, not to harm creators' revenues.
-
-### 4. No Hosting of Copyrighted Material
-We do not host, upload, distribute, or store any audio, video, or copyrighted media files on our own servers. All content accessed through this application is stored entirely on third-party servers (such as Google/YouTube and JioSaavn CDNs) and remains the property of their respective copyright owners. The app merely acts as a conduit to stream publicly accessible links directly from their source CDNs to the client's browser.
-
-### 5. User Responsibility & Legal Contact
-The software is provided "AS IS", without warranty of any kind. The developers of Slothify do not encourage or condone piracy. Users are solely responsible for ensuring their usage of this app complies with their local copyright laws and the Terms of Service of the platforms they access.
+| Engine | Source Mechanism | Coverage & Quality |
+|:---|:---|:---|
+| **JioSaavn** | Direct media stream resolution via companion Cloudflare Worker microservice ([`slothify-audio-services`](../saavn-extension-main/slothify-audio-services)) | Studio masters, regional albums, and Bollywood catalogs (up to **320 kbps AAC**) |
+| **YouTube** | Progressive stream extraction via bundled `yt-dlp` and Piped instances | Global catalog, live concerts, indie tracks, and remixes (M4A container / `itag 140`) |
+| **Smart Fallback** | Deterministic, request-scoped fallback routing | Automatic zero-downtime failover between providers |
 
 ---
 
 ## Android Roadmap
 
-Planned capabilities for the native mobile application:
+The native Android mobile application for **Neko Music** is currently under active development.
 
+Planned capabilities for the native application include:
 - Background audio service and lock screen playback controls
 - Encrypted local storage for offline playback
 - Android Auto integration
 - Bidirectional library and playlist cloud synchronization
 - Dynamic dark theme with AMOLED support
 
+Source code, development milestones, and release tracking are available at the dedicated repository:  
+**[https://github.com/PurveshShinde/Neko-Music](https://github.com/PurveshShinde/Neko-Music)**
+
 ---
 
-## Contributors
+## Quick Start
+
+### 1. Prerequisites
+- **Node.js** `>= 20.10.0` (Recommended: `v24+`) and **npm** `>= 10.0.0`
+- **Bun** `>= 1.0.29` (for Saavn Audio Services)
+- **MongoDB** (Local instance or MongoDB Atlas cluster)
+
+### 2. Install & Start Slothify
+```bash
+# Clone the repository
+git clone https://github.com/PurveshShinde/Slothify.git
+cd Slothify
+
+# Install dependencies
+npm install --prefix server
+npm install --prefix client
+
+# Start Backend (Terminal 1 - http://localhost:5000)
+npm run dev --prefix server
+
+# Start Frontend (Terminal 2 - http://localhost:5173)
+npm run dev --prefix client
+```
+
+### 3. Run Test Suite
+```bash
+npm test
+```
+*Executes all unit tests using the Node.js native test runner and tsx.*
+
+For full environment variable configuration and deployment options, see [`SETUP.md`](SETUP.md).
+
+---
+
+## Legal Disclaimer
+
+1. **100% Free, Open-Source & Non-Commercial**: Neko Music / Slothify is an educational proof-of-concept created for personal use. It contains no advertisements, no premium subscriptions, and no monetization.
+2. **Custom Content-Filtering Browser**: The application acts strictly as a specialized web client that parses publicly available content and media endpoints from YouTube, Spotify, and JioSaavn. Its functionality is fundamentally equivalent to viewing these platforms in a browser equipped with an ad-blocking extension.
+3. **No Hosting of Copyrighted Material**: Neither Slothify nor the Saavn Audio Services extension hosts, uploads, or stores copyrighted audio or video files. All audio streams are delivered directly from source CDNs (Google/YouTube and JioSaavn) to the user's browser.
+4. **Support Content Creators**: We strongly urge all users to support musicians, artists, and creators by purchasing official subscriptions to [YouTube Premium](https://www.youtube.com/premium), [Spotify Premium](https://www.spotify.com/premium), and [JioSaavn Pro](https://www.jiosaavn.com/pro).
+
+---
+
+## Open Source Credits
+
+Neko Music & Slothify build upon research and open-source tools created by the community:
+
+- **[sumitkolhe/jiosaavn-api](https://github.com/sumitkolhe/jiosaavn-api)**: Architectural foundation for media endpoint structures and DES media decryption algorithms utilized in our companion edge audio services.
+- **[spotube-plugin-spotify](https://github.com/sonic-liberation/spotube-plugin-spotify)**: Reverse-engineered Spotify Web Player TOTP authentication algorithms for clientless metadata discovery.
+- **[Piped](https://github.com/TeamPiped/Piped)**: Decentralized YouTube stream extraction framework.
+
+---
+
+## Maintainer & Contributors
 
 <div align="center">
 
@@ -99,23 +143,11 @@ Planned capabilities for the native mobile application:
 </a>
 
 ### **[Purvesh Shinde](https://github.com/PurveshShinde)**
-*Lead Developer*
-
-</div>
-
----
-
-## Support
-
-<div align="center">
-
-If you find Slothify helpful, consider supporting its development.
+*Lead Developer & Maintainer*
 
 <br />
 
-<a href="https://buymeacoffee.com/purvesh.dev" target="_blank">
-  <img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me A Coffee" width="170">
-</a>
+[![Buy Me A Coffee](https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png)](https://buymeacoffee.com/purvesh.dev)
 
 </div>
 
@@ -123,4 +155,10 @@ If you find Slothify helpful, consider supporting its development.
 
 ## License
 
-Distributed under the **MIT License**. See [`LICENSE`](LICENSE) for more details.
+This project is open-source software licensed under the **[MIT License](LICENSE)**:
+
+```
+Copyright (c) 2026 Purvesh Shinde
+```
+
+See [`LICENSE`](LICENSE) for the complete legal text.
