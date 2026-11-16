@@ -6,6 +6,7 @@ import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { useTheme } from '../context/ThemeContext';
 import { useCache } from '../context/CacheContext';
 import PlaylistCover from '../components/PlaylistCover';
+import TrackRow from '../components/TrackRow';
 import { AudioService } from '../services/audioService';
 import { useDebounce } from '../hooks/useDebounce';
 import { getOptimizedImageUrl, getTrackThumbnail, getArtistAvatarUrl, handleArtistImageError } from '../utils/imageOptimizer';
@@ -568,64 +569,15 @@ const Search: React.FC<SearchProps> = ({ isAuthenticated, onPlayTrack }) => {
   };
 
   const renderTrackRow = (track: Track, queue: Track[] = results) => {
-    const thumbUrl = getTrackThumbnail(track, '', '150');
     return (
-      <div
+      <TrackRow
         key={track.id}
-        onClick={() => onPlayTrack(track, queue)}
-        className="flex items-center space-x-3.5 p-2.5 bg-white/[0.02] hover:bg-white/[0.05] border border-white/[0.04] rounded-2xl cursor-pointer transition-all group"
-      >
-        <div className="relative w-11 h-11 flex-shrink-0 rounded-xl overflow-hidden bg-[#18151c]">
-          <img
-            src={thumbUrl}
-            loading="lazy"
-            className="w-full h-full object-cover"
-            alt=""
-            onError={(e) => {
-              (e.currentTarget as HTMLImageElement).src = 'https://images.unsplash.com/photo-1518199266791-5375a83190b7?w=150';
-            }}
-          />
-          <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-            <Play size={16} fill="white" className="text-white ml-0.5" />
-          </div>
-        </div>
-
-        <div className="flex-1 min-w-0">
-          <h3 className={`font-semibold text-xs md:text-sm text-white truncate transition-colors leading-tight ${
-            isOcean ? 'group-hover:text-blue-400' : 'group-hover:text-[#f5d0b5]'
-          }`}>
-            {track.name}
-          </h3>
-          <p className="text-[11px] text-[#8a8489] truncate mt-0.5 leading-tight">
-            {track.artists && track.artists.length > 0 ? (
-              track.artists.map((a, i) => (
-                <React.Fragment key={a.name || i}>
-                  {i > 0 && ', '}
-                  <Link
-                    to={`/artist/sp_art_${encodeURIComponent(a.name)}`}
-                    onClick={(e) => e.stopPropagation()}
-                    className="hover:underline hover:text-white transition-colors"
-                  >
-                    {a.name}
-                  </Link>
-                </React.Fragment>
-              ))
-            ) : (
-              'Artist'
-            )}
-          </p>
-        </div>
-
-        <button
-          onClick={(e) => openPlaylistModal(track, e)}
-          className={`p-2 text-[#8a8489] rounded-full transition-colors flex-shrink-0 hover:bg-white/5 cursor-pointer ${
-            isOcean ? 'hover:text-blue-400' : 'hover:text-[#f5d0b5]'
-          }`}
-          title="Add to Playlist"
-        >
-          <Plus size={18} />
-        </button>
-      </div>
+        track={track}
+        variant="compact"
+        isOcean={isOcean}
+        onPlay={() => onPlayTrack(track, queue)}
+        onAddToPlaylist={(t, e) => openPlaylistModal(t, e)}
+      />
     );
   };
 
