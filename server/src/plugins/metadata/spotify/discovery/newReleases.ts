@@ -254,3 +254,4 @@ export async function getNewReleases(): Promise<any[]> {
 
     return albums;
 }
+
