@@ -11,6 +11,7 @@ import { useTheme } from '../context/ThemeContext';
 import { useSpotify } from '../context/SpotifyContext';
 import PlaylistCover from '../components/PlaylistCover';
 import { getTrackThumbnail } from '../utils/imageOptimizer';
+import { extractTracksArray, ExtendedTrack } from '../utils/trackParser';
 
 const KNOWN_PLAYLIST_META: Record<string, { name: string; description: string; image: string }> = {
   'late-night-drive': {
@@ -37,11 +38,6 @@ const KNOWN_PLAYLIST_META: Record<string, { name: string; description: string; i
 
 type SortOption = 'custom' | 'az' | 'za' | 'artist' | 'duration';
 
-interface ExtendedTrack extends Track {
-  added_at?: string;
-  added_by?: { id: string; display_name?: string;[key: string]: any };
-}
-
 interface PlaylistDetailProps {
   id?: string;
   isLikedView?: boolean;
@@ -59,24 +55,6 @@ interface PlaylistDetailProps {
   title?: string;
   user?: User | null;
 }
-
-const extractTracksArray = (data: any): ExtendedTrack[] => {
-  if (!data) return [];
-  if (Array.isArray(data.tracks)) return data.tracks;
-  if (Array.isArray(data.tracks?.items)) {
-    return data.tracks.items
-      .filter((i: any) => i && (i.track || i.id))
-      .map((i: any) => {
-        const t = i.track || i;
-        return { ...t, added_at: i.added_at, added_by: i.added_by };
-      });
-  }
-  if (Array.isArray(data.items)) {
-    return data.items.map((i: any) => i.track || i).filter(Boolean);
-  }
-  if (Array.isArray(data)) return data;
-  return [];
-};
 
 const PlaylistDetail: React.FC<PlaylistDetailProps> = ({
   isLikedView, onPlayTrack, likedTrackIds, onToggleLike, currentTrackId,

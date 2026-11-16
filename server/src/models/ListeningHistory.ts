@@ -13,7 +13,7 @@ export interface IListeningHistory extends Document {
 }
 
 const ListeningHistorySchema = new Schema<IListeningHistory>({
-    userId: { type: String, required: true, index: true },
+    userId: { type: String, required: true },
     trackId: { type: String, required: true },
     trackName: { type: String, required: true },
     artistName: { type: String, required: true },
@@ -21,7 +21,11 @@ const ListeningHistorySchema = new Schema<IListeningHistory>({
     albumImage: { type: String },
     duration_ms: { type: Number, default: 180000 },
     preview_url: { type: String },
-    playedAt: { type: Date, default: Date.now, index: true }
+    playedAt: { type: Date, default: Date.now }
 });
+
+// Compound index for reverse-chronological and chronological retrieval of a user's listening history.
+// The leading prefix { userId: 1 } also covers equality lookups, countDocuments, and deleteMany operations by userId.
+ListeningHistorySchema.index({ userId: 1, playedAt: -1 });
 
 export const ListeningHistory = mongoose.models.ListeningHistory || mongoose.model<IListeningHistory>('ListeningHistory', ListeningHistorySchema);

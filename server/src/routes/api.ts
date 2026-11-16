@@ -82,7 +82,7 @@ router.get('/me/playlists', async (req, res) => {
             const records = await EncryptedPlaylist.find({ userId: req.user.userId }).sort({ updatedAt: -1 }).lean();
             const playlists: Playlist[] = [];
             for (const rec of records) {
-                const decrypted = decryptPayload<Playlist>(rec.ciphertext, rec.iv, rec.tag, req.user.userId);
+                const decrypted = await decryptPayload<Playlist>(rec.ciphertext, rec.iv, rec.tag, req.user.userId);
                 if (decrypted) {
                     if (decrypted.tracks?.items) {
                         const albumArtList = decrypted.tracks.items
@@ -133,7 +133,7 @@ router.post('/me/playlists', async (req, res) => {
                 tracks: { total: 0, items: [] }
             };
 
-            const encrypted = encryptPayload(newPlaylist, req.user.userId);
+            const encrypted = await encryptPayload(newPlaylist, req.user.userId);
             await EncryptedPlaylist.create({
                 userId: req.user.userId,
                 playlistId,
@@ -188,7 +188,7 @@ router.get('/playlists/:id', async (req, res) => {
         if (isDbConnected()) {
             const rec = await EncryptedPlaylist.findOne({ playlistId: id });
             if (rec) {
-                const decrypted = decryptPayload<Playlist>(rec.ciphertext, rec.iv, rec.tag, rec.userId);
+                const decrypted = await decryptPayload<Playlist>(rec.ciphertext, rec.iv, rec.tag, rec.userId);
                 if (decrypted) {
                     if (decrypted.tracks?.items) {
                         const albumArtList = decrypted.tracks.items
@@ -235,7 +235,7 @@ router.get('/playlists/:id/tracks', async (req, res) => {
         if (isDbConnected()) {
             const rec = await EncryptedPlaylist.findOne({ playlistId: id });
             if (rec) {
-                const decrypted = decryptPayload<Playlist>(rec.ciphertext, rec.iv, rec.tag, rec.userId);
+                const decrypted = await decryptPayload<Playlist>(rec.ciphertext, rec.iv, rec.tag, rec.userId);
                 if (decrypted) {
                     return res.json((decrypted.tracks.items || []).map(i => i.track));
                 }
@@ -267,7 +267,7 @@ router.post('/playlists/:id/tracks', async (req, res) => {
         if (req.user && isDbConnected()) {
             const rec = await EncryptedPlaylist.findOne({ playlistId: id, userId: req.user.userId });
             if (rec) {
-                const decrypted = decryptPayload<Playlist>(rec.ciphertext, rec.iv, rec.tag, req.user.userId);
+                const decrypted = await decryptPayload<Playlist>(rec.ciphertext, rec.iv, rec.tag, req.user.userId);
                 if (decrypted) {
                     if (!decrypted.tracks.items) decrypted.tracks.items = [];
 
@@ -315,7 +315,7 @@ router.post('/playlists/:id/tracks', async (req, res) => {
                         decrypted.images = [];
                     }
 
-                    const reencrypted = encryptPayload(decrypted, req.user.userId);
+                    const reencrypted = await encryptPayload(decrypted, req.user.userId);
                     rec.ciphertext = reencrypted.ciphertext;
                     rec.iv = reencrypted.iv;
                     rec.tag = reencrypted.tag;
@@ -347,7 +347,7 @@ router.delete('/playlists/:id/tracks', async (req, res) => {
         if (req.user && isDbConnected()) {
             const rec = await EncryptedPlaylist.findOne({ playlistId: id, userId: req.user.userId });
             if (rec) {
-                const decrypted = decryptPayload<Playlist>(rec.ciphertext, rec.iv, rec.tag, req.user.userId);
+                const decrypted = await decryptPayload<Playlist>(rec.ciphertext, rec.iv, rec.tag, req.user.userId);
                 if (decrypted && decrypted.tracks.items) {
                     const rawUris = (Array.isArray(uris) ? uris : [uris]).filter(Boolean);
                     const idsToRemove = new Set(rawUris.map((u: string) => typeof u === 'string' ? u.replace('spotify:track:', '') : ''));
@@ -367,7 +367,7 @@ router.delete('/playlists/:id/tracks', async (req, res) => {
                         decrypted.images = [];
                     }
 
-                    const reencrypted = encryptPayload(decrypted, req.user.userId);
+                    const reencrypted = await encryptPayload(decrypted, req.user.userId);
                     rec.ciphertext = reencrypted.ciphertext;
                     rec.iv = reencrypted.iv;
                     rec.tag = reencrypted.tag;
@@ -1099,7 +1099,7 @@ router.post('/spotify/import-playlists', async (req, res) => {
                     // If user is authenticated and DB is connected, save to EncryptedPlaylist
                     if (req.user && isDbConnected()) {
                         const existingRec = await EncryptedPlaylist.findOne({ playlistId: savedLocal.id, userId: req.user.userId });
-                        const encrypted = encryptPayload(savedLocal, req.user.userId);
+                        const encrypted = await encryptPayload(savedLocal, req.user.userId);
                         if (existingRec) {
                             existingRec.ciphertext = encrypted.ciphertext;
                             existingRec.iv = encrypted.iv;
@@ -1186,7 +1186,7 @@ router.get('/me/tracks', async (req, res) => {
             const records = await EncryptedLikedTrack.find({ userId: req.user.userId }).sort({ addedAt: -1 }).lean();
             const tracks: Track[] = [];
             for (const rec of records) {
-                const decrypted = decryptPayload<Track>(rec.ciphertext, rec.iv, rec.tag, req.user.userId);
+                const decrypted = await decryptPayload<Track>(rec.ciphertext, rec.iv, rec.tag, req.user.userId);
                 if (decrypted) tracks.push(decrypted);
             }
             return res.json({ items: tracks, total: tracks.length, ids: records.map((r: any) => r.trackId) });
@@ -1232,7 +1232,7 @@ router.post('/me/tracks', async (req, res) => {
                 const total = await EncryptedLikedTrack.countDocuments({ userId: req.user.userId });
                 return res.json({ liked: false, total });
             } else {
-                const encrypted = encryptPayload(track, req.user.userId);
+                const encrypted = await encryptPayload(track, req.user.userId);
                 await EncryptedLikedTrack.create({
                     userId: req.user.userId,
                     trackId: track.id,
@@ -1273,7 +1273,7 @@ router.put('/me/tracks', async (req, res) => {
         if (req.user && isDbConnected()) {
             const existing = await EncryptedLikedTrack.findOne({ userId: req.user.userId, trackId });
             if (!existing) {
-                const encrypted = encryptPayload(track, req.user.userId);
+                const encrypted = await encryptPayload(track, req.user.userId);
                 await EncryptedLikedTrack.create({
                     userId: req.user.userId,
                     trackId: track.id,
@@ -1494,7 +1494,7 @@ router.get('/recommendations', async (req, res) => {
             const likedRecords = await EncryptedLikedTrack.find({ userId }).sort({ addedAt: -1 }).limit(20);
             const likedArtists: string[] = [];
             for (const rec of likedRecords) {
-                const dec = decryptPayload<Track>(rec.ciphertext, rec.iv, rec.tag, userId);
+                const dec = await decryptPayload<Track>(rec.ciphertext, rec.iv, rec.tag, userId);
                 if (dec && dec.artists?.[0]?.name && dec.artists[0].name !== 'Unknown Artist') {
                     likedArtists.push(dec.artists[0].name);
                 }
@@ -1504,7 +1504,7 @@ router.get('/recommendations', async (req, res) => {
             const playlistRecords = await EncryptedPlaylist.find({ userId }).sort({ updatedAt: -1 }).limit(10);
             const playlistArtists: string[] = [];
             for (const pRec of playlistRecords) {
-                const decPlaylist = decryptPayload<Playlist>(pRec.ciphertext, pRec.iv, pRec.tag, userId);
+                const decPlaylist = await decryptPayload<Playlist>(pRec.ciphertext, pRec.iv, pRec.tag, userId);
                 if (decPlaylist && Array.isArray(decPlaylist.tracks?.items)) {
                     for (const item of decPlaylist.tracks.items) {
                         const aName = item.track?.artists?.[0]?.name;

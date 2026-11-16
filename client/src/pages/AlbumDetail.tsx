@@ -5,6 +5,7 @@ import { Track } from '../types';
 import axios from 'axios';
 import { useTheme } from '../context/ThemeContext';
 import { useCache } from '../context/CacheContext';
+import TrackRow from '../components/TrackRow';
 
 interface AlbumDetailProps {
   onPlayTrack: (track: Track, queue?: Track[]) => void;
@@ -342,81 +343,22 @@ export const AlbumDetail: React.FC<AlbumDetailProps> = ({
           </div>
         ) : tracks.length > 0 ? (
           <div className="space-y-1 pt-1">
-            {tracks.map((track, index) => {
-              const isCurrent = currentTrackId === track.id;
-              const isTrackPlaying = isCurrent && isPlaying;
-              const isLiked = likedTrackIds.has(track.id);
-
-              return (
-                <div
-                  key={track.id || `track-${index}`}
-                  onClick={() => handlePlaySong(track)}
-                  className={`group flex items-center justify-between p-3 rounded-2xl cursor-pointer transition-all border ${
-                    isCurrent
-                      ? isOcean
-                        ? 'bg-blue-600/15 border-blue-500/30'
-                        : 'bg-[#f5d0b5]/10 border-[#f5d0b5]/20'
-                      : 'hover:bg-white/[0.04] border-transparent hover:border-white/[0.06]'
-                  }`}
-                >
-                  <div className="flex items-center space-x-4 min-w-0 flex-1 pr-4">
-                    {/* Track Number / Play Icon */}
-                    <div className="w-6 text-center flex items-center justify-center text-xs font-mono text-slate-400 group-hover:text-white">
-                      {isTrackPlaying ? (
-                        <div className="flex items-end space-x-0.5 h-3">
-                          <span className={`w-0.5 h-full rounded-full animate-pulse ${isOcean ? 'bg-blue-400' : 'bg-[#f5d0b5]'}`} />
-                          <span className={`w-0.5 h-2 rounded-full animate-pulse delay-75 ${isOcean ? 'bg-blue-400' : 'bg-[#f5d0b5]'}`} />
-                          <span className={`w-0.5 h-3 rounded-full animate-pulse delay-150 ${isOcean ? 'bg-blue-400' : 'bg-[#f5d0b5]'}`} />
-                        </div>
-                      ) : (
-                        <>
-                          <span className="group-hover:hidden">{index + 1}</span>
-                          <Play size={14} fill="currentColor" className="hidden group-hover:block" />
-                        </>
-                      )}
-                    </div>
-
-                    {/* Track Name & Artist */}
-                    <div className="min-w-0 flex-1">
-                      <p className={`font-bold text-sm truncate ${
-                        isCurrent
-                          ? isOcean ? 'text-blue-400' : 'text-[#f5d0b5]'
-                          : 'text-white'
-                      }`}>
-                        {track.name}
-                      </p>
-                      <p className="text-xs text-slate-400 truncate mt-0.5">
-                        {track.artists?.map(a => a.name).join(', ') || 'Unknown Artist'}
-                      </p>
-                    </div>
-                  </div>
-
-                  {/* Actions & Duration */}
-                  <div className="flex items-center space-x-3 text-xs text-slate-400">
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onToggleLike(track.id, track);
-                      }}
-                      className="p-1 text-slate-400 hover:text-white transition-colors"
-                      title={isLiked ? 'Unlike Song' : 'Like Song'}
-                    >
-                      <Heart
-                        size={15}
-                        className={
-                          isLiked
-                            ? isOcean
-                              ? 'fill-blue-500 text-blue-500'
-                              : 'fill-[#f5d0b5] text-[#f5d0b5]'
-                            : 'opacity-0 group-hover:opacity-100'
-                        }
-                      />
-                    </button>
-                    <span className="font-mono">{formatDuration(track.duration_ms)}</span>
-                  </div>
-                </div>
-              );
-            })}
+            {tracks.map((track, index) => (
+              <TrackRow
+                key={track.id || `track-${index}`}
+                track={track}
+                index={index}
+                variant="table"
+                showIndex={true}
+                showCover={false}
+                isCurrent={currentTrackId === track.id}
+                isPlaying={isPlaying}
+                isLiked={likedTrackIds.has(track.id)}
+                isOcean={isOcean}
+                onPlay={() => handlePlaySong(track)}
+                onToggleLike={onToggleLike}
+              />
+            ))}
           </div>
         ) : (
           <div className="py-16 text-center space-y-2 text-slate-400">
