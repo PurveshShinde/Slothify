@@ -18,7 +18,7 @@
   <b>A modern, ad-free music streaming platform combining multi-engine audio routing, real-time Spotify Web Player discovery, zero-knowledge library encryption, aesthetic themes, and an edge-accelerated audio microservice.</b>
 </p>
 
-[Documentation](#documentation-index) • [Key Features](#key-features) • [Audio Engines](#audio-engines) • [Android Roadmap](#android-roadmap) • [Quick Start](#quick-start) • [Legal Disclaimer](#legal-disclaimer) • [Credits](#open-source-credits) • [License](#license)
+[Documentation](#documentation-index) • [Key Features](#key-features) • [Audio Engines](#audio-engines) • [Android Roadmap](#android-roadmap) • [Legal Disclaimer](#legal-disclaimer) • [Credits](#open-source-credits) • [License](#license)
 
 </div>
 
@@ -78,40 +78,6 @@ Planned capabilities for the native application include:
 
 Source code, development milestones, and release tracking are available at the dedicated repository:  
 **[https://github.com/PurveshShinde/Neko-Music](https://github.com/PurveshShinde/Neko-Music)**
-
----
-
-## Quick Start
-
-### 1. Prerequisites
-- **Node.js** `>= 20.10.0` (Recommended: `v24+`) and **npm** `>= 10.0.0`
-- **Bun** `>= 1.0.29` (for Saavn Audio Services)
-- **MongoDB** (Local instance or MongoDB Atlas cluster)
-
-### 2. Install & Start Slothify
-```bash
-# Clone the repository
-git clone https://github.com/PurveshShinde/Slothify.git
-cd Slothify
-
-# Install dependencies
-npm install --prefix server
-npm install --prefix client
-
-# Start Backend (Terminal 1 - http://localhost:5000)
-npm run dev --prefix server
-
-# Start Frontend (Terminal 2 - http://localhost:5173)
-npm run dev --prefix client
-```
-
-### 3. Run Test Suite
-```bash
-npm test
-```
-*Executes all unit tests using the Node.js native test runner and tsx.*
-
-For full environment variable configuration and deployment options, see [`SETUP.md`](SETUP.md).
 
 ---
 
